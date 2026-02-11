@@ -14,8 +14,10 @@ import {
     BadgePercent,
     Coins,
     Printer,
-    FileText
+    FileText,
+    X
 } from 'lucide-react';
+import CommissionExtractPrint from '../components/CommissionExtractPrint';
 
 interface CommissionsProps {
     orders: Order[];
@@ -29,6 +31,8 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [searchTerm, setSearchTerm] = useState('');
+    const [showPrintModal, setShowPrintModal] = useState(false);
+    const [printData, setPrintData] = useState<any>(null);
 
     const months = [
         'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -134,109 +138,24 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
         return Object.values(summary).sort((a, b) => b.total - a.total);
     }, [filteredData]);
 
-    const handlePrintSellerExtract = (sellerId: string) => {
-        const seller = sellers.find(s => s.id === sellerId);
-        if (!seller) return;
+    const handlePrintSellerExtract = (sellerId: string, name?: string) => {
+        let seller = sellers.find(s => s.id === sellerId);
+        if (!seller) {
+            seller = { id: sellerId, name: name || 'Vendedor RTC', email: '', phone: '' };
+        }
 
         const sellerData = calculateCommissionData.filter(d => d.sellerId === sellerId);
         const sellerTotal = sellerData.reduce((acc, d) => acc + d.commissionValue, 0);
         const sellerVolume = sellerData.reduce((acc, d) => acc + d.installmentValue, 0);
 
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
-
-        const monthsLong = [
-            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-        ];
-
-        printWindow.document.write(`
-      <html>
-        <head>
-          <title>Extrato de Comissão - ${seller.name}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <style>
-            @media print {
-              @page { margin: 2cm; }
-              body { -webkit-print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body class="p-10 text-slate-900 font-sans">
-          <div class="max-w-4xl mx-auto">
-            <div class="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-8">
-              <div>
-                <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" class="h-12 mb-4" />
-                <h1 class="text-2xl font-black uppercase tracking-tighter text-slate-900">Extrato de Comissão</h1>
-                <p class="text-sm font-bold text-slate-500">Vendedor: ${seller.name}</p>
-              </div>
-              <div class="text-right">
-                <p class="text-[10px] font-black uppercase text-slate-400">Referente a</p>
-                <p class="text-sm font-black">${monthsLong[selectedMonth === 0 ? 11 : selectedMonth - 1]} / ${selectedMonth === 0 ? selectedYear - 1 : selectedYear}</p>
-                <p class="text-[10px] font-black uppercase text-slate-400 mt-2">Data de Emissão</p>
-                <p class="text-xs font-bold text-slate-600">${new Date().toLocaleDateString()}</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-8 mb-10">
-              <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total a Receber</p>
-                <p class="text-3xl font-black text-blue-600">R$ ${sellerTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-              </div>
-              <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume de Vendas (Base)</p>
-                <p class="text-xl font-black text-slate-700">R$ ${sellerVolume.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-
-            <table class="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr class="border-b-2 border-slate-200">
-                  <th class="py-3 font-black uppercase text-slate-500 text-[10px]">Data Pagto</th>
-                  <th class="py-3 font-black uppercase text-slate-500 text-[10px]">Pedido / Cliente</th>
-                  <th class="py-3 font-black uppercase text-slate-500 text-[10px] text-center">Desc.</th>
-                  <th class="py-3 font-black uppercase text-slate-500 text-[10px] text-center">Taxa</th>
-                  <th class="py-3 font-black uppercase text-slate-500 text-[10px] text-right">Base</th>
-                  <th class="py-3 font-black uppercase text-slate-500 text-[10px] text-right">Comissão</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${sellerData.map(d => `
-                  <tr>
-                    <td class="py-4 font-medium text-slate-600">${new Date(d.paymentDate).toLocaleDateString()}</td>
-                    <td class="py-4">
-                      <p class="font-bold text-slate-900">${d.customerName}</p>
-                      <div class="flex items-center gap-2">
-                        <p class="text-[10px] font-black text-blue-600 uppercase">Pedido ${d.orderId}</p>
-                        <span class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-black">Parc. ${String(d.installmentNumber).padStart(2, '0')}/${String(d.totalInstallments).padStart(2, '0')}</span>
-                      </div>
-                    </td>
-                    <td class="py-4 text-center">
-                      <span class="text-[10px] font-black">${d.discount.toFixed(1)}%</span>
-                    </td>
-                    <td class="py-4 text-center font-black">${(d.commissionRate * 100).toFixed(0)}%</td>
-                    <td class="py-4 text-right font-medium text-slate-500">R$ ${d.installmentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                    <td class="py-4 text-right font-black text-emerald-600">R$ ${d.commissionValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-
-            <div class="mt-20 pt-8 border-t border-slate-200 text-center">
-              <p class="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">RTC DECOR • QUALIDADE E EXCELÊNCIA</p>
-            </div>
-          </div>
-          <script>
-            window.onload = () => {
-              setTimeout(() => {
-                window.print();
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-        printWindow.document.close();
+        setPrintData({
+            seller,
+            data: sellerData,
+            totalComissao: sellerTotal,
+            totalVolume: sellerVolume,
+            period: `${months[selectedMonth]} / ${selectedYear}`
+        });
+        setShowPrintModal(true);
     };
 
     return (
@@ -298,7 +217,7 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
                                             <p className="text-lg font-black text-blue-600 mt-1">R$ {s.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                         </div>
                                         <button
-                                            onClick={() => handlePrintSellerExtract(s.id)}
+                                            onClick={() => handlePrintSellerExtract(s.id, s.name)}
                                             className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm"
                                             title="Imprimir Extrato"
                                         >
@@ -339,7 +258,8 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
                                 <th className="px-6 py-4 text-center">Desconto</th>
                                 <th className="px-6 py-4 text-center">Taxa</th>
                                 <th className="px-6 py-4 text-right">Base</th>
-                                <th className="px-6 py-4 text-right">Comissão</th>
+                                <th className="px-6 py-4 text-right border-r border-slate-100">Comissão</th>
+                                <th className="px-6 py-4 text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -385,8 +305,17 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
                                         <td className="px-6 py-4 text-right">
                                             <span className="text-xs font-bold text-slate-500">R$ {d.installmentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right border-r border-slate-100">
                                             <span className="text-sm font-black text-emerald-600">R$ {d.commissionValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <button
+                                                onClick={() => handlePrintSellerExtract(d.sellerId, d.sellerName)}
+                                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                title="Imprimir Extrato do Vendedor"
+                                            >
+                                                <Printer size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))
@@ -395,6 +324,57 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
                     </table>
                 </div>
             </div>
+
+            {/* Print Modal */}
+            {showPrintModal && printData && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-[900px] w-full max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-gradient-to-r from-emerald-600 to-emerald-700 p-6 rounded-t-3xl flex items-center justify-between z-10 no-print">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-xl">
+                                    <Printer size={24} className="text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-white">Extrato de Comissões</h3>
+                                    <p className="text-xs text-emerald-100 font-medium tracking-wide">{printData.seller.name} • {printData.period}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => { setShowPrintModal(false); setPrintData(null); }}
+                                className="p-2 hover:bg-white/20 rounded-xl transition-colors no-print"
+                            >
+                                <X size={24} className="text-white" />
+                            </button>
+                        </div>
+
+                        <div className="p-0">
+                            <CommissionExtractPrint
+                                seller={printData.seller}
+                                data={printData.data}
+                                totalComissao={printData.totalComissao}
+                                totalVolume={printData.totalVolume}
+                                period={printData.period}
+                            />
+                        </div>
+
+                        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-6 rounded-b-3xl flex gap-3 no-print">
+                            <button
+                                onClick={() => { setShowPrintModal(false); setPrintData(null); }}
+                                className="flex-1 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-all active:scale-[0.98]"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => window.print()}
+                                className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all active:scale-[0.98] shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                            >
+                                <Printer size={18} />
+                                Imprimir / Gerar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

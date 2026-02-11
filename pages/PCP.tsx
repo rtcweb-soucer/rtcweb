@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product } from '../types';
+import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product, Seller, Customer } from '../types';
 import { dataService } from '../services/dataService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
 import {
@@ -19,12 +19,17 @@ import {
   ArrowRightCircle,
   AlertCircle,
   Printer,
-  X
+  X,
+  Users,
+  User as UserIcon,
+  Calendar
 } from 'lucide-react';
 
 interface PCPProps {
   orders: Order[];
   products: Product[];
+  sellers: Seller[];
+  customers: Customer[];
   onUpdateOrder: (updatedOrder: Order) => void;
 }
 
@@ -37,7 +42,7 @@ const STAGES_CONFIG = [
   { id: ProductionStage.INSTALLATION, icon: <Truck size={16} />, color: 'bg-slate-700' }
 ];
 
-const PCP = ({ orders, products, onUpdateOrder }: PCPProps) => {
+const PCP = ({ orders, products, sellers, customers, onUpdateOrder }: PCPProps) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
@@ -85,11 +90,31 @@ const PCP = ({ orders, products, onUpdateOrder }: PCPProps) => {
     const newHistory = [...(order.productionHistory || []), historyEntry];
 
     // Optimistic Update
-    const updatedOrders = pcpOrders.map(o => o.id === orderId ? { ...o, productionStage: nextStage, productionHistory: newHistory } : o);
+    const updatedOrder = { ...order, productionStage: nextStage, productionHistory: newHistory };
+
+    // Auto-update order status based on stage
+    if (order.status === OrderStatus.CONTRACT_SIGNED) {
+      updatedOrder.status = OrderStatus.IN_PRODUCTION;
+    }
+
+    if (nextStage === ProductionStage.READY) {
+      updatedOrder.status = OrderStatus.FINISHED;
+    }
+
+    const updatedOrders = pcpOrders.map(o => o.id === orderId ? updatedOrder : o);
     setPcpOrders(updatedOrders);
 
     try {
+      // First update the production tracking
       await dataService.updateProductionStage(orderId, nextStage, newHistory);
+
+      // Then sync the main order status if changed
+      if (updatedOrder.status !== order.status) {
+        await dataService.saveOrder(updatedOrder);
+      }
+
+      // Always notify global state of the change
+      onUpdateOrder(updatedOrder);
     } catch (error) {
       console.error("Failed to update stage:", error);
       // Revert if failed
@@ -115,11 +140,14 @@ const PCP = ({ orders, products, onUpdateOrder }: PCPProps) => {
       const newHistory = [...(order.productionHistory || []), historyEntry];
 
       // Optimistic Update
-      const updatedOrders = pcpOrders.map(o => o.id === orderId ? { ...o, productionStage: prevStage, productionHistory: newHistory } : o);
+      const updatedOrder = { ...order, productionStage: prevStage, productionHistory: newHistory };
+      const updatedOrders = pcpOrders.map(o => o.id === orderId ? updatedOrder : o);
       setPcpOrders(updatedOrders);
 
       try {
         await dataService.updateProductionStage(orderId, prevStage, newHistory);
+        // Sync global state
+        onUpdateOrder(updatedOrder);
       } catch (error) {
         console.error("Failed to regress stage:", error);
         loadPcpData();
@@ -204,14 +232,41 @@ const PCP = ({ orders, products, onUpdateOrder }: PCPProps) => {
                         </div>
                       </div>
 
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
-                          <ClipboardList size={12} className="text-slate-400" />
-                          Provisionar lona e ferragens
+                      <div className="space-y-2.5 mb-4">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-700 font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <Users size={12} className="text-blue-500" />
+                          <span className="truncate">{customers.find(c => c.id === order.customerId)?.name || 'Cliente Desconhecido'}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
-                          <AlertCircle size={12} className="text-amber-500" />
-                          Prioridade Normal
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Vendedor</span>
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+                              <UserIcon size={10} className="text-slate-400" />
+                              <span className="truncate">{sellers.find(s => s.id === order.sellerId)?.name || 'Vendedor RTC'}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Data Pedido</span>
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+                              <Calendar size={10} className="text-slate-400" />
+                              <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-amber-600 uppercase tracking-tighter">Prazo de Entrega</span>
+                            <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-900">
+                              <Truck size={12} className="text-amber-500" />
+                              <span>{order.installationDate ? new Date(order.installationDate).toLocaleDateString() : 'Não definida'}</span>
+                            </div>
+                          </div>
+                          {order.installationDate && new Date(order.installationDate) < new Date() && (
+                            <AlertCircle size={14} className="text-rose-500 animate-pulse" />
+                          )}
                         </div>
                       </div>
 

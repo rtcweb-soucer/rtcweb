@@ -38,10 +38,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
 
   // Pedidos prontos para instalar (Finished no PCP, em Instalação no PCP, ou status FINISHED)
   const installationOrders = orders.filter(o =>
-    o.status === OrderStatus.FINISHED ||
-    o.status === OrderStatus.IN_PRODUCTION ||
-    o.productionStage === ProductionStage.INSTALLATION ||
-    o.productionStage === ProductionStage.READY
+    o.productionStage === ProductionStage.INSTALLATION
   ).filter(o => {
     const customer = customers.find(c => c.id === o.customerId);
     return customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || o.id.includes(searchTerm);

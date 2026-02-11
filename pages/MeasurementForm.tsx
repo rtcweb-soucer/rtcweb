@@ -39,6 +39,7 @@ const MeasurementForm = ({
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [editingProductionItemId, setEditingProductionItemId] = useState<string | null>(null);
   const [productionSheetData, setProductionSheetData] = useState<Partial<ProductionInstallationSheet>>({});
+  const [currentSheetId, setCurrentSheetId] = useState<string | null>(editingSheet?.id || null);
 
 
   useEffect(() => {
@@ -46,8 +47,10 @@ const MeasurementForm = ({
       setSelectedCustomerId(editingSheet.customerId);
       setItems([...editingSheet.items]);
       setSelectedItemIds(new Set(editingSheet.items.map((i: MeasurementItem) => i.id)));
+      setCurrentSheetId(editingSheet.id);
     } else if (initialCustomerId) {
       setSelectedCustomerId(initialCustomerId);
+      setCurrentSheetId(null);
     }
   }, [initialCustomerId, editingSheet]);
 
@@ -145,7 +148,7 @@ const MeasurementForm = ({
 
   const createSheetObject = (mergedItems?: MeasurementItem[]) => {
     return {
-      id: editingSheet?.id || crypto.randomUUID(),
+      id: currentSheetId || crypto.randomUUID(),
       customerId: selectedCustomerId,
       sellerId: currentUser?.sellerId || null,
       items: mergedItems || [...items],
@@ -157,6 +160,11 @@ const MeasurementForm = ({
     if (!validate(true)) return;
     const newSheet = createSheetObject();
     onSave(newSheet);
+
+    // Keep the ID only if we want to continue editing, 
+    // but the original code clears the form. 
+    // To fix duplication between Save and Quote, we set the ID
+    setCurrentSheetId(newSheet.id);
 
     setItems([]);
     setSelectedItemIds(new Set());

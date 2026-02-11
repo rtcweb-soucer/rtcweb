@@ -63,12 +63,21 @@ const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => 
 
     // Group items by environment and product type
     const groupedItems = React.useMemo(() => {
-        const grouped: Record<string, Record<string, typeof data.items>> = {};
+        // Create a map of clones to avoid mutating objects in the original data.items array
+        const itemsMap = new Map(data.items.map(item => [item.id, { ...item, accessories: [] as any[] }]));
+        const grouped: Record<string, Record<string, any[]>> = {};
 
-        // First, process main items (not accessories)
-        data.items
-            .filter(item => !item.parentItemId)
-            .forEach(item => {
+        // Link accessories to parents and organize main items into groups
+        for (const item of itemsMap.values()) {
+            if (item.parentItemId) {
+                const parent = itemsMap.get(item.parentItemId);
+                if (parent) {
+                    // Check to avoid duplicates if ID is somehow repeated
+                    if (!parent.accessories.some((acc: any) => acc.id === item.id)) {
+                        parent.accessories.push(item);
+                    }
+                }
+            } else {
                 const env = item.environment || 'Sem Ambiente';
                 const type = getProductType(item.productId);
 
@@ -76,22 +85,8 @@ const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => 
                 if (!grouped[env][type]) grouped[env][type] = [];
 
                 grouped[env][type].push(item);
-            });
-
-        // Then, add accessories to their parent items
-        data.items
-            .filter(item => item.parentItemId)
-            .forEach(accessory => {
-                Object.values(grouped).forEach(envGroup => {
-                    Object.values(envGroup).forEach(typeItems => {
-                        const parent = typeItems.find(i => i.id === accessory.parentItemId);
-                        if (parent) {
-                            if (!(parent as any).accessories) (parent as any).accessories = [];
-                            (parent as any).accessories.push(accessory);
-                        }
-                    });
-                });
-            });
+            }
+        }
 
         return grouped;
     }, [data.items, products]);

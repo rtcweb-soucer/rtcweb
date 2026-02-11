@@ -604,10 +604,16 @@ export const dataService = {
         if (sheetError) throw sheetError;
 
         // Get measurement items
-        const { data: itemsData, error: itemsError } = await supabase
+        let query = supabase
             .from('measurement_items')
             .select('*')
             .eq('technical_sheet_id', sheetData.id);
+
+        if (orderData.item_ids && orderData.item_ids.length > 0) {
+            query = query.in('id', orderData.item_ids);
+        }
+
+        const { data: itemsData, error: itemsError } = await query;
 
         if (itemsError) throw itemsError;
 

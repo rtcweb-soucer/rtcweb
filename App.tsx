@@ -342,7 +342,7 @@ const App = () => {
           onUpdateOrder={handleUpdateOrder} onDeleteOrder={handleDeleteOrder}
         />;
       case 'pcp':
-        return <PCP orders={orders} products={products} onUpdateOrder={handleUpdateOrder} />;
+        return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} />;
       case 'installations':
         return <Installations
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products}
