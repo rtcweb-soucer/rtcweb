@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTC WEB - Sistema de Gestão</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Utilitário para esconder barra de rolagem mas manter funcionalidade */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            scrollbar-width: none;
+            /* Firefox */
+        }
+
+        /* --- ESTILO DE IMPRESSÃO PROFISSIONAL --- */
+        @media print {
+
+            /* 1. Esconder TUDO por padrão */
+            body * {
+                visibility: hidden !important;
+            }
+
+            /* 2. Mostrar APENAS a proposta e seus filhos */
+            .proposta-container,
+            .proposta-container * {
+                visibility: visible !important;
+            }
+
+            /* 3. Posicionar a proposta no topo absoluto da página de impressão */
+            .proposta-container {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                display: block !important;
+                background: white !important;
+            }
+
+            /* 4. Resetar os pais que bloqueiam a rolagem/impressão */
+            html,
+            body,
+            #root,
+            main,
+            div[class*="h-screen"],
+            div[class*="flex-1"] {
+                height: auto !important;
+                overflow: visible !important;
+                display: block !important;
+                position: static !important;
+                background: white !important;
+            }
+
+            /* 5. Forçar o navegador a imprimir cores (fundos azuis, logos, etc) */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            /* 6. Configurações de Página */
+            @page {
+                margin: 0.5cm;
+                size: auto;
+            }
+
+            /* Esconder botões de ação dentro do documento se houver */
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="/index.css">
+
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+
+</html>

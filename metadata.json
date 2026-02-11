@@ -1,0 +1,8 @@
+{
+  "name": "RTC - Toldos & Cortinas",
+  "description": "Sistema integrado para gestão de vendas externas, medições técnicas, faturamento e controle de produção (PCP) para fábricas de toldos e cortinas.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
