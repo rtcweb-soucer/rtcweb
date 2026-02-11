@@ -46,6 +46,14 @@ export interface Seller {
   password?: string;
 }
 
+export interface Installer {
+  id: string;
+  name: string;
+  dailyRate: number;
+  phone?: string;
+  active: boolean;
+}
+
 export interface Product {
   id: string; // IdProduto
   tipo: string;
@@ -185,6 +193,7 @@ export interface Appointment {
   type: 'MEASUREMENT' | 'INSTALLATION';
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
+  installerIds?: string[]; // IDs dos instaladores vinculados (múltiplos)
 }
 
 export interface Installment {
@@ -231,6 +240,7 @@ export interface Order {
   installationDate?: string;
   installationTime?: string;
   technician?: string;
+  installerIds?: string[];
   createdAt: Date;
 }
 
@@ -239,4 +249,14 @@ export interface ProductionTracking {
   stage: ProductionStage;
   history: ProductionHistoryEntry[];
   updatedAt: Date;
+}
+
+export interface SellerBlockedSlot {
+  id: string;
+  sellerId: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
+  endTime: string; // HH:MM
+  reason: string;
+  createdAt?: string;
 }

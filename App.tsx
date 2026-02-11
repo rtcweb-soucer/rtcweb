@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser } from './types';
+import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer } from './types';
 import { MENU_ITEMS } from './constants';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -20,6 +20,8 @@ import Commissions from './pages/Commissions';
 import Expenses from './pages/Expenses';
 import Login from './pages/Login';
 import TeamRegistration from './pages/TeamRegistration';
+import Agenda from './pages/Agenda';
+import Installers from './pages/Installers';
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon } from 'lucide-react';
 import { dataService } from './services/dataService';
 
@@ -34,6 +36,8 @@ const App = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [technicalSheets, setTechnicalSheets] = useState<TechnicalSheet[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [blockedSlots, setBlockedSlots] = useState<SellerBlockedSlot[]>([]);
+  const [installers, setInstallers] = useState<Installer[]>([]);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
   const [lastGeneratedQuoteId, setLastGeneratedQuoteId] = useState<string | null>(null);
@@ -44,14 +48,16 @@ const App = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets] = await Promise.all([
+        const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers] = await Promise.all([
           dataService.getSellers(),
           dataService.getCustomers(),
           dataService.getProducts(),
           dataService.getAppointments(),
           dataService.getOrders(),
           dataService.getSystemUsers(),
-          dataService.getTechnicalSheets()
+          dataService.getTechnicalSheets(),
+          dataService.getBlockedSlots(),
+          dataService.getInstallers()
         ]);
 
         setSellers(dbSellers);
@@ -61,6 +67,8 @@ const App = () => {
         setAppointments(dbAppointments);
         setOrders(dbOrders);
         setTechnicalSheets(dbTechnicalSheets);
+        setBlockedSlots(dbBlockedSlots);
+        setInstallers(dbInstallers);
 
         // Se ainda não houver usuários (primeiro acesso), criar o MASTER
         if (dbUsers.length === 0) {
@@ -298,6 +306,51 @@ const App = () => {
     }
   };
 
+  const handleAddInstaller = async (i: Installer) => {
+    try {
+      const saved = await dataService.saveInstaller(i);
+      setInstallers([...installers, saved]);
+    } catch (err: any) {
+      alert("Erro ao salvar instalador: " + (err.message || err));
+    }
+  };
+
+  const handleUpdateInstaller = async (i: Installer) => {
+    try {
+      await dataService.saveInstaller(i);
+      setInstallers((prev: Installer[]) => prev.map((item: Installer) => item.id === i.id ? i : item));
+    } catch (err) {
+      alert("Erro ao atualizar instalador");
+    }
+  };
+
+  const handleDeleteInstaller = async (id: string) => {
+    try {
+      await dataService.deleteInstaller(id);
+      setInstallers((prev: Installer[]) => prev.filter((i: Installer) => i.id !== id));
+    } catch (err) {
+      alert("Erro ao excluir instalador");
+    }
+  };
+
+  const handleAddBlockedSlot = async (slot: SellerBlockedSlot) => {
+    try {
+      const saved = await dataService.saveBlockedSlot(slot);
+      setBlockedSlots((prev) => [...prev, saved]);
+    } catch (err) {
+      alert("Erro ao salvar bloqueio de horário");
+    }
+  };
+
+  const handleDeleteBlockedSlot = async (id: string) => {
+    try {
+      await dataService.deleteBlockedSlot(id);
+      setBlockedSlots((prev) => prev.filter(s => s.id !== id));
+    } catch (err) {
+      alert("Erro ao remover bloqueio de horário");
+    }
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -322,7 +375,13 @@ const App = () => {
       case 'schedule':
       case 'my-schedule':
         return <Schedule
-          appointments={appointments} sellers={sellers} customers={customers} technicalSheets={technicalSheets} products={products}
+          appointments={appointments}
+          sellers={sellers}
+          customers={customers}
+          technicalSheets={technicalSheets}
+          products={products}
+          blockedSlots={blockedSlots}
+          installers={installers}
           onAdd={handleAddAppointment}
           onStartMeasurement={handleStartMeasurement}
           onEditTechnicalSheet={handleEditSheet}
@@ -343,6 +402,22 @@ const App = () => {
           onUpdateOrder={handleUpdateOrder} initialSelectedId={lastGeneratedQuoteId || undefined}
           onClearSelection={() => setLastGeneratedQuoteId(null)} onNavigateToOrders={() => setActiveTab('orders')}
         />;
+      case 'agenda':
+        return <Agenda
+          appointments={appointments}
+          blockedSlots={blockedSlots}
+          sellers={sellers}
+          customers={customers}
+          technicalSheets={technicalSheets}
+          products={products}
+          installers={installers}
+          currentUser={currentUser}
+          onAddBlockedSlot={handleAddBlockedSlot}
+          onDeleteBlockedSlot={handleDeleteBlockedSlot}
+          onStartMeasurement={handleStartMeasurement}
+          onEditTechnicalSheet={handleEditSheet}
+          onGenerateQuote={handleGenerateQuote}
+        />;
       case 'orders':
         return <Orders
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products} sellers={sellers}
@@ -353,6 +428,7 @@ const App = () => {
       case 'installations':
         return <Installations
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products}
+          installers={installers}
           onUpdateOrder={handleUpdateOrder} onAddAppointment={handleAddAppointment}
         />;
       case 'finance':
@@ -369,6 +445,8 @@ const App = () => {
         return <Expenses orders={orders} customers={customers} />;
       case 'system-users':
         return <TeamRegistration users={systemUsers} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />;
+      case 'installers':
+        return <Installers installers={installers} appointments={appointments} onAdd={handleAddInstaller} onUpdate={handleUpdateInstaller} onDelete={handleDeleteInstaller} />;
       default:
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;
     }

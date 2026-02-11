@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useRef } from 'react';
-import { Order, Customer, TechnicalSheet, Product, OrderStatus, Appointment, ProductionStage } from '../types';
+import { Order, Customer, TechnicalSheet, Product, OrderStatus, Appointment, ProductionStage, Installer } from '../types';
 import {
   Truck,
   Calendar,
@@ -20,6 +20,14 @@ import {
   HardHat
 } from 'lucide-react';
 
+const formatDisplayDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+};
+
 interface InstallationsProps {
   orders: Order[];
   customers: Customer[];
@@ -27,12 +35,17 @@ interface InstallationsProps {
   products: Product[];
   onUpdateOrder: (order: Order) => void;
   onAddAppointment: (appointment: Appointment) => void;
+  installers: Installer[];
 }
 
-const Installations = ({ orders, customers, technicalSheets, products, onUpdateOrder, onAddAppointment }: InstallationsProps) => {
+const Installations = ({ orders, customers, technicalSheets, products, onUpdateOrder, onAddAppointment, installers }: InstallationsProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderForSchedule, setSelectedOrderForSchedule] = useState<Order | null>(null);
-  const [scheduleData, setScheduleData] = useState({ date: '', time: '', technician: '' });
+  const [scheduleData, setScheduleData] = useState<{ date: string; time: string; installerIds: string[] }>({
+    date: '',
+    time: '',
+    installerIds: []
+  });
   const printRef = useRef<HTMLDivElement>(null);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
 
@@ -52,7 +65,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
       ...selectedOrderForSchedule,
       installationDate: scheduleData.date,
       installationTime: scheduleData.time,
-      technician: scheduleData.technician
+      installerIds: scheduleData.installerIds
     };
 
     onUpdateOrder(updatedOrder);
@@ -62,7 +75,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
       customerId: selectedOrderForSchedule.customerId,
       orderId: selectedOrderForSchedule.id,
       sellerId: selectedOrderForSchedule.sellerId,
-      technicianName: scheduleData.technician,
+      installerIds: scheduleData.installerIds,
       date: scheduleData.date,
       time: scheduleData.time,
       type: 'INSTALLATION',
@@ -71,7 +84,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
 
     onAddAppointment(newApp);
     setSelectedOrderForSchedule(null);
-    setScheduleData({ date: '', time: '', technician: '' });
+    setScheduleData({ date: '', time: '', installerIds: [] });
   };
 
   const handlePrintFicha = (order: Order) => {
@@ -158,13 +171,18 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                   {isScheduled ? (
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                        <Calendar size={12} className="text-emerald-500" /> {new Date(order.installationDate!).toLocaleDateString()}
+                        <Calendar size={12} className="text-emerald-500" /> {formatDisplayDate(order.installationDate!)}
                       </div>
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
                         <Clock size={12} className="text-emerald-500" /> {order.installationTime}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <HardHat size={12} className="text-slate-400" /> {order.technician || 'Instalador não definido'}
+                        <HardHat size={12} className="text-slate-400 shrink-0" />
+                        <span className="truncate">
+                          {order.installerIds && order.installerIds.length > 0
+                            ? order.installerIds.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ')
+                            : 'Equipe não definida'}
+                        </span>
                       </div>
                     </div>
                   ) : (
@@ -206,14 +224,29 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </div>
             <form onSubmit={handleSchedule} className="p-8 space-y-6">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Instalador / Equipe</label>
-                <input
-                  required
-                  placeholder="Ex: Equipe Carlos"
-                  value={scheduleData.technician}
-                  onChange={(e) => setScheduleData({ ...scheduleData, technician: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Instaladores Escalados</label>
+                <div className="max-h-40 overflow-y-auto p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  {installers.filter((i: Installer) => i.active).map((i: Installer) => (
+                    <label key={i.id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-lg transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={scheduleData.installerIds.includes(i.id)}
+                        onChange={(e) => {
+                          const current = scheduleData.installerIds;
+                          const next = e.target.checked
+                            ? [...current, i.id]
+                            : current.filter(id => id !== i.id);
+                          setScheduleData({ ...scheduleData, installerIds: next });
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                      <span className="text-sm font-medium text-slate-700">{i.name}</span>
+                    </label>
+                  ))}
+                  {installers.filter((i: Installer) => i.active).length === 0 && (
+                    <p className="text-xs text-slate-400 italic text-center py-2">Nenhum instalador ativo cadastrado.</p>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -277,9 +310,11 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             <div className="space-y-4">
               <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-3 py-1 w-fit">Programação</h2>
               <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl">
-                <p className="text-sm font-bold">Data: <span className="font-black">{printOrder?.installationDate ? new Date(printOrder.installationDate).toLocaleDateString() : 'A DEFINIR'}</span></p>
+                <p className="text-sm font-bold">Data: <span className="font-black">{printOrder?.installationDate ? formatDisplayDate(printOrder.installationDate) : 'A DEFINIR'}</span></p>
                 <p className="text-sm font-bold mt-1">Horário: <span className="font-black">{printOrder?.installationTime || '--:--'}</span></p>
-                <p className="text-sm font-bold mt-1">Equipe: <span className="font-black">{printOrder?.technician || 'A DEFINIR'}</span></p>
+                <p className="text-sm font-bold mt-1">Equipe: <span className="font-black">
+                  {printOrder?.installerIds?.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ') || 'A DEFINIR'}
+                </span></p>
               </div>
             </div>
           </div>

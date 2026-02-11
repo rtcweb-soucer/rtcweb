@@ -19,7 +19,8 @@ import {
   ShieldAlert,
   Users2,
   Receipt,
-  Coins
+  Coins,
+  HardHat
 } from 'lucide-react';
 
 export const MENU_ITEMS = [
@@ -30,6 +31,7 @@ export const MENU_ITEMS = [
   { id: 'products', label: 'Produtos', icon: <Package size={20} />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'schedule', label: 'Agendamentos', icon: <Calendar size={20} />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'my-schedule', label: 'Minha Agenda', icon: <Calendar size={20} />, roles: ['SELLER'] },
+  { id: 'agenda', label: 'Agenda', icon: <Calendar size={20} className="text-blue-500" />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
   { id: 'measurements', label: 'Medições/Fichas', icon: <Ruler size={20} />, roles: ['ADMIN', 'SELLER'] },
   { id: 'quotes', label: 'Orçamentos', icon: <FileText size={20} />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
   { id: 'orders', label: 'Pedidos', icon: <Briefcase size={20} />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
@@ -38,6 +40,7 @@ export const MENU_ITEMS = [
   { id: 'finance', label: 'Contas a Receber', icon: <Wallet size={20} />, roles: ['ADMIN'] },
   { id: 'expenses', label: 'Despesas', icon: <Receipt size={20} className="text-rose-500" />, roles: ['ADMIN'] },
   { id: 'commissions', label: 'Comissões', icon: <Coins size={20} className="text-amber-500" />, roles: ['ADMIN'] },
+  { id: 'installers', label: 'Instaladores', icon: <HardHat size={20} className="text-blue-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'system-users', label: 'Cadastro de Equipe', icon: <Users2 size={20} className="text-rose-500" />, roles: ['ADMIN', 'ATTENDANT'] },
 ];
 

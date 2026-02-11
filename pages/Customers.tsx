@@ -25,6 +25,22 @@ import {
   Ruler
 } from 'lucide-react';
 
+// Helpers para tratamento de data local
+const getLocalISODate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatDisplayDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+};
+
 interface CustomersProps {
   customers: Customer[];
   onAdd: (c: Customer) => void;
@@ -61,7 +77,7 @@ const Customers = ({
   });
 
   const [scheduleData, setScheduleData] = useState<Partial<Appointment>>({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalISODate(new Date()),
     time: '09:00',
     status: 'SCHEDULED'
   });
@@ -169,7 +185,7 @@ const Customers = ({
     });
 
     setScheduleData({
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalISODate(new Date()),
       time: '09:00',
       status: 'SCHEDULED'
     });
@@ -559,7 +575,7 @@ const Customers = ({
                               <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Calendar size={16} /></div>
                               <div>
                                 <p className="text-sm font-bold text-slate-900">Visita Técnica Agendada</p>
-                                <p className="text-xs text-slate-500">{new Date(app.date).toLocaleDateString()} às {app.time}</p>
+                                <p className="text-xs text-slate-500">{formatDisplayDate(app.date)} às {app.time}</p>
                               </div>
                             </div>
                             <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">AGENDADO</span>
@@ -578,8 +594,8 @@ const Customers = ({
                       {customerAppointments.map((app: Appointment) => (
                         <div key={app.id} className="flex items-center gap-4 p-4 border-b border-slate-50">
                           <div className="w-12 h-12 flex flex-col items-center justify-center bg-slate-50 rounded-xl text-slate-500 font-bold border border-slate-100">
-                            <span className="text-[10px] uppercase">{new Date(app.date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
-                            <span className="text-lg leading-none">{new Date(app.date).getDate()}</span>
+                            <span className="text-[10px] uppercase">{formatDisplayDate(app.date).split('/')[1]}</span>
+                            <span className="text-lg leading-none">{app.date.split('-')[2]}</span>
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-bold text-slate-900">Medição Técnica</p>

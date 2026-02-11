@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet } from '../types';
+import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer } from '../types';
 
 export const dataService = {
     // Products
@@ -85,6 +85,30 @@ export const dataService = {
         if (error) throw error;
         return data as Seller;
     },
+    // Installers
+    async getInstallers() {
+        const { data, error } = await supabase.from('installers').select('*');
+        if (error) throw error;
+        return (data || []).map(i => ({
+            ...i,
+            dailyRate: Number(i.daily_rate),
+        })) as Installer[];
+    },
+    async saveInstaller(installer: Installer) {
+        const payload = {
+            ...installer,
+            daily_rate: installer.dailyRate,
+        };
+        // @ts-ignore
+        delete payload.dailyRate;
+        const { data, error } = await supabase.from('installers').upsert(payload).select().single();
+        if (error) throw error;
+        return { ...data, dailyRate: Number(data.daily_rate) } as Installer;
+    },
+    async deleteInstaller(id: string) {
+        const { error } = await supabase.from('installers').delete().eq('id', id);
+        if (error) throw error;
+    },
 
     // System Users
     async getSystemUsers() {
@@ -167,7 +191,10 @@ export const dataService = {
 
     // Appointments
     async getAppointments() {
-        const { data, error } = await supabase.from('appointments').select('*');
+        const { data, error } = await supabase.from('appointments').select(`
+            *,
+            installers:appointment_installers(installer_id)
+        `);
         if (error) throw error;
         return (data || []).map(a => ({
             ...a,
@@ -176,25 +203,42 @@ export const dataService = {
             sellerId: a.seller_id,
             technicianName: a.technician_name,
             notes: a.notes,
+            installerIds: (a.installers || []).map((i: any) => i.installer_id),
             createdAt: new Date(a.created_at)
-        })) as unknown as Appointment[]; // Type assertion for compatibility
+        })) as unknown as Appointment[];
     },
     async saveAppointment(appointment: Appointment) {
+        const { installerIds, ...rest } = appointment;
         const payload = {
-            id: appointment.id,
-            customer_id: appointment.customerId,
-            order_id: appointment.orderId,
-            seller_id: appointment.sellerId,
-            technician_name: appointment.technicianName,
-            date: appointment.date,
-            time: appointment.time,
-            type: appointment.type,
-            status: appointment.status,
-            notes: appointment.notes,
-            // created_at is automatic
+            id: rest.id,
+            customer_id: rest.customerId,
+            order_id: rest.orderId,
+            seller_id: rest.sellerId,
+            technician_name: rest.technicianName,
+            date: rest.date,
+            time: rest.time,
+            type: rest.type,
+            status: rest.status,
+            notes: rest.notes,
         };
         const { data, error } = await supabase.from('appointments').upsert(payload).select().single();
         if (error) throw error;
+
+        // Atualiza instaladores vinculados
+        if (installerIds) {
+            // Remove anteriores
+            await supabase.from('appointment_installers').delete().eq('appointment_id', data.id);
+
+            if (installerIds.length > 0) {
+                const relations = installerIds.map(installerId => ({
+                    appointment_id: data.id,
+                    installer_id: installerId
+                }));
+                const { error: relError } = await supabase.from('appointment_installers').insert(relations);
+                if (relError) throw relError;
+            }
+        }
+
         return {
             ...data,
             customerId: data.customer_id,
@@ -202,6 +246,7 @@ export const dataService = {
             sellerId: data.seller_id,
             technicianName: data.technician_name,
             notes: data.notes,
+            installerIds: installerIds || [],
             createdAt: new Date(data.created_at)
         } as unknown as Appointment;
     },
@@ -777,5 +822,41 @@ export const dataService = {
         if (products.length > 0) await supabase.from('products').upsert(products);
         if (customers.length > 0) await supabase.from('customers').upsert(customers);
         if (sellers.length > 0) await supabase.from('sellers').upsert(sellers);
+    },
+
+    // Seller Blocked Slots
+    async getBlockedSlots() {
+        const { data, error } = await supabase.from('seller_blocked_slots').select('*');
+        if (error) throw error;
+        return (data || []).map(s => ({
+            ...s,
+            sellerId: s.seller_id,
+            startTime: s.start_time,
+            endTime: s.end_time,
+            createdAt: s.created_at
+        })) as SellerBlockedSlot[];
+    },
+    async saveBlockedSlot(slot: SellerBlockedSlot) {
+        const payload = {
+            id: slot.id,
+            seller_id: slot.sellerId,
+            date: slot.date,
+            start_time: slot.startTime,
+            end_time: slot.endTime,
+            reason: slot.reason
+        };
+        const { data, error } = await supabase.from('seller_blocked_slots').upsert(payload).select().single();
+        if (error) throw error;
+        return {
+            ...data,
+            sellerId: data.seller_id,
+            startTime: data.start_time,
+            endTime: data.end_time,
+            createdAt: data.created_at
+        } as SellerBlockedSlot;
+    },
+    async deleteBlockedSlot(id: string) {
+        const { error } = await supabase.from('seller_blocked_slots').delete().eq('id', id);
+        if (error) throw error;
     }
 };

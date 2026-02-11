@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Appointment, Seller, Customer, UserRole, TechnicalSheet, Product } from '../types';
+import { Appointment, Seller, Customer, UserRole, TechnicalSheet, Product, SellerBlockedSlot, Installer } from '../types';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -18,8 +18,26 @@ import {
   Package,
   Layers,
   CheckSquare,
-  Square
+  Square,
+  HardHat,
+  Wrench
 } from 'lucide-react';
+
+// Helpers para tratamento de data local
+const getLocalISODate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatDisplayDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+};
 
 interface ScheduleProps {
   appointments: Appointment[];
@@ -27,6 +45,8 @@ interface ScheduleProps {
   customers: Customer[];
   technicalSheets: TechnicalSheet[];
   products: Product[];
+  blockedSlots: SellerBlockedSlot[];
+  installers: Installer[];
   onAdd: (a: Appointment) => void;
   onStartMeasurement?: (customerId: string) => void;
   onEditTechnicalSheet?: (sheet: TechnicalSheet) => void;
@@ -41,6 +61,8 @@ const Schedule = ({
   customers,
   technicalSheets,
   products,
+  blockedSlots,
+  installers,
   onAdd,
   onStartMeasurement,
   onEditTechnicalSheet,
@@ -58,13 +80,31 @@ const Schedule = ({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
   const [newApp, setNewApp] = useState<Partial<Appointment>>({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalISODate(new Date()),
     time: '09:00',
-    status: 'SCHEDULED'
+    status: 'SCHEDULED',
+    type: 'MEASUREMENT',
+    installerIds: []
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validar conflito com horários bloqueados
+    const conflict = blockedSlots.find(slot => {
+      if (slot.sellerId !== newApp.sellerId || slot.date !== newApp.date) return false;
+
+      const appTime = newApp.time || '00:00';
+      // Consideramos que uma visita técnica dura em média 1 hora para fins de bloqueio simples
+      // Mas a regra de negócio solicitada é bloquear se o início estiver dentro do intervalo
+      return appTime >= slot.startTime && appTime < slot.endTime;
+    });
+
+    if (conflict) {
+      alert(`CONFLITO DE AGENDA: O vendedor está indisponível neste horário.\n\nMotivo: ${conflict.reason || 'Não informado'}\nPeríodo: ${conflict.startTime} às ${conflict.endTime}`);
+      return;
+    }
+
     onAdd({
       ...newApp as Appointment,
       id: crypto.randomUUID()
@@ -193,7 +233,7 @@ const Schedule = ({
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                           <CalendarIcon size={14} className="text-blue-500" />
-                          {new Date(app.date).toLocaleDateString()}
+                          {formatDisplayDate(app.date)}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                           <Clock size={14} className="text-slate-400" />
@@ -377,7 +417,7 @@ const Schedule = ({
                         </div>
                         <div className="flex gap-4">
                           <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                            <CalendarIcon size={14} className="text-blue-500" /> {new Date(selectedApp.date).toLocaleDateString()}
+                            <CalendarIcon size={14} className="text-blue-500" /> {formatDisplayDate(selectedApp.date)}
                           </div>
                           <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
                             <Clock size={14} className="text-blue-500" /> {selectedApp.time}
@@ -559,12 +599,51 @@ const Schedule = ({
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Observações (Opcional)</label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     placeholder="Ex: Cliente solicitou catálogo de cores específicas, portão estreito..."
                     value={newApp.notes || ''}
                     onChange={(e) => setNewApp({ ...newApp, notes: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none font-medium"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Tipo *</label>
+                    <select
+                      required
+                      value={newApp.type}
+                      onChange={(e) => setNewApp({ ...newApp, type: e.target.value as any })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                    >
+                      <option value="MEASUREMENT">Medição</option>
+                      <option value="INSTALLATION">Instalação</option>
+                    </select>
+                  </div>
+                  {newApp.type === 'INSTALLATION' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Instaladores</label>
+                      <div className="max-h-32 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                        {installers.filter(i => i.active).map(i => (
+                          <label key={i.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={newApp.installerIds?.includes(i.id)}
+                              onChange={(e) => {
+                                const current = newApp.installerIds || [];
+                                const next = e.target.checked
+                                  ? [...current, i.id]
+                                  : current.filter(id => id !== i.id);
+                                setNewApp({ ...newApp, installerIds: next });
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <span className="text-xs font-medium text-slate-700">{i.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-4 mt-10">
