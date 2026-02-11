@@ -220,21 +220,12 @@ const Products = ({ products, onAdd, onUpdate, onDelete }: ProductsProps) => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo *</label>
-                      <div className="flex gap-2">
-                        {['Toldo', 'Cortina'].map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setFormData({ ...formData, tipo: t as any })}
-                            className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${formData.tipo === t
-                              ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                              }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
+                      <input
+                        type="text" required placeholder="Ex: Toldo, Cortina, Motor..."
+                        value={formData.tipo}
+                        onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Produto *</label>

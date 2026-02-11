@@ -442,7 +442,7 @@ export const dataService = {
         return baseSheet;
     },
 
-    async saveProductionInstallationSheet(sheet: any, productType: 'Toldo' | 'Cortina' | 'Cobertura') {
+    async saveProductionInstallationSheet(sheet: any, productType: string) {
         // Save main production sheet
         const mainPayload = {
             id: sheet.id,

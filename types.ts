@@ -48,7 +48,7 @@ export interface Seller {
 
 export interface Product {
   id: string; // IdProduto
-  tipo: 'Toldo' | 'Cortina' | 'Cobertura';
+  tipo: string;
   nome: string;
   valor: number;
   custo: number;
@@ -158,7 +158,7 @@ export interface MeasurementItem {
   parentItemId?: string; // ID do item pai para agrupamento de acessórios
   width: number;
   height: number;
-  productType: 'Toldo' | 'Cortina' | 'Cobertura';
+  productType: string;
   notes?: string;
   productionSheet?: ProductionInstallationSheet;
 }

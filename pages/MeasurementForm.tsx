@@ -274,7 +274,7 @@ const MeasurementForm = ({
       }
 
       const product = products.find(p => p.id === currentItem?.productId);
-      const productType = product?.tipo as 'Toldo' | 'Cortina' | 'Cobertura';
+      const productType = product?.tipo as string;
 
       if (!productType) {
         alert('Erro: Tipo de produto não identificado');
