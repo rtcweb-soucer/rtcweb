@@ -1,7 +1,5 @@
-
 import * as React from 'react';
 import { useState } from 'react';
-import { Seller, Appointment, Customer, TechnicalSheet, OrderStatus } from '../types';
 import {
   Plus,
   Mail,
@@ -26,12 +24,14 @@ import {
   EyeOff,
   UserPlus
 } from 'lucide-react';
+import { Seller, Appointment, Customer, TechnicalSheet, OrderStatus, Order } from '../types';
 
 interface SellersProps {
   sellers: Seller[];
   appointments: Appointment[];
   customers: Customer[];
   technicalSheets: TechnicalSheet[];
+  orders: Order[];
   onAdd: (s: Seller) => void;
   onUpdate: (s: Seller) => void;
   onEditTechnicalSheet: (sheet: TechnicalSheet) => void;
@@ -44,6 +44,7 @@ const Sellers = ({
   appointments,
   customers,
   technicalSheets,
+  orders,
   onAdd,
   onUpdate,
   onEditTechnicalSheet,
@@ -56,6 +57,11 @@ const Sellers = ({
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Estados para o Dashboard
+  const now = new Date();
+  const [startDate, setStartDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]);
 
   const [formData, setFormData] = useState<Partial<Seller>>({
     name: '',
@@ -108,22 +114,100 @@ const Sellers = ({
     return appointments.filter(a => a.customerId === customerId && a.sellerId === sellerId);
   };
 
+  // Cálculos do Dashboard
+  const getSellerStats = (sellerId?: string) => {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const filteredOrders = orders.filter(o => {
+      const orderDate = new Date(o.createdAt);
+      const inRange = orderDate >= start && orderDate <= end;
+      const matchesSeller = sellerId ? o.sellerId === sellerId : true;
+      return inRange && matchesSeller;
+    });
+
+    const closedOrders = filteredOrders.filter(o => o.status !== OrderStatus.QUOTE_SENT && o.status !== OrderStatus.PENDING_MEASUREMENT);
+    const openQuotes = filteredOrders.filter(o => o.status === OrderStatus.QUOTE_SENT);
+
+    const totalClosed = closedOrders.reduce((acc, o) => acc + (o.totalValue || 0), 0);
+
+    return {
+      totalClosed,
+      closedCount: closedOrders.length,
+      openQuotesCount: openQuotes.length,
+      conversion: openQuotes.length + closedOrders.length > 0
+        ? (closedOrders.length / (openQuotes.length + closedOrders.length) * 100).toFixed(1)
+        : '0'
+    };
+  };
+
+  const globalStats = getSellerStats();
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
             <Users className="text-blue-600" /> Equipe de Vendas
           </h2>
-          <p className="text-slate-500 font-medium">Gestão de vendedores e credenciais de acesso externo.</p>
+          <p className="text-slate-500 font-medium">Dashboard de performance e gestão de consultores.</p>
         </div>
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-500/20 transition-all font-black uppercase text-xs tracking-widest"
-        >
-          <UserPlus size={18} />
-          Cadastrar Vendedor
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+            <Calendar size={14} className="text-slate-400" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="text-[10px] font-bold text-slate-600 outline-none bg-transparent"
+            />
+            <span className="text-slate-300">|</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="text-[10px] font-bold text-slate-600 outline-none bg-transparent"
+            />
+          </div>
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition-all font-black uppercase text-[10px] tracking-widest"
+          >
+            <Plus size={16} /> Novo Consultor
+          </button>
+        </div>
+      </div>
+
+      {/* Dashboard Global */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Pedidos Fechados</p>
+          <p className="text-2xl font-black text-slate-900">R$ {globalStats.totalClosed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{globalStats.closedCount} contratos</span>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Orçamentos Abertos</p>
+          <p className="text-2xl font-black text-blue-600">{globalStats.openQuotesCount}</p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Aguardando fechamento</p>
+        </div>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Taxa de Conversão</p>
+          <p className="text-2xl font-black text-slate-900">{globalStats.conversion}%</p>
+          <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div className="bg-blue-500 h-full rounded-full transition-all duration-500" style={{ width: `${globalStats.conversion}%` }}></div>
+          </div>
+        </div>
+        <div className="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow-lg shadow-slate-900/10 flex flex-col justify-between">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Período Ativo</p>
+          <p className="text-sm font-bold text-white uppercase tracking-tight">
+            {new Date(startDate).toLocaleDateString()} à {new Date(endDate).toLocaleDateString()}
+          </p>
+          <p className="text-[9px] text-blue-400 font-bold mt-2 italic">* Filtro aplicado em todos os dados</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -153,13 +237,13 @@ const Sellers = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-6">
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Carteira</p>
-                    <p className="text-xl font-black text-slate-900">{sellerCustomers.length}</p>
+                  <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Fechados</p>
+                    <p className="text-md font-black text-slate-900">R$ {getSellerStats(seller.id).totalClosed.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Visitas</p>
-                    <p className="text-xl font-black text-slate-900">{sellerApps.length}</p>
+                  <div className="bg-blue-50 p-3 rounded-2xl border border-blue-100">
+                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Orçamentos</p>
+                    <p className="text-md font-black text-slate-900">{getSellerStats(seller.id).openQuotesCount}</p>
                   </div>
                 </div>
               </div>

@@ -317,6 +317,7 @@ const Orders = ({
                     <tr>
                       <th className="px-4 py-2 text-[8px] font-black text-slate-500 uppercase">Parcela</th>
                       <th className="px-4 py-2 text-[8px] font-black text-slate-500 uppercase">Vencimento</th>
+                      <th className="px-4 py-2 text-[8px] font-black text-slate-500 uppercase text-center">Forma de Pagto</th>
                       <th className="px-4 py-2 text-[8px] font-black text-slate-500 uppercase text-right">Valor</th>
                     </tr>
                   </thead>
@@ -326,7 +327,8 @@ const Orders = ({
                         <td className="px-4 py-2 text-xs font-bold text-slate-700">
                           {String(inst.number).padStart(2, '0')}/{String(selectedOrder.installments?.length || 1).padStart(2, '0')}
                         </td>
-                        <td className="px-4 py-2 text-xs text-slate-600">{new Date(inst.dueDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-2 text-xs text-slate-600 font-medium">{new Date(inst.dueDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-2 text-[10px] text-slate-600 font-bold text-center uppercase italic">{inst.paymentMethod || '-'}</td>
                         <td className="px-4 py-2 text-xs text-right font-black text-blue-600">R$ {(inst.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                       </tr>
                     )) || (

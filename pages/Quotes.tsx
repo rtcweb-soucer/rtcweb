@@ -1,4 +1,3 @@
-
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { dataService } from '../services/dataService';
@@ -55,13 +54,18 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
   const [downPayment, setDownPayment] = useState<number>(0);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [filterSellerId, setFilterSellerId] = useState('');
+  const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
+  const [isSaving, setIsSaving] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
 
   const activeQuoteId = selectedQuoteId || initialSelectedId;
 
   const filteredOrders = orders.filter((order: Order) => {
-    const isQuote = order.status === OrderStatus.QUOTE_SENT;
+    const isQuote = activeTab === 'open'
+      ? order.status === OrderStatus.QUOTE_SENT
+      : (order.status !== OrderStatus.QUOTE_SENT && order.status !== OrderStatus.PENDING_MEASUREMENT);
+
     if (!isQuote) return false;
     const customer = customers.find((c: Customer) => c.id === order.customerId);
     const matchesSearch = customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || order.id.includes(searchTerm);
@@ -81,13 +85,15 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
 
   const orderItems = getOrderItems();
 
+  // Sincroniza os valores comerciais quando o orçamento selecionado muda
+  // ou quando o valor total da proposta é alterado (enquanto o modal está fechado)
   useEffect(() => {
-    if (selectedOrder) {
+    if (selectedOrder && !showOrderModal) {
       setFinalValue(selectedOrder.totalValue);
       setPaymentMethod(selectedOrder.paymentMethod || '');
       setPaymentConditions(selectedOrder.paymentConditions || '');
     }
-  }, [selectedOrder]);
+  }, [selectedOrder?.id, selectedOrder?.totalValue, showOrderModal]);
 
   // Gera parcelas automaticamente quando o valor ou quantidade de parcelas muda
   useEffect(() => {
@@ -156,33 +162,41 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
   };
 
   const handleTransformToOrder = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || isSaving) return;
+    setIsSaving(true);
 
-    const updatedOrder: Order = {
-      ...selectedOrder,
-      status: OrderStatus.CONTRACT_SIGNED,
-      totalValue: finalValue,
-      paymentMethod: paymentMethod,
-      paymentConditions: paymentConditions,
-      installments: installments,
-      createdAt: new Date()
-    };
+    try {
+      const updatedOrder: Order = {
+        ...selectedOrder,
+        status: OrderStatus.CONTRACT_SIGNED,
+        totalValue: finalValue,
+        paymentMethod: paymentMethod,
+        paymentConditions: paymentConditions,
+        installments: installments,
+        createdAt: new Date()
+      };
 
-    // 3. Save Order (Commercial data)
-    await dataService.saveOrder(updatedOrder);
+      // 3. Save Order (Commercial data)
+      await dataService.saveOrder(updatedOrder);
 
-    // 4. Initialize Production Tracking
-    await dataService.initializeProduction(
-      updatedOrder.id,
-      ProductionStage.NEW_ORDER,
-      [{ stage: ProductionStage.NEW_ORDER, timestamp: new Date() }]
-    );
+      // 4. Initialize Production Tracking
+      await dataService.initializeProduction(
+        updatedOrder.id,
+        ProductionStage.NEW_ORDER,
+        [{ stage: ProductionStage.NEW_ORDER, timestamp: new Date() }]
+      );
 
-    // 5. Update UI and Navigate
-    onUpdateOrder(updatedOrder);
-    setShowOrderModal(false);
-    setSelectedQuoteId(null);
-    onNavigateToOrders?.();
+      // 5. Update UI and Navigate
+      onUpdateOrder(updatedOrder);
+      setShowOrderModal(false);
+      setSelectedQuoteId(null);
+      onNavigateToOrders?.();
+    } catch (err: any) {
+      console.error("Erro ao confirmar pedido:", err);
+      alert("Erro ao confirmar pedido: " + (err.message || "Erro desconhecido. Verifique se as colunas necessárias foram criadas no banco de dados."));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleGeneratePrint = (autoPrint: boolean = true) => {
@@ -229,25 +243,114 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
     printWindow.document.close();
   };
 
+  // Componente de Input de Moeda com Estado Local para evitar travamentos
+  const CurrencyInput = ({
+    value,
+    onChange,
+    className = "",
+    prefix = "R$",
+    prefixColor = "text-slate-400"
+  }: {
+    value: number,
+    onChange: (val: number) => void,
+    className?: string,
+    prefix?: string,
+    prefixColor?: string
+  }) => {
+    const [localValue, setLocalValue] = useState(value.toFixed(2));
+    const [isFocused, setIsFocused] = useState(false);
+
+    useEffect(() => {
+      if (!isFocused) {
+        setLocalValue(value.toFixed(2));
+      }
+    }, [value, isFocused]);
+
+    const handleBlur = () => {
+      setIsFocused(false);
+      const numericValue = parseFloat(localValue.replace(',', '.'));
+      if (!isNaN(numericValue)) {
+        onChange(numericValue);
+      } else {
+        setLocalValue(value.toFixed(2));
+      }
+    };
+
+    return (
+      <div className={`relative flex items-center gap-1 ${className}`}>
+        {prefix && <span className={`text-[10px] font-bold ${prefixColor}`}>{prefix}</span>}
+        <input
+          type="text"
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={handleBlur}
+          className="w-20 text-right bg-transparent border-none p-0 font-black text-slate-900 focus:ring-0 outline-none no-print appearance-none"
+        />
+      </div>
+    );
+  };
+
   const calculateItemPrice = (item: MeasurementItem) => {
+    // 1. Se houver um preço explícito definido para este item, use-o
+    if (selectedOrder?.itemPrices && selectedOrder.itemPrices[item.id] !== undefined) {
+      return selectedOrder.itemPrices[item.id];
+    }
+
+    // 2. Caso contrário, calcule o preço base do produto
     const product = products.find((p: Product) => p.id === item.productId);
     if (!product) return 0;
-
-    const originalTotal = orderItems.reduce((acc: number, it: MeasurementItem) => {
-      const p = products.find((prod: Product) => prod.id === it.productId);
-      if (!p) return acc;
-      const area = (it.width * it.height) || 1;
-      return acc + (p.unidade === 'M2' ? p.valor * area : p.valor);
-    }, 0);
 
     const area = (item.width * item.height) || 1;
     const baseValue = product.unidade === 'M2' ? product.valor * area : product.valor;
 
+    // 3. Se o total da proposta foi ajustado globalmente (desconto/acréscimo) 
+    // e ainda não temos preços por item definidos, aplique a proporção
+    const originalTotal = orderItems.reduce((acc: number, it: MeasurementItem) => {
+      const p = products.find((prod: Product) => prod.id === it.productId);
+      if (!p) return acc;
+      const a = (it.width * it.height) || 1;
+      return acc + (p.unidade === 'M2' ? p.valor * a : p.valor);
+    }, 0);
+
     if (selectedOrder && selectedOrder.totalValue !== originalTotal && originalTotal > 0) {
+      // Se já existem itemPrices, mas este item específico não está lá, 
+      // não aplicamos o ratio para evitar cálculos circulares ou saltos inesperados.
+      // Nesse caso, o usuário provavelmente quer definir todos manualmente.
+      if (selectedOrder.itemPrices && Object.keys(selectedOrder.itemPrices).length > 0) {
+        return baseValue;
+      }
+
       const ratio = selectedOrder.totalValue / originalTotal;
       return baseValue * ratio;
     }
+
     return baseValue;
+  };
+
+  const updateItemPrice = async (itemId: string, newPrice: number) => {
+    if (!selectedOrder) return;
+
+    // Inicializa todos os preços se for a primeira vez que editamos itens individualmente
+    // para garantir que os outros itens não "resetem" para o valor original sem desconto
+    let newItemPrices = { ...(selectedOrder.itemPrices || {}) };
+    if (Object.keys(newItemPrices).length === 0) {
+      orderItems.forEach((item: MeasurementItem) => {
+        newItemPrices[item.id] = calculateItemPrice(item);
+      });
+    }
+
+    newItemPrices[itemId] = newPrice;
+    const newTotal = Object.values(newItemPrices).reduce((acc, curr) => acc + curr, 0);
+
+    const updatedOrder: Order = {
+      ...selectedOrder,
+      itemPrices: newItemPrices,
+      totalValue: newTotal
+    };
+
+    await dataService.saveOrder(updatedOrder);
+    onUpdateOrder(updatedOrder);
   };
 
   const uniqueSpecs = (() => {
@@ -342,7 +445,16 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                         <td className="px-4 py-1.5 text-xs text-slate-700 font-medium">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</td>
                         <td className="px-4 py-1.5 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
                         <td className="px-4 py-1.5 text-xs text-center font-mono font-bold text-blue-600">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
-                        <td className="px-4 py-1.5 text-xs text-right font-black text-slate-900">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-4 py-1.5 text-xs text-right font-black text-slate-900">
+                          <div className="flex justify-end no-print">
+                            <CurrencyInput
+                              value={calculateItemPrice(item)}
+                              onChange={(val) => updateItemPrice(item.id, val)}
+                              className="border-b border-transparent hover:border-slate-200 transition-all focus-within:border-blue-400"
+                            />
+                          </div>
+                          <span className="hidden print:block font-black">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -420,26 +532,22 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Final (R$)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span>
-                        <input
-                          type="number" step="0.01" value={finalValue}
-                          onChange={(e) => setFinalValue(parseFloat(e.target.value) || 0)}
-                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-md font-bold text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Final</label>
+                      <CurrencyInput
+                        value={finalValue}
+                        onChange={(val) => setFinalValue(val)}
+                        prefixColor="text-blue-400"
+                        className="w-full px-3 py-2.5 bg-blue-50/30 border border-blue-100 rounded-xl text-md font-black text-blue-600 focus-within:ring-2 focus-within:ring-blue-500 transition-all cursor-text"
+                      />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Entrada (R$)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span>
-                        <input
-                          type="number" step="0.01" value={downPayment}
-                          onChange={(e) => setDownPayment(parseFloat(e.target.value) || 0)}
-                          className="w-full pl-9 pr-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-md font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
-                        />
-                      </div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Entrada</label>
+                      <CurrencyInput
+                        value={downPayment}
+                        onChange={(val) => setDownPayment(val)}
+                        prefixColor="text-emerald-400"
+                        className="w-full px-3 py-2.5 bg-emerald-50/30 border border-emerald-100 rounded-xl text-md font-black text-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500 transition-all cursor-text"
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd. Parcelas</label>
@@ -496,15 +604,12 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                                 </select>
                               </td>
                               <td className="px-4 py-2 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-[10px] font-bold text-slate-400">R$</span>
-                                  <input
-                                    type="number" step="0.01"
-                                    value={inst.value}
-                                    onChange={(e) => updateInstallment(idx, 'value', parseFloat(e.target.value) || 0)}
-                                    className="bg-transparent border-none font-black text-blue-600 text-right w-20 p-0 focus:ring-0 outline-none text-[11px]"
-                                  />
-                                </div>
+                                <CurrencyInput
+                                  value={inst.value}
+                                  onChange={(val) => updateInstallment(idx, 'value', val)}
+                                  prefixColor="text-blue-400"
+                                  className="justify-end bg-blue-50/50 p-1.5 rounded-lg border border-transparent focus-within:border-blue-300 transition-all"
+                                />
                               </td>
                             </tr>
                           ))}
@@ -543,8 +648,19 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                 </div>
 
                 <div className="flex gap-4 pt-4">
-                  <button onClick={() => setShowOrderModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
-                  <button onClick={handleTransformToOrder} className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-xl shadow-emerald-500/30 transition-all">Confirmar Pedido</button>
+                  <button onClick={() => setShowOrderModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors disabled:opacity-50" disabled={isSaving}>Cancelar</button>
+                  <button
+                    onClick={handleTransformToOrder}
+                    className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-xl shadow-emerald-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Salvando...
+                      </>
+                    ) : 'Confirmar Pedido'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -558,8 +674,22 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Orçamentos</h2>
-          <p className="text-slate-500">Gestão de propostas enviadas aos clientes.</p>
+          <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Gestão de Orçamentos</h2>
+          <p className="text-slate-500 font-medium">Controle de propostas e conversão em pedidos.</p>
+        </div>
+        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner">
+          <button
+            onClick={() => setActiveTab('open')}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'open' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Abertos
+          </button>
+          <button
+            onClick={() => setActiveTab('closed')}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'closed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Fechados
+          </button>
         </div>
       </div>
       <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4">

@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { Product } from '../types';
+import { fuzzyMatch } from '../utils/searchUtils';
 import { Plus, Search, Package, Trash2, X, Edit3, Info, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface ProductsProps {
@@ -32,8 +33,8 @@ const Products = ({ products, onAdd, onUpdate, onDelete }: ProductsProps) => {
   });
 
   const filteredProducts = products.filter(p =>
-    p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.tipo.toLowerCase().includes(searchTerm.toLowerCase())
+    fuzzyMatch(p.nome, searchTerm) ||
+    fuzzyMatch(p.tipo, searchTerm)
   );
 
   const handleOpenModal = (product?: Product) => {

@@ -2,9 +2,10 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura } from '../types';
-import { Ruler, Sparkles, Plus, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench } from 'lucide-react';
+import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
+import { fuzzyMatch } from '../utils/searchUtils';
 import { QRCodeSVG } from 'qrcode.react';
 import { CortinaForm, ToldoForm, CoberturaForm } from '../components/ProductionForms';
 
@@ -18,6 +19,80 @@ interface MeasurementFormProps {
   onSave: (sheet: TechnicalSheet) => void;
   onGenerateQuote: (sheet: TechnicalSheet, selectedItemIds?: string[]) => void;
 }
+
+// Componente de Busca Customizado para Produtos
+const SearchableProductSelect = ({ value, onChange, products }: { value: string, onChange: (val: string) => void, products: Product[] }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+  const selectedProduct = products.find(p => p.id === value);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = products.filter(p =>
+    !searchTerm || fuzzyMatch(p.nome, searchTerm) || fuzzyMatch(p.tipo, searchTerm)
+  );
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <div
+        onClick={() => {
+          setIsOpen(!isOpen);
+          if (!isOpen) setSearchTerm('');
+        }}
+        className="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus-within:ring-1 focus-within:ring-blue-500 cursor-pointer min-h-[30px] flex items-center justify-between"
+      >
+        <span className={`font-black truncate ${selectedProduct ? 'text-blue-600' : 'text-slate-400'}`}>
+          {selectedProduct ? selectedProduct.nome : 'Selecione...'}
+        </span>
+        <Search size={10} className="text-slate-400 flex-shrink-0 ml-1" />
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 min-w-[250px]">
+          <div className="p-2 border-b border-slate-100 bg-slate-50">
+            <input
+              autoFocus
+              type="text"
+              placeholder="Pesquisar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-2 py-1.5 text-[11px] bg-white border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
+            {filtered.length === 0 ? (
+              <div className="p-4 text-center text-[10px] text-slate-400 font-bold uppercase">Nenhum produto</div>
+            ) : (
+              filtered.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    onChange(p.id);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-[11px] hover:bg-blue-50 transition-colors flex flex-col gap-0.5 ${p.id === value ? 'bg-blue-50/50 border-l-2 border-blue-500' : ''}`}
+                >
+                  <span className="font-black text-slate-800">{p.nome}</span>
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{p.tipo}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MeasurementForm = ({
   customers,
@@ -576,16 +651,11 @@ const MeasurementForm = ({
 
                     <div className="md:col-span-3">
                       <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter">Produto *</label>
-                      <select
+                      <SearchableProductSelect
                         value={item.productId}
-                        onChange={(e) => updateItem(item.id, 'productId', e.target.value)}
-                        className="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:ring-1 focus:ring-blue-500 outline-none font-black text-blue-600"
-                      >
-                        <option value="">Selecione...</option>
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>{p.nome}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => updateItem(item.id, 'productId', val)}
+                        products={products}
+                      />
                     </div>
 
                     <div className="md:col-span-1">

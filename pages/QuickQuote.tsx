@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { useState, useMemo } from 'react';
 import { Product } from '../types';
+import { normalizeString, fuzzyMatch } from '../utils/searchUtils';
 import {
   Search,
   Zap,
@@ -38,11 +39,10 @@ const QuickQuote = ({ products }: QuickQuoteProps) => {
   const [showCopiedAlert, setShowCopiedAlert] = useState(false);
 
   const filteredProducts = useMemo(() => {
-    if (!searchTerm) return [];
     return products.filter(p =>
-      p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.tipo.toLowerCase().includes(searchTerm.toLowerCase())
-    ).slice(0, 5);
+      fuzzyMatch(p.nome, searchTerm) ||
+      fuzzyMatch(p.tipo, searchTerm)
+    );
   }, [products, searchTerm]);
 
   const addProduct = (product: Product) => {
@@ -169,7 +169,7 @@ const QuickQuote = ({ products }: QuickQuoteProps) => {
             </div>
 
             {/* Resultados da Busca */}
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {filteredProducts.map(product => (
                 <button
                   key={product.id}

@@ -31,6 +31,7 @@ interface PCPProps {
   sellers: Seller[];
   customers: Customer[];
   onUpdateOrder: (updatedOrder: Order) => void;
+  onSelectCustomer: (customerId: string) => void;
 }
 
 const STAGES_CONFIG = [
@@ -42,7 +43,7 @@ const STAGES_CONFIG = [
   { id: ProductionStage.INSTALLATION, icon: <Truck size={16} />, color: 'bg-slate-700' }
 ];
 
-const PCP = ({ orders, products, sellers, customers, onUpdateOrder }: PCPProps) => {
+const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCustomer }: PCPProps) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
@@ -233,10 +234,13 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder }: PCPProps) 
                       </div>
 
                       <div className="space-y-2.5 mb-4">
-                        <div className="flex items-center gap-2 text-[11px] text-slate-700 font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
-                          <Users size={12} className="text-blue-500" />
+                        <button
+                          onClick={() => onSelectCustomer(order.customerId)}
+                          className="flex items-center gap-2 text-[11px] text-slate-700 font-bold bg-slate-50 p-2 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all w-full text-left group/cust"
+                        >
+                          <Users size={12} className="text-blue-500 group-hover/cust:scale-110 transition-transform" />
                           <span className="truncate">{customers.find(c => c.id === order.customerId)?.name || 'Cliente Desconhecido'}</span>
-                        </div>
+                        </button>
 
                         <div className="grid grid-cols-2 gap-2">
                           <div className="flex flex-col gap-0.5">

@@ -81,6 +81,9 @@ export interface Customer {
     city: string;
     state: string;
   };
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
 }
 
 // Interfaces para campos específicos por tipo de produto
@@ -224,6 +227,7 @@ export interface Order {
   paymentMethod?: string; // Forma de Pagamento
   paymentConditions?: string; // Tabela/Condições de Pagamento
   installments?: Installment[]; // Detalhamento das parcelas
+  itemPrices?: Record<string, number>; // New: Preços manuais por item
   installationDate?: string;
   installationTime?: string;
   technician?: string;

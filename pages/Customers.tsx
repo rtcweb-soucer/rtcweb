@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { Customer, Appointment, Order, Seller, OrderStatus, TechnicalSheet } from '../types';
+import { fuzzyMatch } from '../utils/searchUtils';
 import {
   Plus,
   Search,
@@ -33,6 +34,7 @@ interface CustomersProps {
   sellers: Seller[];
   technicalSheets: TechnicalSheet[];
   onAddAppointment: (a: Appointment) => void;
+  preselectedCustomerId?: string | null;
 }
 
 const Customers = ({
@@ -43,7 +45,8 @@ const Customers = ({
   orders,
   sellers,
   technicalSheets,
-  onAddAppointment
+  onAddAppointment,
+  preselectedCustomerId
 }: CustomersProps) => {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -63,51 +66,81 @@ const Customers = ({
     status: 'SCHEDULED'
   });
 
+  React.useEffect(() => {
+    if (preselectedCustomerId) {
+      const customer = customers.find(c => c.id === preselectedCustomerId);
+      if (customer) {
+        openDetails(customer);
+      }
+    }
+  }, [preselectedCustomerId, customers]);
+
   const handleCepLookup = async (cep: string) => {
     const cleanedCep = cep.replace(/\D/g, '');
     if (cleanedCep.length === 8) {
       setLoadingSearch(true);
-      // Simulate API delay
-      setTimeout(() => {
-        setFormData(prev => ({
-          ...prev,
-          address: {
-            ...prev.address!,
-            cep,
-            street: 'Av. Paulista',
-            neighborhood: 'Bela Vista',
-            city: 'São Paulo',
-            state: 'SP'
-          }
-        }));
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleanedCep}/json/`);
+        const data = await response.json();
+
+        if (!data.erro) {
+          setFormData(prev => ({
+            ...prev,
+            address: {
+              ...prev.address!,
+              cep,
+              street: data.logradouro || prev.address?.street || '',
+              neighborhood: data.bairro || prev.address?.neighborhood || '',
+              city: data.localidade || prev.address?.city || '',
+              state: data.uf || prev.address?.state || ''
+            }
+          }));
+        }
+      } catch (error) {
+        console.error("Erro ao buscar CEP:", error);
+      } finally {
         setLoadingSearch(false);
-      }, 500);
+      }
     }
   };
 
   const handleCnpjLookup = async () => {
     if (!formData.document) return;
+    const cleanCnpj = formData.document.replace(/\D/g, '');
+    if (cleanCnpj.length !== 14) {
+      alert("CNPJ inválido (deve ter 14 dígitos)");
+      return;
+    }
+
     setLoadingSearch(true);
-    // Simulate CNPJ gov consultation
-    setTimeout(() => {
+    try {
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+      if (!response.ok) throw new Error("CNPJ não encontrado");
+      const data = await response.json();
+
       setFormData(prev => ({
         ...prev,
-        name: 'RTC DECORAÇÕES E COMÉRCIO LTDA',
-        tradeName: 'RTC Decor',
-        email: 'vendas@rtcdecor.com.br',
-        phone: '(11) 4004-0000',
+        name: data.razao_social || '',
+        tradeName: data.nome_fantasia || '',
+        email: data.email || prev.email || '',
+        phone: data.ddd_telefone_1 ? `(${data.ddd_telefone_1.substring(0, 2)}) ${data.ddd_telefone_1.substring(2)}` : prev.phone || '',
         address: {
           ...prev.address!,
-          cep: '01310-100',
-          street: 'Avenida Paulista',
-          number: '1000',
-          neighborhood: 'Bela Vista',
-          city: 'São Paulo',
-          state: 'SP'
+          cep: data.cep || '',
+          street: data.logradouro || '',
+          number: data.numero || '',
+          complement: data.complemento || '',
+          neighborhood: data.bairro || '',
+          city: data.municipio || '',
+          state: data.uf || ''
         }
       }));
+    } catch (error) {
+      console.error("Erro ao buscar CNPJ:", error);
+      alert("Erro ao consultar CNPJ. Verifique se o número está correto.");
+    } finally {
       setLoadingSearch(false);
-    }, 800);
+    }
   };
 
   const handleSaveCustomer = (e: React.FormEvent) => {
@@ -147,7 +180,11 @@ const Customers = ({
     setSelectedCustomer(null);
     setFormData({
       type: 'CPF',
-      address: { cep: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' }
+      address: { cep: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
+      phone2: '',
+      contactName: '',
+      contactPhone: '',
+      contactEmail: ''
     });
   };
 
@@ -165,8 +202,8 @@ const Customers = ({
   };
 
   const filteredCustomers = customers.filter((c: Customer) =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.document.includes(searchTerm)
+    fuzzyMatch(c.name || '', searchTerm) ||
+    (c.document || '').includes(searchTerm)
   );
 
   const customerAppointments = appointments.filter((a: Appointment) => a.customerId === selectedCustomer?.id);
@@ -202,59 +239,84 @@ const Customers = ({
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCustomers.map((customer: Customer) => (
-          <div key={customer.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all group relative overflow-hidden flex flex-col">
-            <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                {customer.type === 'CNPJ' ? <Building2 size={24} /> : <UserIcon size={24} />}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => openDetails(customer)}
-                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                  title="Detalhes e Histórico"
-                >
-                  <Eye size={18} />
-                </button>
-                <button
-                  onClick={() => openEdit(customer)}
-                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                  title="Editar"
-                >
-                  <Edit3 size={18} />
-                </button>
-              </div>
-            </div>
-
-            <h3 className="font-bold text-slate-900 truncate pr-4" title={customer.name}>
-              {customer.name}
-            </h3>
-            {customer.tradeName && (
-              <p className="text-xs text-blue-600 font-medium truncate mb-1">{customer.tradeName}</p>
-            )}
-            <p className="text-xs text-slate-500 mb-4">{customer.document}</p>
-
-            <div className="space-y-2 flex-1">
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <Mail size={14} className="text-slate-400 shrink-0" />
-                <span className="truncate">{customer.email}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <Phone size={14} className="text-slate-400 shrink-0" />
-                <span>{customer.phone}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              <div className="flex items-center gap-1">
-                <MapPin size={10} />
-                {customer.address.city}/{customer.address.state}
-              </div>
-              <span className="bg-slate-100 px-2 py-0.5 rounded-full">{customer.type}</span>
-            </div>
-          </div>
-        ))}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left min-w-[1000px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Documento</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Nome / Razão Social</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">E-mail</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Telefone</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Localização</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Tipo</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredCustomers.map((customer: Customer) => (
+                <tr key={customer.id} className="hover:bg-slate-50 transition-colors group">
+                  <td className="px-6 py-4 text-sm font-medium text-slate-500">
+                    {customer.document}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        {customer.type === 'CNPJ' ? <Building2 size={18} /> : <UserIcon size={18} />}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">{customer.name}</div>
+                        {customer.tradeName && <div className="text-[10px] text-blue-600 font-medium">{customer.tradeName}</div>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {customer.email}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {customer.phone}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-500">
+                    <div className="flex items-center gap-1">
+                      <MapPin size={12} className="text-slate-400" />
+                      {customer.address.city}/{customer.address.state}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full uppercase">
+                      {customer.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => openDetails(customer)}
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        title="Detalhes e Histórico"
+                      >
+                        <Eye size={18} />
+                      </button>
+                      <button
+                        onClick={() => openEdit(customer)}
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Editar"
+                      >
+                        <Edit3 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredCustomers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
+                    Nenhum cliente cadastrado ou encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modal - Cadastro/Edição */}
@@ -319,10 +381,14 @@ const Customers = ({
                   <input type="text" required value={formData.address?.cep || ''} onChange={(e) => { handleCepLookup(e.target.value); setFormData(p => ({ ...p, address: { ...p.address!, cep: e.target.value } })) }} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone *</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone Principal *</label>
                   <input type="text" required value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
                 </div>
-                <div className="col-span-full grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone Secundário</label>
+                  <input type="text" value={formData.phone2 || ''} onChange={(e) => setFormData({ ...formData, phone2: e.target.value })} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                </div>
+                <div className="col-span-full grid grid-cols-2 md:grid-cols-6 gap-4">
                   <div className="col-span-2">
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rua/Logradouro</label>
                     <input type="text" value={formData.address?.street || ''} onChange={(e) => setFormData(p => ({ ...p, address: { ...p.address!, street: e.target.value } }))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
@@ -332,10 +398,42 @@ const Customers = ({
                     <input type="text" value={formData.address?.number || ''} onChange={(e) => setFormData(p => ({ ...p, address: { ...p.address!, number: e.target.value } }))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
                   </div>
                   <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Comp.</label>
+                    <input type="text" value={formData.address?.complement || ''} onChange={(e) => setFormData(p => ({ ...p, address: { ...p.address!, complement: e.target.value } }))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Ex: Apto 10" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bairro</label>
+                    <input type="text" value={formData.address?.neighborhood || ''} onChange={(e) => setFormData(p => ({ ...p, address: { ...p.address!, neighborhood: e.target.value } }))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade</label>
+                    <input type="text" value={formData.address?.city || ''} onChange={(e) => setFormData(p => ({ ...p, address: { ...p.address!, city: e.target.value } }))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                  </div>
+                  <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">UF</label>
                     <input type="text" value={formData.address?.state || ''} onChange={(e) => setFormData(p => ({ ...p, address: { ...p.address!, state: e.target.value } }))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm uppercase" />
                   </div>
                 </div>
+
+                {formData.type === 'CNPJ' && (
+                  <div className="col-span-full bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-4">
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Dados de Contato (PJ)</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Contato</label>
+                        <input type="text" value={formData.contactName || ''} onChange={(e) => setFormData({ ...formData, contactName: e.target.value })} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm" placeholder="Ex: João Silva" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone do Contato</label>
+                        <input type="text" value={formData.contactPhone || ''} onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail do Contato</label>
+                        <input type="email" value={formData.contactEmail || ''} onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">Cancelar</button>
@@ -366,18 +464,37 @@ const Customers = ({
                     <div className="flex items-center gap-2 text-sm text-slate-600">
                       <Phone size={14} className="text-blue-500" /> {selectedCustomer.phone}
                     </div>
+                    {selectedCustomer.phone2 && (
+                      <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Smartphone size={14} className="text-blue-500" /> {selectedCustomer.phone2}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 text-sm text-slate-600">
                       <Mail size={14} className="text-blue-500" /> {selectedCustomer.email}
                     </div>
                   </div>
                 </div>
 
+                {(selectedCustomer.contactName || selectedCustomer.contactPhone) && (
+                  <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Contato na Empresa</p>
+                    <div className="space-y-1">
+                      {selectedCustomer.contactName && <p className="text-xs font-bold text-slate-900">{selectedCustomer.contactName}</p>}
+                      {selectedCustomer.contactPhone && <p className="text-[11px] text-slate-600 flex items-center gap-1.5"><Phone size={10} /> {selectedCustomer.contactPhone}</p>}
+                      {selectedCustomer.contactEmail && <p className="text-[11px] text-slate-600 flex items-center gap-1.5"><Mail size={10} /> {selectedCustomer.contactEmail}</p>}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Endereço</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    {selectedCustomer.address.street}, {selectedCustomer.address.number}<br />
+                    {selectedCustomer.address.street}, {selectedCustomer.address.number}
+                    {selectedCustomer.address.complement && <span> • {selectedCustomer.address.complement}</span>}
+                    <br />
                     {selectedCustomer.address.neighborhood}<br />
-                    {selectedCustomer.address.city} - {selectedCustomer.address.state}
+                    {selectedCustomer.address.city} - {selectedCustomer.address.state}<br />
+                    <span className="text-[10px] font-bold text-slate-400">CEP: {selectedCustomer.address.cep}</span>
                   </p>
                 </div>
               </div>

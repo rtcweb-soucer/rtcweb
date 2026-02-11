@@ -30,6 +30,9 @@ export const dataService = {
         return (data || []).map(c => ({
             ...c,
             tradeName: c.trade_name, // Map snake_case from DB to camelCase
+            contactName: c.contact_name,
+            contactPhone: c.contact_phone,
+            contactEmail: c.contact_email,
         })) as Customer[];
     },
     async saveCustomer(customer: Customer) {
@@ -37,9 +40,18 @@ export const dataService = {
             const payload = {
                 ...customer,
                 trade_name: customer.tradeName,
+                contact_name: customer.contactName,
+                contact_phone: customer.contactPhone,
+                contact_email: customer.contactEmail,
             };
             // @ts-ignore
             delete payload.tradeName;
+            // @ts-ignore
+            delete payload.contactName;
+            // @ts-ignore
+            delete payload.contactPhone;
+            // @ts-ignore
+            delete payload.contactEmail;
 
             console.log("Saving customer payload:", payload);
             const { data, error } = await supabase.from('customers').upsert(payload).select().single();
@@ -51,7 +63,10 @@ export const dataService = {
 
             return {
                 ...data,
-                tradeName: data.trade_name
+                tradeName: data.trade_name,
+                contactName: data.contact_name,
+                contactPhone: data.contact_phone,
+                contactEmail: data.contact_email,
             } as Customer;
         } catch (err: any) {
             console.error("DataService Exception:", err);
@@ -216,6 +231,7 @@ export const dataService = {
                 installationTime: o.installation_time,
                 productionStage: tracking?.stage || o.production_stage,
                 productionHistory: tracking?.history || o.production_history,
+                itemPrices: o.item_prices || {},
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -235,10 +251,24 @@ export const dataService = {
             installation_date: order.installationDate,
             installation_time: order.installationTime,
             technician: order.technician,
-            // production fields removed from orders table
+            item_prices: order.itemPrices,
         };
-        const { data, error } = await supabase.from('orders').upsert(payload).select().single();
-        if (error) throw error;
+        console.log('💾 Saving order payload:', payload);
+        let { data, error } = await supabase.from('orders').upsert(payload).select().single();
+
+        // Robustez: Se a coluna item_prices não existir no banco, tenta salvar sem ela
+        if (error && error.message?.includes('item_prices')) {
+            console.warn('⚠️ Coluna item_prices não encontrada. Tentando salvar sem preços customizados.');
+            const { item_prices, ...payloadWithoutPrices } = payload;
+            const retry = await supabase.from('orders').upsert(payloadWithoutPrices).select().single();
+            data = retry.data;
+            error = retry.error;
+        }
+
+        if (error) {
+            console.error('❌ Supabase error saving order:', error);
+            throw error;
+        }
         return {
             ...data,
             customerId: data.customer_id,
@@ -252,6 +282,7 @@ export const dataService = {
             installationTime: data.installation_time,
             productionStage: data.production_stage,
             productionHistory: data.production_history,
+            itemPrices: data.item_prices || {},
             createdAt: new Date(data.created_at)
         } as unknown as Order;
     },
@@ -290,9 +321,12 @@ export const dataService = {
             order_id: orderId,
             stage: stage,
             history: history,
-            updated_at: new Date()
+            updated_at: new Date().toISOString()
         });
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Supabase error initializing production:', error);
+            throw error;
+        }
     },
 
     async updateProductionStage(orderId: string, stage: string, history: any[]) {

@@ -180,6 +180,11 @@ const App = () => {
     setActiveTab('measurements');
   };
 
+  const handleSelectCustomer = (customerId: string) => {
+    setPreselectedCustomerId(customerId);
+    setActiveTab('customers');
+  };
+
   const handleGenerateQuote = (sheet: TechnicalSheet, selectedItemIds?: string[]) => {
     if (!sheet || !sheet.items || sheet.items.length === 0) return;
     const activeItems = selectedItemIds ? sheet.items.filter((item: any) => selectedItemIds.includes(item.id)) : sheet.items;
@@ -302,6 +307,7 @@ const App = () => {
       case 'sellers':
         return <Sellers
           sellers={sellers} appointments={appointments} customers={customers} technicalSheets={technicalSheets}
+          orders={orders}
           onAdd={handleAddSeller} onUpdate={handleUpdateSeller} onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote} onStartMeasurement={handleStartMeasurement}
         />;
@@ -309,6 +315,7 @@ const App = () => {
         return <Customers
           customers={customers} onAdd={handleAddCustomer} onUpdate={handleUpdateCustomer}
           appointments={appointments} orders={orders} sellers={sellers} technicalSheets={technicalSheets} onAddAppointment={handleAddAppointment}
+          preselectedCustomerId={preselectedCustomerId}
         />;
       case 'products':
         return <Products products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />;
@@ -342,7 +349,7 @@ const App = () => {
           onUpdateOrder={handleUpdateOrder} onDeleteOrder={handleDeleteOrder}
         />;
       case 'pcp':
-        return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} />;
+        return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} onSelectCustomer={handleSelectCustomer} />;
       case 'installations':
         return <Installations
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products}
@@ -381,7 +388,10 @@ const App = () => {
         activeTab={activeTab}
         setActiveTab={(tab: string) => {
           setActiveTab(tab);
-          if (tab !== 'measurements') { setPreselectedCustomerId(null); setEditingSheet(null); }
+          if (tab !== 'measurements' && tab !== 'customers') {
+            setPreselectedCustomerId(null);
+            setEditingSheet(null);
+          }
           if (tab !== 'quotes') setLastGeneratedQuoteId(null);
         }}
         menuItems={filteredMenu}
