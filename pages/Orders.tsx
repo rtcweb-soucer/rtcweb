@@ -501,7 +501,8 @@ const Orders = ({
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-900 text-white font-black uppercase tracking-widest text-[9px]">
@@ -569,6 +570,55 @@ const Orders = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filteredOrders.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 italic px-4">
+              Nenhum pedido encontrado.
+            </div>
+          ) : (
+            filteredOrders.map((order: Order) => {
+              const customer = customers.find((c: Customer) => c.id === order.customerId);
+              const seller = sellers.find((s: Seller) => s.id === order.sellerId);
+              return (
+                <div
+                  key={order.id}
+                  onClick={() => setSelectedOrderId(order.id)}
+                  className="p-4 active:bg-slate-50 transition-colors group flex justify-between items-center"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">#{order.id}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <h3 className="font-black text-slate-900 uppercase text-sm truncate">{customer?.name}</h3>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                      <p className="flex items-center gap-1 text-[10px] text-slate-500 font-bold truncate">
+                        <PinIcon size={10} /> {customer?.address.neighborhood}
+                      </p>
+                      <span className="text-[8px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter border border-emerald-100 w-fit">
+                        {order.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right pl-4">
+                    <p className="text-sm font-black text-slate-900">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <div className="flex justify-end items-center gap-2 mt-2">
+                      <button
+                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); openHistory(e, order); }}
+                        className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"
+                      >
+                        <Activity size={14} />
+                      </button>
+                      <ChevronRight size={16} className="text-slate-300" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

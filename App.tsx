@@ -20,7 +20,7 @@ import Commissions from './pages/Commissions';
 import Expenses from './pages/Expenses';
 import Login from './pages/Login';
 import TeamRegistration from './pages/TeamRegistration';
-import { Search, LogOut, User as UserIcon } from 'lucide-react';
+import { Search, LogOut, User as UserIcon, Menu as MenuIcon } from 'lucide-react';
 import { dataService } from './services/dataService';
 
 const App = () => {
@@ -38,6 +38,7 @@ const App = () => {
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
   const [lastGeneratedQuoteId, setLastGeneratedQuoteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Load initial data from Supabase
   useEffect(() => {
@@ -367,7 +368,15 @@ const App = () => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-[100dvh] bg-slate-50 overflow-hidden relative">
+      {/* Backdrop for mobile menu */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[90] md:hidden transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       <Sidebar
         activeTab={activeTab}
         setActiveTab={(tab: string) => {
@@ -376,10 +385,20 @@ const App = () => {
           if (tab !== 'quotes') setLastGeneratedQuoteId(null);
         }}
         menuItems={filteredMenu}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 no-print">
-          <div className="flex items-center gap-4">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 shrink-0 no-print">
+          <div className="flex items-center gap-3">
+            {/* Mobile Menu Toggle */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <MenuIcon size={24} />
+            </button>
+
             <div className="relative group hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input type="text" placeholder="Pesquisar..." className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64 transition-all" />
@@ -400,7 +419,7 @@ const App = () => {
             </div>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0">
+        <main className="flex-1 overflow-y-auto px-4 py-6 md:p-8 print:p-0 min-w-0 w-full overflow-x-hidden">
           {renderContent()}
         </main>
       </div>

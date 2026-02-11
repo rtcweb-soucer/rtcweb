@@ -583,7 +583,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         </select>
       </div>
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-900 text-white font-black uppercase tracking-widest text-[9px]">
@@ -641,6 +642,46 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filteredOrders.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 italic px-4">
+              <FileText size={40} className="mx-auto text-slate-200 mb-3" />
+              Nenhuma proposta encontrada.
+            </div>
+          ) : (
+            filteredOrders.map((order: Order) => {
+              const customer = customers.find((c: Customer) => c.id === order.customerId);
+              const seller = sellers.find((s: Seller) => s.id === order.sellerId);
+              return (
+                <div
+                  key={order.id}
+                  onClick={() => setSelectedQuoteId(order.id)}
+                  className="p-4 active:bg-slate-50 transition-colors flex justify-between items-center group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Nº {order.id}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <h3 className="font-black text-slate-900 uppercase text-sm truncate">{customer?.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="h-4 w-4 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-[8px] font-black">
+                        {seller?.name.charAt(0)}
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-bold">{seller?.name || 'Vendedor RTC'}</span>
+                    </div>
+                  </div>
+                  <div className="text-right pl-4">
+                    <p className="text-sm font-black text-slate-900">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <ChevronRight size={16} className="text-slate-300 ml-auto mt-1" />
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

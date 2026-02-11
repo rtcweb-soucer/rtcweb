@@ -166,7 +166,8 @@ const Schedule = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -247,6 +248,80 @@ const Schedule = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-4">
+        {filteredAppointments.length === 0 ? (
+          <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 italic">
+            Nenhum agendamento encontrado
+          </div>
+        ) : (
+          filteredAppointments.map((app) => {
+            const customer = customers.find(c => c.id === app.customerId);
+            const seller = sellers.find(s => s.id === app.sellerId);
+            return (
+              <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm relative group">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <button
+                      onClick={() => setSelectedApp(app)}
+                      className="text-base font-bold text-slate-900 hover:text-blue-600 transition-colors text-left block"
+                    >
+                      {customer?.name}
+                    </button>
+                    <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
+                      <MapPin size={12} />
+                      {customer?.address.neighborhood}, {customer?.address.city}
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${app.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                    }`}>
+                    {app.status === 'SCHEDULED' ? 'AGENDADO' : 'CONCLUÍDO'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-3 border-t border-slate-50">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                      <CalendarIcon size={14} className="text-blue-500" />
+                      {new Date(app.date).toLocaleDateString()}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
+                      <Clock size={14} className="text-slate-400" />
+                      {app.time}
+                    </div>
+                  </div>
+                </div>
+
+                {role !== UserRole.SELLER && (
+                  <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded-lg">
+                    Vendedor: <span className="font-semibold text-slate-700">{seller?.name}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-50">
+                  {role === UserRole.SELLER && app.status === 'SCHEDULED' && (
+                    <button
+                      onClick={() => onStartMeasurement?.(app.customerId)}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20"
+                    >
+                      <Ruler size={16} />
+                      Iniciar Medição
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedApp(app)}
+                    className="p-3 bg-slate-50 text-slate-500 hover:text-blue-600 rounded-xl transition-all"
+                    title="Detalhes"
+                  >
+                    <Info size={20} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Modal Detalhes Estendido */}
