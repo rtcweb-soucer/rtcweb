@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura } from '../types';
-import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench } from 'lucide-react';
+import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, ExternalLink } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
 import { fuzzyMatch } from '../utils/searchUtils';
@@ -946,12 +946,21 @@ const MeasurementForm = ({
                 <Sparkles size={18} className="text-blue-400" />
                 <h4 className="font-bold text-sm">Captura de Mídia (Google Drive)</h4>
               </div>
-              <button
-                onClick={() => setShowDriveUploadModal(false)}
-                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.open(getGasUrl(), '_blank')}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] uppercase font-bold text-blue-300 border border-blue-900"
+                  title="Se der erro, abra em nova aba"
+                >
+                  <ExternalLink size={14} /> Solução Celular
+                </button>
+                <button
+                  onClick={() => setShowDriveUploadModal(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
             <div className="flex-1 bg-slate-50">
               <iframe
