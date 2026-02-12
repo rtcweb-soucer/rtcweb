@@ -261,12 +261,16 @@ const Orders = ({
                         <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">Nº {selectedOrder.id}</span>
                         <span className="text-slate-400 font-medium text-[9px]">Data: {new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
                       </div>
+                      <div className="mt-2 flex items-center gap-1.5 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded-md w-fit">
+                        <span className="text-[8px] font-black text-yellow-700 uppercase tracking-widest">Consultor:</span>
+                        <span className="text-[10px] font-black text-slate-900 uppercase">{sellers.find(s => s.id === selectedOrder.sellerId)?.name || 'NÃO DEFINIDO'}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="text-right space-y-0">
                     <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
                     <p className="text-xs font-black text-slate-900">RTC TOLDOS E DECORAÇÕES</p>
-                    <p className="text-[9px] text-slate-500 font-medium">CNPJ: 06.276.371/0001-87</p>
+                    <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
                     <p className="text-[9px] text-slate-500 font-medium">(21) 2281-8224 | (21) 99798-6419</p>
                   </div>
                 </div>
@@ -354,30 +358,48 @@ const Orders = ({
                   </section>
 
                   {/* Financeiro e Prazos */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <section className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                      <h4 className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Condições de Pagamento</h4>
-                      <p className="text-xs font-bold text-slate-900">{selectedOrder.paymentConditions || 'A combinar'}</p>
+                  <div className="w-full">
+                    <section className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60">
+                        <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <CreditCard size={12} className="text-blue-500" /> Condições de Pagamento
+                        </h4>
+                      </div>
+
+                      {(!selectedOrder.installments || selectedOrder.installments.length === 0) && (
+                        <p className="text-sm font-bold text-slate-900">{selectedOrder.paymentConditions || 'A combinar'}</p>
+                      )}
+
                       {selectedOrder.installments && selectedOrder.installments.length > 0 && (
-                        <div className="mt-2 text-[9px] text-slate-500 font-medium list-none divide-y divide-slate-200">
-                          {selectedOrder.installments.map(inst => (
-                            <div key={inst.id} className="py-1 flex justify-between uppercase">
-                              <span>Parcela {inst.number}</span>
-                              <span className="font-bold">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        <div className="space-y-1 list-none">
+                          <div className="px-3 flex justify-between text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">
+                            <div className="flex gap-4">
+                              <span className="w-16 text-center">Nº Parcela</span>
+                              <span>Forma de Pagamento</span>
+                            </div>
+                            <div className="flex gap-10">
+                              <span className="w-16 text-right">Vencimento</span>
+                              <span className="w-20 text-right">Valor</span>
+                            </div>
+                          </div>
+                          {selectedOrder.installments.map((inst, idx, arr) => (
+                            <div key={inst.id} className="py-1 px-3 bg-white border border-slate-100 rounded-lg flex items-center justify-between text-[9px] uppercase group hover:border-blue-200 transition-colors">
+                              <div className="flex items-center gap-4">
+                                <span className="font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[8px] w-16 text-center">{inst.number}/{arr.length}</span>
+                                <span className="font-bold text-slate-600 truncate max-w-[150px]">{inst.paymentMethod || 'Espécie'}</span>
+                              </div>
+                              <div className="flex items-center gap-10">
+                                <div className="flex flex-col items-end w-16">
+                                  <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
+                                </div>
+                                <div className="flex flex-col items-end min-w-[80px]">
+                                  <span className="font-black text-blue-700 leading-tight">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>
                       )}
-                    </section>
-                    <section className="grid grid-cols-2 gap-3">
-                      <div className="p-4 bg-slate-50 rounded-xl text-center border border-slate-100">
-                        <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Vendedor</p>
-                        <p className="text-xs font-bold text-slate-900">{sellers.find(s => s.id === selectedOrder.sellerId)?.name || 'NÃO DEFINIDO'}</p>
-                      </div>
-                      <div className="p-4 bg-slate-50 rounded-xl text-center border border-slate-100">
-                        <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Status</p>
-                        <p className="text-xs font-black text-slate-900 uppercase">{selectedOrder.status as any}</p>
-                      </div>
                     </section>
                   </div>
 
@@ -427,7 +449,13 @@ const Orders = ({
                       <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
                       <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">Assinatura do Cliente</p>
                     </div>
-                    <div className="flex-1 text-center">
+                    <div className="flex-1 text-center flex flex-col items-center">
+                      <img
+                        src="/signature.png"
+                        alt="Assinatura RTC"
+                        className="h-10 mb-[-10px] z-10"
+                        style={{ mixBlendMode: 'multiply' }}
+                      />
                       <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
                       <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">RTC Toldos e Decorações</p>
                     </div>

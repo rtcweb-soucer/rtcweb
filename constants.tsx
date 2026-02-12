@@ -50,6 +50,6 @@ export const STATUS_COLORS = {
   QUOTE_SENT: 'bg-indigo-100 text-indigo-800',
   CONTRACT_SIGNED: 'bg-emerald-100 text-emerald-800',
   IN_PRODUCTION: 'bg-orange-100 text-orange-800',
-  FINISHED: 'bg-green-100 text-green-800',
   DELIVERED: 'bg-slate-100 text-slate-800',
 };
+

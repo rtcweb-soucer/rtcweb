@@ -419,7 +419,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
             <div className="text-right space-y-0">
               <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
               <p className="text-xs font-black text-slate-900">RTC TOLDOS E DECORAÇÕES</p>
-              <p className="text-[9px] text-slate-500 font-medium">CNPJ: 06.276.371/0001-87</p>
+              <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
               <p className="text-[9px] text-slate-500 font-medium">(21) 2281-8224 | (21) 99798-6419</p>
             </div>
           </div>
