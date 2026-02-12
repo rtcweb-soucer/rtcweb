@@ -277,6 +277,8 @@ export const dataService = {
                 productionStage: tracking?.stage || o.production_stage,
                 productionHistory: tracking?.history || o.production_history,
                 itemPrices: o.item_prices || {},
+                deliveryDays: o.delivery_days,
+                deliveryDeadline: o.delivery_deadline,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -297,6 +299,8 @@ export const dataService = {
             installation_time: order.installationTime,
             technician: order.technician,
             item_prices: order.itemPrices,
+            delivery_days: order.deliveryDays,
+            delivery_deadline: order.deliveryDeadline,
         };
         console.log('💾 Saving order payload:', payload);
         let { data, error } = await supabase.from('orders').upsert(payload).select().single();
@@ -353,6 +357,8 @@ export const dataService = {
                 sellerId: o.seller_id,
                 itemIds: o.item_ids,
                 totalValue: o.total_value || 0,
+                deliveryDays: o.delivery_days,
+                deliveryDeadline: o.delivery_deadline,
                 createdAt: new Date(o.created_at),
                 // Merge tracking info
                 productionStage: tracking?.stage,

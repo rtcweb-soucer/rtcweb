@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { dataService } from '../services/dataService';
 import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, MeasurementItem, ProductionStage, Seller } from '../types';
+import { addBusinessDays } from '../utils/dateUtils';
 import {
   FileText,
   Search,
@@ -56,6 +57,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
   const [filterSellerId, setFilterSellerId] = useState('');
   const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
   const [isSaving, setIsSaving] = useState(false);
+  const [deliveryDays, setDeliveryDays] = useState(25);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -92,8 +94,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
       setFinalValue(selectedOrder.totalValue);
       setPaymentMethod(selectedOrder.paymentMethod || '');
       setPaymentConditions(selectedOrder.paymentConditions || '');
+      setDeliveryDays(selectedOrder.deliveryDays || 25);
     }
-  }, [selectedOrder?.id, selectedOrder?.totalValue, showOrderModal]);
+  }, [selectedOrder?.id, selectedOrder?.totalValue, selectedOrder?.deliveryDays, showOrderModal]);
 
   // Gera parcelas automaticamente quando o valor ou quantidade de parcelas muda
   useEffect(() => {
@@ -173,6 +176,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         paymentMethod: paymentMethod,
         paymentConditions: paymentConditions,
         installments: installments,
+        deliveryDays: deliveryDays,
+        deliveryDeadline: addBusinessDays(new Date(), deliveryDays).toISOString(),
         createdAt: new Date()
       };
 
@@ -353,6 +358,22 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
     onUpdateOrder(updatedOrder);
   };
 
+  const updateDeliveryDays = async (days: number) => {
+    if (!selectedOrder || isNaN(days)) return;
+
+    const updatedOrder: Order = {
+      ...selectedOrder,
+      deliveryDays: days
+    };
+
+    try {
+      await dataService.saveOrder(updatedOrder);
+      onUpdateOrder(updatedOrder);
+    } catch (error) {
+      console.error("Erro ao salvar prazo:", error);
+    }
+  };
+
   const uniqueSpecs = (() => {
     if (orderItems.length === 0) return [];
     const uniqueIds = Array.from(new Set(orderItems.map((i: MeasurementItem) => i.productId)));
@@ -487,19 +508,29 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                 <section>
                   <h3 className="text-[8px] font-black text-blue-600 uppercase mb-2">Observações Gerais</h3>
                   <div className="p-4 bg-slate-50 rounded-xl border-l-3 border-blue-600 text-[9px] text-slate-600 leading-relaxed italic">
-                    Garantia RTC Decor de 01 ano contra defeitos de fabricação. Prazo de instalação entre 25 a 30 dias úteis. Proposta válida por 07 dias.
+                    Garantia RTC Decor de 01 ano contra defeitos de fabricação. Prazo de instalação: {deliveryDays} Dias Úteis. Proposta válida por 07 dias.
                   </div>
                 </section>
               </div>
+
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100">
                     <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Garantia</p>
                     <p className="text-md font-black text-slate-900">12 Meses</p>
                   </div>
-                  <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100">
+                  <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100 group/prazo relative">
                     <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Prazo</p>
-                    <p className="text-md font-black text-slate-900">25-30 dias</p>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        value={deliveryDays}
+                        onChange={(e) => setDeliveryDays(parseInt(e.target.value) || 0)}
+                        onBlur={() => updateDeliveryDays(deliveryDays)}
+                        className="w-12 text-md font-black text-slate-900 bg-transparent border-none p-0 focus:ring-0 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <span className="text-md font-black text-slate-900 truncate">Dias Úteis</span>
+                    </div>
                   </div>
                 </div>
                 <div className="pt-4 text-center">
@@ -619,6 +650,16 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                   </div>
 
                   <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Prazo de Entrega (dias úteis)</label>
+                    <input
+                      type="number"
+                      value={deliveryDays}
+                      onChange={(e) => setDeliveryDays(parseInt(e.target.value) || 0)}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Forma de Pagamento</label>
                     <div className="relative">
                       <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -665,8 +706,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
               </div>
             </div>
           </div>
-        )}
-      </div>
+        )
+        }
+      </div >
     );
   }
 

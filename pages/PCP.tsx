@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product, Seller, Customer } from '../types';
+import { formatBusinessDate } from '../utils/dateUtils';
 import { dataService } from '../services/dataService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
 import {
@@ -265,10 +266,10 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
                             <span className="text-[8px] font-black text-amber-600 uppercase tracking-tighter">Prazo de Entrega</span>
                             <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-900">
                               <Truck size={12} className="text-amber-500" />
-                              <span>{order.installationDate ? new Date(order.installationDate).toLocaleDateString() : 'Não definida'}</span>
+                              <span>{order.deliveryDeadline ? formatBusinessDate(order.deliveryDeadline) : (order.installationDate ? new Date(order.installationDate).toLocaleDateString() : 'Não definida')}</span>
                             </div>
                           </div>
-                          {order.installationDate && new Date(order.installationDate) < new Date() && (
+                          {((order.deliveryDeadline && new Date(order.deliveryDeadline) < new Date()) || (!order.deliveryDeadline && order.installationDate && new Date(order.installationDate) < new Date())) && (
                             <AlertCircle size={14} className="text-rose-500 animate-pulse" />
                           )}
                         </div>

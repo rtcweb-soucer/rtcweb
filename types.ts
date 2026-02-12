@@ -241,6 +241,8 @@ export interface Order {
   installationTime?: string;
   technician?: string;
   installerIds?: string[];
+  deliveryDays?: number; // Prazo de entrega em dias úteis
+  deliveryDeadline?: string; // Data limite de entrega calculada
   createdAt: Date;
 }
 
