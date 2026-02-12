@@ -129,6 +129,40 @@ const MeasurementForm = ({
     }
   }, [initialCustomerId, editingSheet]);
 
+  // Ponte para receber o link do Google Drive do Apps Script
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'DRIVE_LINK_UPLOADED') {
+        setProductionSheetData(prev => ({ ...prev, videoLink: event.data.link }));
+        alert("✅ Link do Google Drive recebido com sucesso!");
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const openDriveUpload = () => {
+    const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
+    // Esta URL deve ser substituída pela URL gerada no "Implantar" do Google Apps Script
+    const gasUrl = 'https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec';
+
+    if (!gasUrl) {
+      alert("Configuração Pendente: Por favor, siga as instruções no arquivo 'google_drive_upload_plan.md' para gerar sua URL do Apps Script e colá-la no código.");
+      return;
+    }
+
+    const width = 600;
+    const height = 800;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+
+    window.open(
+      `${gasUrl}?clientName=${encodeURIComponent(customerName)}`,
+      'DriveUpload',
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+  };
+
   const historicalSheets = technicalSheets
     .filter((s: TechnicalSheet) => s.customerId === selectedCustomerId && s.id !== editingSheet?.id)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -799,10 +833,18 @@ const MeasurementForm = ({
                     {/* General Fields (always visible) */}
                     {/* Link do Vídeo */}
                     <div>
-                      <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wide">
-                        Link do Vídeo
-                        <span className="text-slate-400 font-normal ml-2 text-xs">(Google Drive, Dropbox, etc.)</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">
+                          Link da Pasta / Vídeo
+                          <span className="text-slate-400 font-normal ml-2 text-xs">(Drive, Fotos, etc.)</span>
+                        </label>
+                        <button
+                          onClick={openDriveUpload}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-200"
+                        >
+                          <Wrench size={12} /> Gravar / Subir Mídia (Google Drive)
+                        </button>
+                      </div>
                       <input
                         type="url"
                         value={productionSheetData.videoLink || ''}
