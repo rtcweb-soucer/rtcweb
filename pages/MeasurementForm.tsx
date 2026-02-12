@@ -143,7 +143,7 @@ const MeasurementForm = ({
 
   const openDriveUpload = () => {
     const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
-    const gasUrl = 'https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec';
+    const gasUrl = 'https://script.google.com/a/macros/rtcdecor.com.br/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec';
     const finalUrl = `${gasUrl}?clientName=${encodeURIComponent(customerName)}`;
 
     // Detecta se é mobile para decidir como abrir
