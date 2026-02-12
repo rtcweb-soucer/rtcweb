@@ -114,6 +114,7 @@ const MeasurementForm = ({
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [editingProductionItemId, setEditingProductionItemId] = useState<string | null>(null);
   const [productionSheetData, setProductionSheetData] = useState<Partial<ProductionInstallationSheet>>({});
+  const [showDriveUploadModal, setShowDriveUploadModal] = useState(false);
   const [currentSheetId, setCurrentSheetId] = useState<string | null>(editingSheet?.id || null);
 
 
@@ -134,6 +135,7 @@ const MeasurementForm = ({
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'DRIVE_LINK_UPLOADED') {
         setProductionSheetData(prev => ({ ...prev, videoLink: event.data.link }));
+        setShowDriveUploadModal(false); // Fecha o modal automático
         alert("✅ Link do Google Drive recebido com sucesso!");
       }
     };
@@ -142,29 +144,13 @@ const MeasurementForm = ({
   }, []);
 
   const openDriveUpload = () => {
+    setShowDriveUploadModal(true);
+  };
+
+  const getGasUrl = () => {
     const customerName = customers.find(c => c.id === selectedCustomerId)?.name || '';
-    const gasUrl = 'https://script.google.com/a/macros/rtcdecor.com.br/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec';
-    const finalUrl = `${gasUrl}?clientName=${encodeURIComponent(customerName)}`;
-
-    // Detecta se é mobile para decidir como abrir
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (isMobile) {
-      // No celular abrir em nova aba é o único jeito de funcionar as permissões de câmera/fotos no Google
-      window.open(finalUrl, '_blank');
-    } else {
-      // No PC abre o popup centralizado que permite o postMessage funcionar melhor
-      const width = 600;
-      const height = 800;
-      const left = (window.screen.width / 2) - (width / 2);
-      const top = (window.screen.height / 2) - (height / 2);
-
-      window.open(
-        finalUrl,
-        'DriveUpload',
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
-    }
+    const gasUrl = 'https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec';
+    return `${gasUrl}?clientName=${encodeURIComponent(customerName)}`;
   };
 
   const historicalSheets = technicalSheets
@@ -947,6 +933,41 @@ const MeasurementForm = ({
               >
                 Salvar Ficha
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Upload do Google Drive (Melhor para Mobile) */}
+      {showDriveUploadModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[400] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-blue-400" />
+                <h4 className="font-bold text-sm">Captura de Mídia (Google Drive)</h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.open(getGasUrl(), '_blank')}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] uppercase font-bold text-blue-300 border border-blue-900"
+                  title="Se der erro, abra em nova aba"
+                >
+                  <ExternalLink size={14} /> Solução Celular
+                </button>
+                <button
+                  onClick={() => setShowDriveUploadModal(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-slate-50">
+              <iframe
+                src={getGasUrl()}
+                className="w-full h-full border-none"
+                title="Google Drive Upload"
+              />
             </div>
           </div>
         </div>
