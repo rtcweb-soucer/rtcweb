@@ -86,35 +86,42 @@ const Installers = ({
 
     // Report Calculation
     const reportData = useMemo(() => {
-        // 1. Filtrar agendamentos concluídos no período
-        const completedApps = appointments.filter(app => {
-            if (app.status !== 'COMPLETED') return false;
-            // Se for do tipo MEASUREMENT, talvez não conte diária de instalador? 
-            // Geralmente diária é para instalação. Vou incluir todos que tenham instaladores vinculados.
+        // 1. Filtrar agendamentos escalados no período (COMPLETED ou SCHEDULED)
+        const validApps = appointments.filter(app => {
+            if (app.status !== 'COMPLETED' && app.status !== 'SCHEDULED') return false;
+            // Apenas agendamentos com instaladores vinculados
             if (!app.installerIds || app.installerIds.length === 0) return false;
 
             return app.date >= reportStartDate && app.date <= reportEndDate;
         });
 
         // 2. Mapear diárias por (Installer, Data)
-        // Usamos um Set de strings "installerId|date" para garantir unicidade por dia
-        const workedDays = new Set<string>();
-        completedApps.forEach(app => {
+        // Usamos um Set de strings "installerId|date|status" para garantir unicidade por dia
+        // NOTA: Se houver múltiplos status no mesmo dia, o Set vai tratar como entradas diferentes.
+        // Assumindo que um instalador só tem uma diária por dia, vamos simplificar para "installerId|date" e pegar o status mais relevante (COMPLETED > SCHEDULED)
+        const workedDays = new Map<string, { status: string }>();
+        validApps.forEach(app => {
             app.installerIds?.forEach(id => {
                 if (!reportFilterInstallerId || id === reportFilterInstallerId) {
-                    workedDays.add(`${id}|${app.date}`);
+                    const key = `${id}|${app.date}`;
+                    const current = workedDays.get(key);
+                    // Prioriza COMPLETED sobre SCHEDULED
+                    if (!current || (current.status === 'SCHEDULED' && app.status === 'COMPLETED')) {
+                        workedDays.set(key, { status: app.status });
+                    }
                 }
             });
         });
 
         // 3. Transformar em lista para exibição
-        const results = Array.from(workedDays).map(key => {
+        const results = Array.from(workedDays.entries()).map(([key, value]) => {
             const [installerId, date] = key.split('|');
             const installer = installers.find(i => i.id === installerId);
             return {
                 installerName: installer?.name || 'Desconhecido',
                 date,
-                dailyRate: installer?.dailyRate || 0
+                dailyRate: installer?.dailyRate || 0,
+                status: value.status
             };
         });
 
@@ -298,13 +305,14 @@ const Installers = ({
                                 <tr className="bg-slate-50 border-b border-slate-200">
                                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
                                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor da Diária</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {reportData.length === 0 ? (
                                     <tr>
-                                        <td colSpan={3} className="px-8 py-12 text-center text-slate-400 italic">Nenhum registro encontrado no período selecionado.</td>
+                                        <td colSpan={4} className="px-8 py-12 text-center text-slate-400 italic">Nenhum registro encontrado no período selecionado.</td>
                                     </tr>
                                 ) : (
                                     reportData.map((row, idx) => (
@@ -314,7 +322,15 @@ const Installers = ({
                                                 {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
                                             </td>
                                             <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
-                                            <td className="px-8 py-4 text-sm font-bold text-emerald-600 text-right">R$ {row.dailyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                            <td className="px-8 py-4">
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${row.status === 'COMPLETED'
+                                                    ? 'bg-emerald-100 text-emerald-600'
+                                                    : 'bg-blue-100 text-blue-600'
+                                                    }`}>
+                                                    {row.status === 'COMPLETED' ? 'Realizado' : 'Agendado'}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-4 text-sm font-bold text-slate-900 text-right">R$ {row.dailyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                         </tr>
                                     ))
                                 )}
@@ -322,7 +338,7 @@ const Installers = ({
                             {reportData.length > 0 && (
                                 <tfoot className="bg-slate-50">
                                     <tr>
-                                        <td colSpan={2} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Total Acumulado:</td>
+                                        <td colSpan={3} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Total Acumulado:</td>
                                         <td className="px-8 py-4 text-lg font-black text-slate-900 text-right">R$ {reportTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                     </tr>
                                 </tfoot>
