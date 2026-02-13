@@ -400,7 +400,7 @@ const QuickQuote = ({ products }: QuickQuoteProps) => {
                 <p className="text-[9px] text-slate-400 font-bold leading-relaxed px-4">
                   * Este documento é apenas uma prévia informativa para conferência rápida. Valores sujeitos a medição e impostos.
                 </p>
-                <p className="text-[8px] text-blue-600 font-black uppercase tracking-[0.3em] pt-2">RTC TOLDOS E DECORAÇÕES</p>
+                <p className="text-[8px] text-blue-600 font-black uppercase tracking-[0.3em] pt-2">RTC TOLDOS E COBERTURAS LTDA</p>
               </div>
             </div>
 

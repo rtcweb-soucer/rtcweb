@@ -306,6 +306,17 @@ const App = () => {
     }
   };
 
+  const handleDeleteTechnicalSheet = async (id: string) => {
+    if (window.confirm("Deseja realmente excluir esta medição? Todos os itens dela serão removidos.")) {
+      try {
+        await dataService.deleteTechnicalSheet(id);
+        setTechnicalSheets((prev: TechnicalSheet[]) => prev.filter((s: TechnicalSheet) => s.id !== id));
+      } catch (err: any) {
+        alert("Erro ao excluir medição: " + (err.message || err));
+      }
+    }
+  };
+
   const handleAddInstaller = async (i: Installer) => {
     try {
       const saved = await dataService.saveInstaller(i);
@@ -394,7 +405,10 @@ const App = () => {
           customers={customers} products={products} technicalSheets={technicalSheets}
           initialCustomerId={preselectedCustomerId || undefined} editingSheet={editingSheet || undefined}
           currentUser={currentUser}
-          onSave={handleSaveTechnicalSheet} onGenerateQuote={handleGenerateQuote}
+          onSave={handleSaveTechnicalSheet}
+          onGenerateQuote={handleGenerateQuote}
+          onEditSheet={handleEditSheet}
+          onDeleteSheet={handleDeleteTechnicalSheet}
         />;
       case 'quotes':
         return <Quotes

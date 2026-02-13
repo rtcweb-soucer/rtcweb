@@ -189,6 +189,18 @@ export const dataService = {
         } as TechnicalSheet;
     },
 
+    async deleteTechnicalSheet(id: string) {
+        // Primeiro removemos os itens relacionados para evitar erros de integridade (se não houver cascade)
+        await supabase.from('measurement_items').delete().eq('technical_sheet_id', id);
+        const { error } = await supabase.from('technical_sheets').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async removeMeasurementItem(id: string) {
+        const { error } = await supabase.from('measurement_items').delete().eq('id', id);
+        if (error) throw error;
+    },
+
     // Appointments
     async getAppointments() {
         const { data, error } = await supabase.from('appointments').select(`
@@ -279,6 +291,7 @@ export const dataService = {
                 itemPrices: o.item_prices || {},
                 deliveryDays: o.delivery_days,
                 deliveryDeadline: o.delivery_deadline,
+                contractObservations: o.contract_observations,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -301,6 +314,7 @@ export const dataService = {
             item_prices: order.itemPrices,
             delivery_days: order.deliveryDays,
             delivery_deadline: order.deliveryDeadline,
+            contract_observations: order.contractObservations,
         };
         console.log('💾 Saving order payload:', payload);
         let { data, error } = await supabase.from('orders').upsert(payload).select().single();
@@ -332,6 +346,7 @@ export const dataService = {
             productionStage: data.production_stage,
             productionHistory: data.production_history,
             itemPrices: data.item_prices || {},
+            contractObservations: data.contract_observations,
             createdAt: new Date(data.created_at)
         } as unknown as Order;
     },

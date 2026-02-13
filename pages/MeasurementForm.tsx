@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura } from '../types';
-import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench } from 'lucide-react';
+import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3 } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
 import { fuzzyMatch } from '../utils/searchUtils';
@@ -18,6 +18,8 @@ interface MeasurementFormProps {
   currentUser: any;
   onSave: (sheet: TechnicalSheet) => void;
   onGenerateQuote: (sheet: TechnicalSheet, selectedItemIds?: string[]) => void;
+  onEditSheet?: (sheet: TechnicalSheet) => void;
+  onDeleteSheet?: (id: string) => void;
 }
 
 // Componente de Busca Customizado para Produtos
@@ -102,7 +104,9 @@ const MeasurementForm = ({
   editingSheet,
   currentUser,
   onSave,
-  onGenerateQuote
+  onGenerateQuote,
+  onEditSheet,
+  onDeleteSheet
 }: MeasurementFormProps) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId || '');
   const [items, setItems] = useState<MeasurementItem[]>([]);
@@ -323,6 +327,18 @@ const MeasurementForm = ({
     onGenerateQuote(newSheet); // Sem passar IDs específicos, ele pega todos da sheet enviada
   };
 
+  const handleDeleteItemFromHistory = async (itemId: string) => {
+    if (window.confirm("Deseja remover este item do histórico?")) {
+      try {
+        await dataService.removeMeasurementItem(itemId);
+        alert("Item removido com sucesso!");
+        // O App.tsx reage a mudanças se houver realtime ou precisará ser recarregado
+      } catch (err: any) {
+        alert("Erro ao remover item: " + (err.message || err));
+      }
+    }
+  };
+
   const toggleHistoryItemSelection = (sheetId: string, itemId: string) => {
     setHistorySelectedItems(prev => {
       const next = { ...prev };
@@ -530,12 +546,28 @@ const MeasurementForm = ({
                       </div>
 
                       {/* Opcional: mantemos esse botão mas ele avisa sobre a global ou funciona apenas para esse sheet */}
-                      <button
-                        onClick={() => handleGenerateQuoteFromHistory(sheet)}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-[0.98] shadow-lg ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed uppercase tracking-widest'}`}
-                      >
-                        <FileText size={16} /> Ver apenas este ({historySelectedItems[sheet.id]?.size || 0})
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onEditSheet?.(sheet)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs ring-1 ring-blue-100 hover:bg-blue-100 transition-all shadow-sm"
+                          title="Editar esta ficha"
+                        >
+                          <Edit3 size={14} /> Editar
+                        </button>
+                        <button
+                          onClick={() => onDeleteSheet?.(sheet.id)}
+                          className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-xs ring-1 ring-rose-100 hover:bg-rose-100 transition-all shadow-sm"
+                          title="Excluir ficha completa"
+                        >
+                          <Trash2 size={14} /> Excluir
+                        </button>
+                        <button
+                          onClick={() => handleGenerateQuoteFromHistory(sheet)}
+                          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-[0.98] shadow-lg ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed uppercase tracking-widest'}`}
+                        >
+                          <FileText size={16} /> Ver apenas este ({historySelectedItems[sheet.id]?.size || 0})
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -571,6 +603,13 @@ const MeasurementForm = ({
                                   title="Ficha de Produção"
                                 >
                                   <Wrench size={14} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteItemFromHistory(item.id)}
+                                  className="p-1.5 rounded-lg bg-slate-50 text-rose-500 hover:bg-rose-50 transition-colors shadow-sm border border-slate-100"
+                                  title="Remover item do histórico"
+                                >
+                                  <Trash2 size={14} />
                                 </button>
                               </div>
                             </div>

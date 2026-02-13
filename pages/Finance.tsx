@@ -377,7 +377,7 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
                            <div>
                               <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="h-12 mb-4" />
                               <h1 className="text-2xl font-black uppercase tracking-tighter">Relatório Financeiro</h1>
-                              <p className="text-sm font-bold text-slate-500">Contas a Receber • RTC Toldos e Decorações</p>
+                              <p className="text-sm font-bold text-slate-500">Contas a Receber • RTC TOLDOS E COBERTURAS LTDA</p>
                            </div>
                            <div className="text-right">
                               <p className="text-[10px] font-black uppercase text-slate-400">Gerado em</p>
@@ -434,7 +434,7 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
                         </table>
 
                         <div className="mt-20 pt-8 border-t border-slate-200 text-center">
-                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">RTC DECOR • QUALIDADE E EXCELÊNCIA</p>
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">RTC TOLDOS E COBERTURAS LTDA • QUALIDADE E EXCELÊNCIA</p>
                         </div>
                      </div>
                   </div>

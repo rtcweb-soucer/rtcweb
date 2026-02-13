@@ -58,6 +58,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
   const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
   const [isSaving, setIsSaving] = useState(false);
   const [deliveryDays, setDeliveryDays] = useState(25);
+  const [contractObservations, setContractObservations] = useState('');
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +95,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
       setFinalValue(selectedOrder.totalValue);
       setPaymentMethod(selectedOrder.paymentMethod || '');
       setPaymentConditions(selectedOrder.paymentConditions || '');
+      setContractObservations(selectedOrder.contractObservations || '');
       setDeliveryDays(selectedOrder.deliveryDays || 25);
     }
   }, [selectedOrder?.id, selectedOrder?.totalValue, selectedOrder?.deliveryDays, showOrderModal]);
@@ -169,12 +171,49 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
     setIsSaving(true);
 
     try {
+      // 1. Calcular o valor atual de cada item como ele aparece no orçamento agora
+      const currentItemPrices = orderItems.map(it => ({
+        id: it.id,
+        price: calculateItemPrice(it)
+      }));
+
+      // 2. Calcular a soma total atual (servirá como base para a proporção)
+      const currentTotal = currentItemPrices.reduce((acc, p) => acc + p.price, 0);
+
+      // 3. Calcular a proporção baseada no valor final definido no modal
+      const ratio = currentTotal > 0 ? finalValue / currentTotal : 1;
+
+      // 4. Gerar o mapa de novos preços arredondados
+      const redistributedItemPrices: Record<string, number> = {};
+      let calculatedTotal = 0;
+
+      currentItemPrices.forEach(item => {
+        const newPrice = Math.round(item.price * ratio * 100) / 100;
+        redistributedItemPrices[item.id] = newPrice;
+        calculatedTotal += newPrice;
+      });
+
+      // 5. Ajuste de arredondamento (cents adjustment)
+      // Se houver diferença entre a soma dos itens arredondados e o finalValue,
+      // ajustamos no item de maior valor para garantir fechamento exato.
+      const diff = Number((finalValue - calculatedTotal).toFixed(2));
+      if (diff !== 0 && currentItemPrices.length > 0) {
+        // Encontrar o item com maior preço para absorver o ajuste
+        const largestItemId = currentItemPrices.reduce((prev, current) =>
+          (prev.price > current.price) ? prev : current
+        ).id;
+
+        redistributedItemPrices[largestItemId] = Number((redistributedItemPrices[largestItemId] + diff).toFixed(2));
+      }
+
       const updatedOrder: Order = {
         ...selectedOrder,
         status: OrderStatus.CONTRACT_SIGNED,
         totalValue: finalValue,
+        itemPrices: redistributedItemPrices, // Salva os preços redistribuídos com precisão
         paymentMethod: paymentMethod,
         paymentConditions: paymentConditions,
+        contractObservations: contractObservations,
         installments: installments,
         deliveryDays: deliveryDays,
         deliveryDeadline: addBusinessDays(new Date(), deliveryDays).toISOString(),
@@ -233,8 +272,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
               }
             }
             body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; padding: 20px; display: flex; justify-content: center; }
-            .a4-page { background: white; width: 210mm; min-height: 297mm; padding: 12mm; margin: 0 auto; box-shadow: 0 0 20px rgba(0,0,0,0.1); box-sizing: border-box; position: relative; }
-            @media print { body { background: white; padding: 0; } .a4-page { width: 100%; height: 100%; margin: 0; padding: 12mm; box-shadow: none; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+            .a4-page { background: white; width: 210mm; min-height: 297mm; padding: 8mm; margin: 0 auto; box-shadow: 0 0 20px rgba(0,0,0,0.1); box-sizing: border-box; position: relative; }
+            @media print { body { background: white; padding: 0; } .a4-page { width: 100%; height: 100%; margin: 0; padding: 8mm; box-shadow: none; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
             section, tr, .footer-content, .spec-item { page-break-inside: avoid; }
             .logo-img { max-height: 70px; }
           </style>
@@ -403,7 +442,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         </div>
 
         <div ref={printRef} className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 print:shadow-none print:border-none print:m-0 print:rounded-none">
-          <div className="p-6 bg-slate-50 border-b-2 border-slate-100 flex justify-between items-start gap-8">
+          <div className="p-4 bg-slate-50 border-b-2 border-slate-100 flex justify-between items-start gap-4">
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
                 <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="logo-img object-contain" />
@@ -418,30 +457,38 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
             </div>
             <div className="text-right space-y-0">
               <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
-              <p className="text-xs font-black text-slate-900">RTC TOLDOS E DECORAÇÕES</p>
+              <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
               <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
               <p className="text-[9px] text-slate-500 font-medium">(21) 2281-8224 | (21) 99798-6419</p>
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
-            <section className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-              <div className="grid grid-cols-3 gap-x-6 gap-y-2">
-                <div className="col-span-2">
+          <div className="p-4 space-y-4">
+            <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+              <div className="grid grid-cols-6 gap-x-6 gap-y-1">
+                <div className="col-span-3">
                   <p className="text-[7px] text-slate-400 uppercase font-black">Contratante</p>
                   <p className="text-xs font-bold text-slate-900">{selectedCustomer.name}</p>
                 </div>
-                <div>
+                <div className="col-span-1">
                   <p className="text-[7px] text-slate-400 uppercase font-black">Documento</p>
                   <p className="text-xs font-bold text-slate-900">{selectedCustomer.document}</p>
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-2 text-right">
+                  <p className="text-[7px] text-slate-400 uppercase font-black">Telefone</p>
+                  <p className="text-xs font-bold text-slate-900">{selectedCustomer.phone}</p>
+                </div>
+                <div className="col-span-3">
                   <p className="text-[7px] text-slate-400 uppercase font-black">Local da Instalação</p>
                   <p className="text-xs font-bold text-slate-900">{selectedCustomer.address.street}, {selectedCustomer.address.number} - {selectedCustomer.address.neighborhood}</p>
                 </div>
-                <div>
+                <div className="col-span-1">
                   <p className="text-[7px] text-slate-400 uppercase font-black">Cidade/UF</p>
                   <p className="text-xs font-bold text-slate-900">{selectedCustomer.address.city} - {selectedCustomer.address.state}</p>
+                </div>
+                <div className="col-span-2 text-right">
+                  <p className="text-[7px] text-slate-400 uppercase font-black">E-mail</p>
+                  <p className="text-xs font-bold text-slate-900 truncate">{selectedCustomer.email}</p>
                 </div>
               </div>
             </section>
@@ -452,21 +499,21 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-900 text-white">
                     <tr>
-                      <th className="px-4 py-2 text-[8px] font-black uppercase">Ambiente</th>
-                      <th className="px-4 py-2 text-[8px] font-black uppercase">Descrição do Produto</th>
-                      <th className="px-4 py-2 text-[8px] font-black uppercase text-center">Cor</th>
-                      <th className="px-4 py-2 text-[8px] font-black uppercase text-center">Medida (L x A)</th>
-                      <th className="px-4 py-2 text-[8px] font-black uppercase text-right">Subtotal</th>
+                      <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '8%' }}>Ambiente</th>
+                      <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '43%' }}>Descrição do Produto</th>
+                      <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center" style={{ width: '10%' }}>Cor</th>
+                      <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center font-mono" style={{ width: '21%' }}>Medida (L x A)</th>
+                      <th className="px-3 py-1.5 text-[8px] font-black uppercase text-right" style={{ width: '18%' }}>Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {orderItems.map((item: MeasurementItem) => (
                       <tr key={item.id}>
-                        <td className="px-4 py-1.5 text-xs font-bold text-slate-900">{item.environment}</td>
-                        <td className="px-4 py-1.5 text-xs text-slate-700 font-medium">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</td>
-                        <td className="px-4 py-1.5 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
-                        <td className="px-4 py-1.5 text-xs text-center font-mono font-bold text-blue-600">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
-                        <td className="px-4 py-1.5 text-xs text-right font-black text-slate-900">
+                        <td className="px-3 py-1.5 text-xs font-bold text-slate-900">{item.environment}</td>
+                        <td className="px-3 py-1.5 text-xs text-slate-700 font-medium">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</td>
+                        <td className="px-3 py-1.5 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
+                        <td className="px-3 py-1.5 text-xs text-center font-mono font-bold text-blue-600">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
+                        <td className="px-3 py-1.5 text-xs text-right font-black text-slate-900">
                           <div className="flex justify-end no-print">
                             <CurrencyInput
                               value={calculateItemPrice(item)}
@@ -474,15 +521,15 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                               className="border-b border-transparent hover:border-slate-200 transition-all focus-within:border-blue-400"
                             />
                           </div>
-                          <span className="hidden print:block font-black">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <span className="hidden print:block font-black whitespace-nowrap">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot className="bg-blue-600 text-white">
                     <tr>
-                      <td colSpan={4} className="px-4 py-2 text-[9px] font-black text-right uppercase tracking-widest">Valor Total da Proposta</td>
-                      <td className="px-4 py-2 text-lg font-black text-right">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={4} className="px-4 py-2 text-[8px] font-black text-right uppercase tracking-widest">Valor Total da Proposta</td>
+                      <td className="px-4 py-2 text-sm font-black text-right whitespace-nowrap">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -684,6 +731,17 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                       value={paymentConditions}
                       onChange={(e) => setPaymentConditions(e.target.value)}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">OBS. DO CONTRATO (Sempre visível)</label>
+                    <textarea
+                      placeholder="Observações que aparecerão no contrato impresso..."
+                      rows={3}
+                      value={contractObservations}
+                      onChange={(e) => setContractObservations(e.target.value)}
+                      className="w-full px-4 py-2 bg-slate-50 border border-amber-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-amber-500 outline-none resize-none"
                     />
                   </div>
                 </div>

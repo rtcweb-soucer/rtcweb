@@ -101,20 +101,33 @@ const Orders = ({
 
   const calculateItemPrice = (item: MeasurementItem) => {
     if (!selectedOrder) return 0;
+
+    // 1. Se houver um preço explícito definido para este item, use-o
+    if (selectedOrder.itemPrices && selectedOrder.itemPrices[item.id] !== undefined) {
+      return selectedOrder.itemPrices[item.id];
+    }
+
+    // 2. Caso contrário, tente encontrar o produto e calcular o preço base
     const product = products.find((p: Product) => p.id === item.productId);
     if (!product) return 0;
-
-    const originalTotal = orderItems.reduce((acc: number, it: MeasurementItem) => {
-      const p = products.find((prod: Product) => prod.id === it.productId);
-      if (!p) return acc;
-      const area = (it.width * it.height) || 1;
-      return acc + (p.unidade === 'M2' ? p.valor * area : p.valor);
-    }, 0);
 
     const area = (item.width * item.height) || 1;
     const baseValue = product.unidade === 'M2' ? product.valor * area : product.valor;
 
+    // 3. Se não houver itemPrices explícitos, mas o total do pedido for diferente 
+    // do total esperado pela tabela de preços, aplique a proporção global (legado)
+    const originalTotal = orderItems.reduce((acc: number, it: MeasurementItem) => {
+      const p = products.find((prod: Product) => prod.id === it.productId);
+      if (!p) return acc;
+      const a = (it.width * it.height) || 1;
+      return acc + (p.unidade === 'M2' ? p.valor * a : p.valor);
+    }, 0);
+
     if (originalTotal > 0 && selectedOrder.totalValue !== originalTotal) {
+      // Evita aplicar ratio se já existem itemPrices definidos
+      if (selectedOrder.itemPrices && Object.keys(selectedOrder.itemPrices).length > 0) {
+        return baseValue;
+      }
       const ratio = selectedOrder.totalValue / originalTotal;
       return baseValue * ratio;
     }
@@ -204,7 +217,7 @@ const Orders = ({
             }
             
             body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; padding: 40px 20px; display: flex; justify-content: center; }
-            .a4-page { background: white; width: 210mm; min-height: 297mm; padding: 15mm; margin: 0 auto; box-shadow: 0 0 40px rgba(0,0,0,0.1); box-sizing: border-box; position: relative; border-radius: 8px; }
+            .a4-page { background: white; width: 210mm; min-height: 297mm; padding: 8mm; margin: 0 auto; box-shadow: 0 0 40px rgba(0,0,0,0.1); box-sizing: border-box; position: relative; border-radius: 8px; }
             .logo-img { max-height: 70px; }
             table.print-table { width: 100%; border-collapse: collapse; }
           </style>
@@ -250,7 +263,7 @@ const Orders = ({
           <thead>
             <tr>
               <td>
-                <div className="pb-6 mb-6 bg-white border-b-2 border-slate-100 flex justify-between items-start gap-8">
+                <div className="pb-4 mb-4 bg-white border-b-2 border-slate-100 flex justify-between items-start gap-8">
                   <div className="flex items-center gap-4">
                     <div className="h-16 w-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
                       <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="logo-img object-contain" />
@@ -269,7 +282,7 @@ const Orders = ({
                   </div>
                   <div className="text-right space-y-0">
                     <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
-                    <p className="text-xs font-black text-slate-900">RTC TOLDOS E DECORAÇÕES</p>
+                    <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
                     <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
                     <p className="text-[9px] text-slate-500 font-medium">(21) 2281-8224 | (21) 99798-6419</p>
                   </div>
@@ -281,11 +294,11 @@ const Orders = ({
           <tbody>
             <tr>
               <td>
-                <div className="p-6 space-y-6">
+                <div className="p-4 space-y-4">
                   {/* Info do Cliente */}
-                  <section className="bg-slate-50/50 p-5 rounded-xl border border-slate-100">
-                    <div className="grid grid-cols-4 gap-x-6 gap-y-4">
-                      <div className="col-span-2">
+                  <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                    <div className="grid grid-cols-6 gap-x-6 gap-y-2">
+                      <div className="col-span-3">
                         <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Contratante</p>
                         <p className="text-xs font-bold text-slate-900">{selectedCustomer.name}</p>
                         {selectedCustomer.tradeName && (
@@ -296,12 +309,12 @@ const Orders = ({
                         <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Documento</p>
                         <p className="text-xs font-bold text-slate-900">{selectedCustomer.document}</p>
                       </div>
-                      <div className="col-span-1 text-right">
+                      <div className="col-span-2 text-right">
                         <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Telefone</p>
                         <p className="text-xs font-bold text-slate-900">{selectedCustomer.phone}{selectedCustomer.phone2 ? ` / ${selectedCustomer.phone2}` : ''}</p>
                       </div>
 
-                      <div className="col-span-2">
+                      <div className="col-span-3">
                         <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Endereço de Instalação</p>
                         <p className="text-xs font-bold text-slate-900">
                           {selectedCustomer.address.street}, {selectedCustomer.address.number}
@@ -313,7 +326,7 @@ const Orders = ({
                         <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">CEP</p>
                         <p className="text-xs font-bold text-slate-900">{selectedCustomer.address.cep}</p>
                       </div>
-                      <div className="col-span-1 text-right">
+                      <div className="col-span-2 text-right">
                         <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">E-mail</p>
                         <p className="text-xs font-bold text-slate-900 truncate">{selectedCustomer.email}</p>
                       </div>
@@ -329,28 +342,28 @@ const Orders = ({
                       <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-900 text-white">
                           <tr>
-                            <th className="px-4 py-2 text-[8px] font-black uppercase">Ambiente</th>
-                            <th className="px-4 py-2 text-[8px] font-black uppercase">Descrição do Produto</th>
-                            <th className="px-4 py-2 text-[8px] font-black uppercase text-center">Cor</th>
-                            <th className="px-4 py-2 text-[8px] font-black uppercase text-center">Medida (L x A)</th>
-                            <th className="px-4 py-2 text-[8px] font-black uppercase text-right">Subtotal</th>
+                            <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '8%' }}>Ambiente</th>
+                            <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '43%' }}>Descrição do Produto</th>
+                            <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center" style={{ width: '10%' }}>Cor</th>
+                            <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center" style={{ width: '21%' }}>Medida (L x A)</th>
+                            <th className="px-3 py-1.5 text-[8px] font-black uppercase text-right" style={{ width: '18%' }}>Subtotal</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {orderItems.map((item: MeasurementItem) => (
                             <tr key={item.id}>
-                              <td className="px-4 py-2 text-xs font-bold text-slate-900">{item.environment}</td>
-                              <td className="px-4 py-2 text-xs text-slate-700 font-medium">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</td>
-                              <td className="px-4 py-2 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
-                              <td className="px-4 py-2 text-xs text-center font-mono font-bold text-blue-600">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
-                              <td className="px-4 py-2 text-xs text-right font-black text-slate-900">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-1.5 text-xs font-bold text-slate-900">{item.environment}</td>
+                              <td className="px-3 py-1.5 text-xs text-slate-700 font-medium">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</td>
+                              <td className="px-3 py-1.5 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
+                              <td className="px-3 py-1.5 text-xs text-center font-mono font-bold text-blue-600">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
+                              <td className="px-3 py-1.5 text-xs text-right font-black text-slate-900 whitespace-nowrap">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot className="bg-slate-50">
                           <tr>
-                            <td colSpan={4} className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total do Pedido</td>
-                            <td className="px-4 py-3 text-right text-base font-black text-slate-900">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td colSpan={4} className="px-4 py-3 text-right text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor Total do Pedido</td>
+                            <td className="px-4 py-3 text-right text-sm font-black text-slate-900 whitespace-nowrap">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -366,12 +379,8 @@ const Orders = ({
                         </h4>
                       </div>
 
-                      {(!selectedOrder.installments || selectedOrder.installments.length === 0) && (
-                        <p className="text-sm font-bold text-slate-900">{selectedOrder.paymentConditions || 'A combinar'}</p>
-                      )}
-
                       {selectedOrder.installments && selectedOrder.installments.length > 0 && (
-                        <div className="space-y-1 list-none">
+                        <div className="space-y-1 list-none mb-4">
                           <div className="px-3 flex justify-between text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">
                             <div className="flex gap-4">
                               <span className="w-16 text-center">Nº Parcela</span>
@@ -400,11 +409,32 @@ const Orders = ({
                           ))}
                         </div>
                       )}
+
+                      {/* Observações e Condições */}
+                      <div className="space-y-2">
+                        {selectedOrder.paymentConditions && (
+                          <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                            <h4 className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                              <CreditCard size={10} /> Observações de Pagamento
+                            </h4>
+                            <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{selectedOrder.paymentConditions}</p>
+                          </div>
+                        )}
+
+                        {selectedOrder.contractObservations && (
+                          <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                            <h4 className="text-[8px] font-black text-amber-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                              <Info size={10} /> Observações do Contrato
+                            </h4>
+                            <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{selectedOrder.contractObservations}</p>
+                          </div>
+                        )}
+                      </div>
                     </section>
                   </div>
 
                   {/* Contract Clauses */}
-                  <div className="mt-8 pt-6 border-t border-slate-100 space-y-4">
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
                     <h3 className="text-[9px] font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2">Cláusulas Contratuais</h3>
 
                     <div className="grid grid-cols-1 gap-4 text-[7.5px] text-slate-500 leading-relaxed text-justify px-2">
@@ -443,7 +473,7 @@ const Orders = ({
           <tfoot>
             <tr>
               <td>
-                <div className="p-12 bg-white">
+                <div className="p-8 bg-white">
                   <div className="flex justify-between items-end gap-12">
                     <div className="flex-1 text-center">
                       <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
@@ -457,7 +487,7 @@ const Orders = ({
                         style={{ mixBlendMode: 'multiply' }}
                       />
                       <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
-                      <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">RTC Toldos e Decorações</p>
+                      <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">RTC TOLDOS E COBERTURAS LTDA</p>
                     </div>
                   </div>
                   <div className="mt-8 bg-slate-900 py-3 text-center rounded-xl">
@@ -539,6 +569,17 @@ const Orders = ({
                       {Object.values(OrderStatus).map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-500 uppercase">Observações do Contrato (Impressão)</label>
+                  <textarea
+                    value={editingOrder.contractObservations || ''}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, contractObservations: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none resize-none"
+                    placeholder="Estas observações aparecerão no contrato impresso..."
+                  />
                 </div>
 
                 <div className="flex gap-4 pt-4 border-t border-slate-100">

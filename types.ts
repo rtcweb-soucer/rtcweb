@@ -243,6 +243,7 @@ export interface Order {
   installerIds?: string[];
   deliveryDays?: number; // Prazo de entrega em dias úteis
   deliveryDeadline?: string; // Data limite de entrega calculada
+  contractObservations?: string; // Observações do contrato
   createdAt: Date;
 }
 

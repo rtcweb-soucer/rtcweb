@@ -158,7 +158,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                     <Truck size={24} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-blue-500 uppercase">Contrato #{order.id}</p>
+                    <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">RTC TOLDOS E COBERTURAS LTDA</p>
                     <h3 className="font-bold text-slate-900 truncate w-48">{customer?.name}</h3>
                   </div>
                 </div>
@@ -278,11 +278,11 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
 
       {/* Template de Impressão (Escondido) */}
       <div className="hidden">
-        <div ref={printRef} className="p-10 text-slate-900">
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-8">
+        <div ref={printRef} className="p-6 text-slate-900">
+          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-4">
             <div>
               <h1 className="text-3xl font-black uppercase tracking-tighter">Ficha de Instalação</h1>
-              <p className="text-xl font-bold text-slate-600 mt-2">RTC TOLDOS E DECORAÇÕES</p>
+              <p className="text-xl font-bold text-slate-600 mt-2">RTC TOLDOS E COBERTURAS LTDA</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-black uppercase">Contrato Nº</p>
@@ -290,7 +290,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 mb-10">
+          <div className="grid grid-cols-2 gap-6 mb-6">
             <div className="space-y-4">
               <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-3 py-1 w-fit">Dados do Cliente</h2>
               <div>
@@ -309,7 +309,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </div>
             <div className="space-y-4">
               <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-3 py-1 w-fit">Programação</h2>
-              <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl">
+              <div className="bg-slate-50 p-3 border border-slate-200 rounded-xl">
                 <p className="text-sm font-bold">Data: <span className="font-black">{printOrder?.installationDate ? formatDisplayDate(printOrder.installationDate) : 'A DEFINIR'}</span></p>
                 <p className="text-sm font-bold mt-1">Horário: <span className="font-black">{printOrder?.installationTime || '--:--'}</span></p>
                 <p className="text-sm font-bold mt-1">Equipe: <span className="font-black">
@@ -319,7 +319,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </div>
           </div>
 
-          <div className="mb-10">
+          <div className="mb-6">
             <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-3 py-1 w-fit mb-4">Itens para Instalação</h2>
             <table className="w-full border-collapse">
               <thead>
@@ -339,10 +339,10 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
 
                   return items?.map(item => (
                     <tr key={item.id}>
-                      <td className="border border-slate-300 p-3 text-sm font-bold">{item.environment}</td>
-                      <td className="border border-slate-300 p-3 text-sm">{products.find(p => p.id === item.productId)?.nome}</td>
-                      <td className="border border-slate-300 p-3 text-sm text-center font-bold uppercase">{item.color || '-'}</td>
-                      <td className="border border-slate-300 p-3 text-sm text-center font-mono font-black">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
+                      <td className="border border-slate-300 p-2 text-sm font-bold">{item.environment}</td>
+                      <td className="border border-slate-300 p-2 text-sm">{products.find(p => p.id === item.productId)?.nome}</td>
+                      <td className="border border-slate-300 p-2 text-sm text-center font-bold uppercase">{item.color || '-'}</td>
+                      <td className="border border-slate-300 p-2 text-sm text-center font-mono font-black">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
                     </tr>
                   ));
                 })()}
@@ -350,7 +350,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </table>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 mt-20">
+          <div className="grid grid-cols-2 gap-10 mt-10">
             <div className="text-center pt-8 border-t border-slate-400">
               <p className="text-[10px] font-black uppercase">Instalador Responsável</p>
             </div>
@@ -359,7 +359,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </div>
           </div>
 
-          <div className="mt-20 p-6 bg-slate-900 text-white rounded-2xl">
+          <div className="mt-10 p-6 bg-slate-900 text-white rounded-2xl">
             <h3 className="text-xs font-black uppercase tracking-widest mb-2">Checklist do Instalador</h3>
             <div className="grid grid-cols-2 gap-4">
               <p className="text-[10px] flex items-center gap-2"><div className="w-3 h-3 border border-white"></div> Verificado fixação e prumo</p>
