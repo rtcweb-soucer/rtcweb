@@ -151,12 +151,32 @@ const Orders = ({
     if (!editingOrder?.installments) return;
     const updated = [...editingOrder.installments];
     updated[index] = { ...updated[index], [field]: value };
-    setEditingOrder({ ...editingOrder, installments: updated });
 
     if (field === 'value') {
       const newTotal = updated.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0);
       setEditingOrder({ ...editingOrder, installments: updated, totalValue: parseFloat(newTotal.toFixed(2)) });
+    } else {
+      setEditingOrder({ ...editingOrder, installments: updated });
     }
+  };
+
+  const handleUpdateItemPrice = (itemId: string, newPrice: number) => {
+    if (!editingOrder) return;
+
+    const newItemPrices = { ...(editingOrder.itemPrices || {}) };
+    newItemPrices[itemId] = newPrice;
+
+    // Recalcular total se necessário, mas geralmente o total do pedido é soberano sobre a soma dos itens
+    // No entanto, para manter consistência, podemos atualizar o total se o usuário estiver editando itens
+    const newTotal = orderItems.reduce((acc, item) => {
+      return acc + (item.id === itemId ? newPrice : (newItemPrices[item.id] ?? calculateItemPrice(item)));
+    }, 0);
+
+    setEditingOrder({
+      ...editingOrder,
+      itemPrices: newItemPrices,
+      totalValue: parseFloat(newTotal.toFixed(2))
+    });
   };
 
   const saveEdits = () => {
@@ -165,6 +185,54 @@ const Orders = ({
       setShowEditModal(false);
       setEditingOrder(null);
     }
+  };
+
+  // Componente de Input de Moeda com Estado Local para evitar travamentos
+  const CurrencyInput = ({
+    value,
+    onChange,
+    className = "",
+    prefix = "R$",
+    prefixColor = "text-slate-400"
+  }: {
+    value: number,
+    onChange: (val: number) => void,
+    className?: string,
+    prefix?: string,
+    prefixColor?: string
+  }) => {
+    const [localValue, setLocalValue] = useState(value.toFixed(2));
+    const [isFocused, setIsFocused] = useState(false);
+
+    React.useEffect(() => {
+      if (!isFocused) {
+        setLocalValue(value.toFixed(2));
+      }
+    }, [value, isFocused]);
+
+    const handleBlur = () => {
+      setIsFocused(false);
+      const numericValue = parseFloat(localValue.replace(',', '.'));
+      if (!isNaN(numericValue)) {
+        onChange(numericValue);
+      } else {
+        setLocalValue(value.toFixed(2));
+      }
+    };
+
+    return (
+      <div className={`relative flex items-center gap-1 ${className}`}>
+        {prefix && <span className={`text-[10px] font-bold ${prefixColor}`}>{prefix}</span>}
+        <input
+          type="text"
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={handleBlur}
+          className="w-20 text-right bg-transparent border-none p-0 font-black text-slate-900 focus:ring-0 outline-none no-print appearance-none"
+        />
+      </div>
+    );
   };
 
   const formatDuration = (ms: number) => {
@@ -511,7 +579,12 @@ const Orders = ({
               </div>
               <div className="p-8 space-y-6 max-h-[85vh] overflow-y-auto">
                 <div className="space-y-4">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade de Recebimento</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade de Recebimento</h4>
+                    <div className="bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">Total: R$ {(editingOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
                   <div className="border border-slate-100 rounded-2xl overflow-hidden">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50">
@@ -528,11 +601,10 @@ const Orders = ({
                               {String(inst.number).padStart(2, '0')}/{String(editingOrder.installments?.length || 1).padStart(2, '0')}
                             </td>
                             <td className="px-4 py-2 text-right">
-                              <input
-                                type="number" step="0.01"
+                              <CurrencyInput
                                 value={inst.value}
-                                onChange={(e) => handleUpdateInstallment(idx, 'value', parseFloat(e.target.value) || 0)}
-                                className="bg-slate-50 border border-slate-200 rounded-lg font-black text-blue-600 text-right w-24 px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500"
+                                onChange={(val) => handleUpdateInstallment(idx, 'value', val)}
+                                className="justify-end bg-blue-50/50 p-1.5 rounded-lg border border-transparent focus-within:border-blue-300 transition-all"
                               />
                             </td>
                             <td className="px-4 py-2 text-center text-[10px]">
@@ -547,6 +619,35 @@ const Orders = ({
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preços dos Itens (Ajuste Estático)</h4>
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-200">
+                      {orderItems.map((item: MeasurementItem) => (
+                        <div key={item.id} className="p-3 bg-white hover:bg-slate-50 transition-colors flex items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-black text-blue-600 uppercase truncate">{item.environment}</p>
+                            <p className="text-[11px] font-bold text-slate-900 truncate">
+                              {products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}
+                            </p>
+                            <p className="text-[9px] text-slate-500 font-medium">
+                              {item.width.toFixed(3)}m x {item.height.toFixed(3)}m {item.color ? ` | ${item.color}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <CurrencyInput
+                              value={editingOrder.itemPrices?.[item.id] ?? calculateItemPrice(item)}
+                              onChange={(val) => handleUpdateItemPrice(item.id, val)}
+                              className="bg-white px-2 py-1.5 rounded-xl border border-slate-200 shadow-inner focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all"
+                            />
+                            <span className="text-[8px] text-slate-400 font-bold uppercase">Preço Unitário</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

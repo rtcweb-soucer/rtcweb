@@ -222,10 +222,16 @@ const App = () => {
 
   const handleUpdateOrder = async (updatedOrder: Order) => {
     try {
-      await dataService.saveOrder(updatedOrder);
-      setOrders((prev: Order[]) => prev.map((o: Order) => o.id === updatedOrder.id ? updatedOrder : o));
+      const saved = await dataService.saveOrder(updatedOrder);
+      setOrders((prev: Order[]) => {
+        const exists = prev.some((o: Order) => o.id === saved.id);
+        if (exists) {
+          return prev.map((o: Order) => o.id === saved.id ? saved : o);
+        }
+        return [...prev, saved];
+      });
     } catch (err: any) {
-      alert("Erro ao atualizar pedido: " + (err.message || err));
+      alert("Erro ao salvar/atualizar pedido: " + (err.message || err));
     }
   };
 
@@ -415,6 +421,7 @@ const App = () => {
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products} sellers={sellers}
           onUpdateOrder={handleUpdateOrder} initialSelectedId={lastGeneratedQuoteId || undefined}
           onClearSelection={() => setLastGeneratedQuoteId(null)} onNavigateToOrders={() => setActiveTab('orders')}
+          currentUser={currentUser}
         />;
       case 'agenda':
         return <Agenda

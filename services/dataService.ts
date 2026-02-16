@@ -300,7 +300,7 @@ export const dataService = {
         const payload = {
             id: order.id,
             customer_id: order.customerId,
-            technical_sheet_id: order.technicalSheetId,
+            technical_sheet_id: order.technicalSheetId || null,
             seller_id: order.sellerId,
             item_ids: order.itemIds,
             status: order.status,

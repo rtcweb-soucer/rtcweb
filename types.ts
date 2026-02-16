@@ -226,7 +226,7 @@ export interface ProductionHistoryEntry {
 export interface Order {
   id: string;
   customerId: string;
-  technicalSheetId: string;
+  technicalSheetId?: string;
   sellerId: string;
   itemIds?: string[];
   status: OrderStatus;
@@ -236,7 +236,7 @@ export interface Order {
   paymentMethod?: string; // Forma de Pagamento
   paymentConditions?: string; // Tabela/Condições de Pagamento
   installments?: Installment[]; // Detalhamento das parcelas
-  itemPrices?: Record<string, number>; // New: Preços manuais por item
+  itemPrices?: Record<string, any>; // New: Preços manuais por item
   installationDate?: string;
   installationTime?: string;
   technician?: string;
