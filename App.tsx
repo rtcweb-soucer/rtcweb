@@ -370,23 +370,55 @@ const App = () => {
     }
   };
 
+  // --- Filtering Logic for Roles ---
+  const getFilteredData = () => {
+    // Admin, Attendant, Production sees everything
+    if (!currentUser || currentUser.role !== UserRole.SELLER || !currentUser.sellerId) {
+      return {
+        viewOrders: orders,
+        viewTechnicalSheets: technicalSheets,
+        viewAppointments: appointments,
+        viewCustomers: customers
+      };
+    }
+
+    // Role == SELLER: Filter by sellerId
+    const sellerId = currentUser.sellerId;
+
+    const viewOrders = orders.filter(o => o.sellerId === sellerId);
+    const viewTechnicalSheets = technicalSheets.filter(t => t.sellerId === sellerId);
+    const viewAppointments = appointments.filter(a => a.sellerId === sellerId);
+
+    // Customers: anyone who has a Quote, Order or Appointment with this seller
+    const customerIds = new Set<string>();
+    viewOrders.forEach(o => customerIds.add(o.customerId));
+    viewTechnicalSheets.forEach(t => customerIds.add(t.customerId));
+    viewAppointments.forEach(a => customerIds.add(a.customerId));
+
+    const viewCustomers = customers.filter(c => customerIds.has(c.id));
+
+    return { viewOrders, viewTechnicalSheets, viewAppointments, viewCustomers };
+  };
+
+  const { viewOrders, viewTechnicalSheets, viewAppointments, viewCustomers } = getFilteredData();
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard orders={orders} appointments={appointments} products={products} technicalSheets={technicalSheets} />;
+        return <Dashboard orders={viewOrders} appointments={viewAppointments} products={products} technicalSheets={viewTechnicalSheets} />;
       case 'quick-quote':
         return <QuickQuote products={products} />;
       case 'sellers':
         return <Sellers
-          sellers={sellers} appointments={appointments} customers={customers} technicalSheets={technicalSheets}
-          orders={orders}
+          sellers={sellers} appointments={viewAppointments} customers={viewCustomers} technicalSheets={viewTechnicalSheets}
+          orders={viewOrders}
           onAdd={handleAddSeller} onUpdate={handleUpdateSeller} onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote} onStartMeasurement={handleStartMeasurement}
         />;
       case 'customers':
         return <Customers
-          customers={customers} onAdd={handleAddCustomer} onUpdate={handleUpdateCustomer}
-          appointments={appointments} orders={orders} sellers={sellers} technicalSheets={technicalSheets} onAddAppointment={handleAddAppointment}
+          customers={viewCustomers} onAdd={handleAddCustomer} onUpdate={handleUpdateCustomer}
+          appointments={viewAppointments} orders={viewOrders} sellers={sellers} technicalSheets={viewTechnicalSheets} onAddAppointment={handleAddAppointment}
           preselectedCustomerId={preselectedCustomerId}
         />;
       case 'products':
@@ -394,10 +426,10 @@ const App = () => {
       case 'schedule':
       case 'my-schedule':
         return <Schedule
-          appointments={appointments}
+          appointments={viewAppointments}
           sellers={sellers}
-          customers={customers}
-          technicalSheets={technicalSheets}
+          customers={viewCustomers}
+          technicalSheets={viewTechnicalSheets}
           products={products}
           blockedSlots={blockedSlots}
           installers={installers}
@@ -410,7 +442,7 @@ const App = () => {
         />;
       case 'measurements':
         return <MeasurementForm
-          customers={customers} products={products} technicalSheets={technicalSheets}
+          customers={viewCustomers} products={products} technicalSheets={viewTechnicalSheets}
           initialCustomerId={preselectedCustomerId || undefined} editingSheet={editingSheet || undefined}
           currentUser={currentUser}
           onSave={handleSaveTechnicalSheet}
@@ -420,7 +452,7 @@ const App = () => {
         />;
       case 'quotes':
         return <Quotes
-          orders={orders} customers={customers} technicalSheets={technicalSheets} products={products} sellers={sellers}
+          orders={viewOrders} customers={viewCustomers} technicalSheets={viewTechnicalSheets} products={products} sellers={sellers}
           installers={installers}
           onUpdateOrder={handleUpdateOrder} initialSelectedId={lastGeneratedQuoteId || undefined}
           onClearSelection={() => setLastGeneratedQuoteId(null)} onNavigateToOrders={() => setActiveTab('orders')}
@@ -432,11 +464,11 @@ const App = () => {
         />;
       case 'agenda':
         return <Agenda
-          appointments={appointments}
+          appointments={viewAppointments}
           blockedSlots={blockedSlots}
           sellers={sellers}
-          customers={customers}
-          technicalSheets={technicalSheets}
+          customers={viewCustomers}
+          technicalSheets={viewTechnicalSheets}
           products={products}
           installers={installers}
           currentUser={currentUser}
