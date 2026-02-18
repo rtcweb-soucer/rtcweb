@@ -372,11 +372,8 @@ const App = () => {
 
   // --- Filtering Logic for Roles ---
   const getFilteredData = () => {
-    console.log("Current User:", currentUser);
-
     // Admin, Attendant, Production sees everything
     if (!currentUser || currentUser.role !== UserRole.SELLER || !currentUser.sellerId) {
-      console.log("Not filtering data. Role:", currentUser?.role, "SellerId:", currentUser?.sellerId);
       return {
         viewOrders: orders,
         viewTechnicalSheets: technicalSheets,
@@ -393,21 +390,16 @@ const App = () => {
       const found = sellers.find(s => s.name === currentUser.name || (s.login && s.login === currentUser.login));
       if (found) {
         sellerId = found.id;
-        console.log("Recovered Seller ID from fallback:", sellerId);
       }
     }
-
-    console.log("Final Filtering Seller ID:", sellerId);
 
     // If still no sellerId, we can't filter safely, but maybe we should return empty?
     // For now, if we can't find the seller, we return EMPTY lists to be safe, rather than ALL data.
     if (!sellerId) {
-      console.warn("User is SELLER but no Seller ID found. Returning empty views for security.");
       return { viewOrders: [], viewTechnicalSheets: [], viewAppointments: [], viewCustomers: [] };
     }
 
     const viewOrders = orders.filter(o => o.sellerId === sellerId);
-    console.log("Total Orders:", orders.length, "Visible Orders:", viewOrders.length);
 
     const viewTechnicalSheets = technicalSheets.filter(t => t.sellerId === sellerId);
     const viewAppointments = appointments.filter(a => a.sellerId === sellerId);

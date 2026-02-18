@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
+        devOptions: {
+          enabled: true
+        },
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo_rtc.jpg'],
         manifest: {
           id: '/',
@@ -24,8 +27,9 @@ export default defineConfig(({ mode }) => {
           theme_color: '#0f172a',
           background_color: '#ffffff',
           display: 'standalone',
-          orientation: 'portrait',
-          start_url: '.',
+          display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
+          orientation: 'portrait-primary',
+          start_url: '/',
           scope: '/',
           icons: [
             {
@@ -39,12 +43,6 @@ export default defineConfig(({ mode }) => {
               sizes: '512x512',
               type: 'image/jpeg',
               purpose: 'any'
-            },
-            {
-              src: 'logo_rtc.jpg',
-              sizes: '512x512',
-              type: 'image/jpeg',
-              purpose: 'maskable'
             }
           ]
         }
