@@ -372,8 +372,11 @@ const App = () => {
 
   // --- Filtering Logic for Roles ---
   const getFilteredData = () => {
+    console.log("Current User:", currentUser);
+
     // Admin, Attendant, Production sees everything
     if (!currentUser || currentUser.role !== UserRole.SELLER || !currentUser.sellerId) {
+      console.log("Not filtering data. Role:", currentUser?.role, "SellerId:", currentUser?.sellerId);
       return {
         viewOrders: orders,
         viewTechnicalSheets: technicalSheets,
@@ -383,9 +386,29 @@ const App = () => {
     }
 
     // Role == SELLER: Filter by sellerId
-    const sellerId = currentUser.sellerId;
+    let sellerId = currentUser.sellerId;
+
+    // Fallback: Try to find seller by name/login if sellerId is missing (Legacy Data Fix)
+    if (!sellerId) {
+      const found = sellers.find(s => s.name === currentUser.name || (s.login && s.login === currentUser.login));
+      if (found) {
+        sellerId = found.id;
+        console.log("Recovered Seller ID from fallback:", sellerId);
+      }
+    }
+
+    console.log("Final Filtering Seller ID:", sellerId);
+
+    // If still no sellerId, we can't filter safely, but maybe we should return empty?
+    // For now, if we can't find the seller, we return EMPTY lists to be safe, rather than ALL data.
+    if (!sellerId) {
+      console.warn("User is SELLER but no Seller ID found. Returning empty views for security.");
+      return { viewOrders: [], viewTechnicalSheets: [], viewAppointments: [], viewCustomers: [] };
+    }
 
     const viewOrders = orders.filter(o => o.sellerId === sellerId);
+    console.log("Total Orders:", orders.length, "Visible Orders:", viewOrders.length);
+
     const viewTechnicalSheets = technicalSheets.filter(t => t.sellerId === sellerId);
     const viewAppointments = appointments.filter(a => a.sellerId === sellerId);
 
@@ -414,12 +437,14 @@ const App = () => {
           orders={viewOrders}
           onAdd={handleAddSeller} onUpdate={handleUpdateSeller} onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote} onStartMeasurement={handleStartMeasurement}
+          currentUser={currentUser}
         />;
       case 'customers':
         return <Customers
           customers={viewCustomers} onAdd={handleAddCustomer} onUpdate={handleUpdateCustomer}
           appointments={viewAppointments} orders={viewOrders} sellers={sellers} technicalSheets={viewTechnicalSheets} onAddAppointment={handleAddAppointment}
           preselectedCustomerId={preselectedCustomerId}
+          currentUser={currentUser}
         />;
       case 'products':
         return <Products products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />;
@@ -480,8 +505,14 @@ const App = () => {
         />;
       case 'orders':
         return <Orders
-          orders={orders} customers={customers} technicalSheets={technicalSheets} products={products} sellers={sellers}
-          onUpdateOrder={handleUpdateOrder} onDeleteOrder={handleDeleteOrder}
+          orders={viewOrders}
+          customers={viewCustomers}
+          technicalSheets={viewTechnicalSheets}
+          products={products}
+          sellers={sellers}
+          onUpdateOrder={handleUpdateOrder}
+          onDeleteOrder={handleDeleteOrder}
+          currentUser={currentUser}
         />;
       case 'pcp':
         return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} onSelectCustomer={handleSelectCustomer} />;

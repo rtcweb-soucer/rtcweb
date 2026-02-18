@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import { Customer, Appointment, Order, Seller, OrderStatus, TechnicalSheet } from '../types';
+import { Customer, Appointment, Order, Seller, OrderStatus, TechnicalSheet, SystemUser } from '../types';
 import { fuzzyMatch } from '../utils/searchUtils';
 import CustomerModal from '../components/CustomerModal';
 import {
@@ -52,6 +52,7 @@ interface CustomersProps {
   technicalSheets: TechnicalSheet[];
   onAddAppointment: (a: Appointment) => void;
   preselectedCustomerId?: string | null;
+  currentUser: SystemUser;
 }
 
 const Customers = ({
@@ -63,7 +64,8 @@ const Customers = ({
   sellers,
   technicalSheets,
   onAddAppointment,
-  preselectedCustomerId
+  preselectedCustomerId,
+  currentUser
 }: CustomersProps) => {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);

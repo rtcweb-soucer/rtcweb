@@ -24,7 +24,7 @@ import {
   EyeOff,
   UserPlus
 } from 'lucide-react';
-import { Seller, Appointment, Customer, TechnicalSheet, OrderStatus, Order } from '../types';
+import { Customer, Appointment, Order, Seller, OrderStatus, TechnicalSheet, SystemUser } from '../types';
 
 interface SellersProps {
   sellers: Seller[];
@@ -37,6 +37,7 @@ interface SellersProps {
   onEditTechnicalSheet: (sheet: TechnicalSheet) => void;
   onGenerateQuote: (sheet: TechnicalSheet) => void;
   onStartMeasurement: (customerId: string) => void;
+  currentUser: SystemUser;
 }
 
 const Sellers = ({
@@ -49,7 +50,8 @@ const Sellers = ({
   onUpdate,
   onEditTechnicalSheet,
   onGenerateQuote,
-  onStartMeasurement
+  onStartMeasurement,
+  currentUser
 }: SellersProps) => {
   const [showModal, setShowModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);

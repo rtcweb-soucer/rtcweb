@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useRef } from 'react';
-import { Order, Customer, TechnicalSheet, Product, OrderStatus, Seller, Installment, ProductionStage, MeasurementItem } from '../types';
+import { Order, Customer, TechnicalSheet, Product, OrderStatus, Seller, Installment, ProductionStage, MeasurementItem, SystemUser, UserRole } from '../types';
 import {
   Briefcase,
   Search,
@@ -38,7 +38,9 @@ interface OrdersProps {
   sellers: Seller[];
   onUpdateOrder: (order: Order) => void;
   onDeleteOrder: (id: string) => void;
+  currentUser: SystemUser;
 }
+
 
 const Orders = ({
   orders,
@@ -47,7 +49,8 @@ const Orders = ({
   products,
   sellers,
   onUpdateOrder,
-  onDeleteOrder
+  onDeleteOrder,
+  currentUser
 }: OrdersProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -57,7 +60,12 @@ const Orders = ({
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
 
   // New Filters
-  const [filterSellerId, setFilterSellerId] = useState('');
+  const [filterSellerId, setFilterSellerId] = useState(() => {
+    if (currentUser && currentUser.role === UserRole.SELLER) {
+      return currentUser.sellerId || currentUser.id || '';
+    }
+    return '';
+  });
   const [filterNeighborhood, setFilterNeighborhood] = useState('');
   const [filterAddress, setFilterAddress] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
