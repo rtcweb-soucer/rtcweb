@@ -383,7 +383,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         ...selectedOrder,
         status: OrderStatus.CONTRACT_SIGNED,
         technicalSheetId: sheetId,
-        itemIds: finalItems.map(it => it.id),
+        itemIds: finalItems.map((it: MeasurementItem) => it.id),
         totalValue: finalValue,
         itemPrices: redistributedItemPrices, // Limpa o __DRAFT_ITEMS__ e salva os preços reais
         paymentMethod: paymentMethod,
