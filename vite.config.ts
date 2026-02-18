@@ -14,32 +14,37 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'auto',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo_rtc.jpg'],
         manifest: {
+          id: '/',
           name: 'RTC - Toldos & Cortinas',
           short_name: 'RTC',
           description: 'Sistema de Gestão RTC - Toldos, Cortinas e Coberturas',
           theme_color: '#0f172a',
           background_color: '#ffffff',
           display: 'standalone',
-          start_url: '/',
+          orientation: 'portrait',
+          start_url: '.',
           scope: '/',
           icons: [
             {
               src: 'logo_rtc.jpg',
               sizes: '192x192',
-              type: 'image/jpeg'
-            },
-            {
-              src: 'logo_rtc.jpg',
-              sizes: '512x512',
-              type: 'image/jpeg'
+              type: 'image/jpeg',
+              purpose: 'any'
             },
             {
               src: 'logo_rtc.jpg',
               sizes: '512x512',
               type: 'image/jpeg',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: 'logo_rtc.jpg',
+              sizes: '512x512',
+              type: 'image/jpeg',
+              purpose: 'maskable'
             }
           ]
         }
