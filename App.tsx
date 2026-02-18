@@ -273,12 +273,14 @@ const App = () => {
     }
   };
 
-  const handleAddCustomer = async (c: Customer) => {
+  const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
     try {
       const saved = await dataService.saveCustomer(c);
       setCustomers([...customers, saved]);
+      return saved;
     } catch (err: any) {
       alert("Erro ao salvar cliente: " + (err.message || err));
+      return null;
     }
   };
 
@@ -419,9 +421,14 @@ const App = () => {
       case 'quotes':
         return <Quotes
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products} sellers={sellers}
+          installers={installers}
           onUpdateOrder={handleUpdateOrder} initialSelectedId={lastGeneratedQuoteId || undefined}
           onClearSelection={() => setLastGeneratedQuoteId(null)} onNavigateToOrders={() => setActiveTab('orders')}
           currentUser={currentUser}
+          onAddCustomer={handleAddCustomer}
+          onAddAppointment={handleAddAppointment}
+          onAddTechnicalSheet={handleSaveTechnicalSheet}
+          onDeleteOrder={handleDeleteOrder}
         />;
       case 'agenda':
         return <Agenda

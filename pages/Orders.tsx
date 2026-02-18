@@ -64,6 +64,7 @@ const Orders = ({
   const [filterCPF, setFilterCPF] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -353,6 +354,7 @@ const Orders = ({
                     <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
                     <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
                     <p className="text-[9px] text-slate-500 font-medium">(21) 4062-7090 | (21) 2201-8118</p>
+                    <p className="text-[9px] text-emerald-600 font-bold">WhatsApp: (21) 97078-9399 / (21) 96433-4539</p>
                   </div>
                 </div>
               </td>
@@ -704,38 +706,48 @@ const Orders = ({
         </div>
       </div>
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 mb-2 text-blue-600">
-          <Filter size={18} />
-          <h3 className="text-sm font-black uppercase tracking-widest">Filtros Avançados</h3>
+        <div
+          className="flex items-center justify-between cursor-pointer md:cursor-default"
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <div className="flex items-center gap-2 text-blue-600">
+            <Filter size={18} />
+            <h3 className="text-sm font-black uppercase tracking-widest">Filtros Avançados</h3>
+          </div>
+          <div className="md:hidden">
+            <ChevronRight size={20} className={`text-slate-400 transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input type="text" placeholder="ID ou Cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+        <div className={`${showFilters ? 'block' : 'hidden'} md:block space-y-4`}>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input type="text" placeholder="ID ou Cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+            </div>
+
+            <select value={filterSellerId} onChange={(e) => setFilterSellerId(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
+              <option value="">Todos os Vendedores</option>
+              {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+
+            <input type="text" placeholder="Bairro..." value={filterNeighborhood} onChange={(e) => setFilterNeighborhood(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+            <input type="text" placeholder="Endereço..." value={filterAddress} onChange={(e) => setFilterAddress(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
           </div>
 
-          <select value={filterSellerId} onChange={(e) => setFilterSellerId(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
-            <option value="">Todos os Vendedores</option>
-            {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input type="text" placeholder="Telefone..." value={filterPhone} onChange={(e) => setFilterPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+            <input type="text" placeholder="CPF/Documento..." value={filterCPF} onChange={(e) => setFilterCPF(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
 
-          <input type="text" placeholder="Bairro..." value={filterNeighborhood} onChange={(e) => setFilterNeighborhood(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
-          <input type="text" placeholder="Endereço..." value={filterAddress} onChange={(e) => setFilterAddress(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <input type="text" placeholder="Telefone..." value={filterPhone} onChange={(e) => setFilterPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
-          <input type="text" placeholder="CPF/Documento..." value={filterCPF} onChange={(e) => setFilterCPF(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
-
-          <div className="flex items-center gap-2 md:col-span-2">
-            <div className="flex-1 relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">De</span>
-              <input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600" />
-            </div>
-            <div className="flex-1 relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">Até</span>
-              <input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600" />
+            <div className="flex items-center gap-2 md:col-span-2">
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">De</span>
+                <input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600" />
+              </div>
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">Até</span>
+                <input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600" />
+              </div>
             </div>
           </div>
         </div>
@@ -814,9 +826,9 @@ const Orders = ({
         </div>
 
         {/* Mobile Card View */}
-        <div className="md:hidden divide-y divide-slate-100">
+        <div className="md:hidden space-y-4 p-4">
           {filteredOrders.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 italic px-4">
+            <div className="py-12 bg-white rounded-3xl border border-dashed border-slate-200 text-center text-slate-400 italic px-4">
               Nenhum pedido encontrado.
             </div>
           ) : (
@@ -827,33 +839,64 @@ const Orders = ({
                 <div
                   key={order.id}
                   onClick={() => setSelectedOrderId(order.id)}
-                  className="p-4 active:bg-slate-50 transition-colors group flex justify-between items-center"
+                  className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden"
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">#{order.id}</span>
-                      <span className="text-[10px] text-slate-400 font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
-                    </div>
-                    <h3 className="font-black text-slate-900 uppercase text-sm truncate">{customer?.name}</h3>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                      <p className="flex items-center gap-1 text-[10px] text-slate-500 font-bold truncate">
-                        <PinIcon size={10} /> {customer?.address.neighborhood}
-                      </p>
-                      <span className="text-[8px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter border border-emerald-100 w-fit">
-                        {order.status}
-                      </span>
-                    </div>
+                  <div className="absolute top-0 right-0 p-3">
+                    <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full uppercase tracking-widest border border-emerald-100">
+                      {order.status}
+                    </span>
                   </div>
-                  <div className="text-right pl-4">
-                    <p className="text-sm font-black text-slate-900">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    <div className="flex justify-end items-center gap-2 mt-2">
-                      <button
-                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); openHistory(e, order); }}
-                        className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"
-                      >
-                        <Activity size={14} />
-                      </button>
-                      <ChevronRight size={16} className="text-slate-300" />
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase border border-blue-100">#{order.id}</span>
+                        <div className="flex items-center gap-1.5 text-slate-400">
+                          <Clock size={12} />
+                          <span className="text-[11px] font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <h3 className="font-black text-slate-900 uppercase text-base leading-tight pr-20">{customer?.name}</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center gap-2.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                        <div className="p-1.5 bg-white text-blue-500 rounded-lg shadow-sm border border-slate-100">
+                          <PinIcon size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bairro</p>
+                          <p className="text-[11px] font-bold text-slate-700 truncate">{customer?.address.neighborhood || 'N/A'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                        <div className="p-1.5 bg-white text-emerald-500 rounded-lg shadow-sm border border-slate-100">
+                          <Phone size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Contato</p>
+                          <p className="text-[11px] font-bold text-slate-700 truncate">{customer?.phone || 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total do Pedido</p>
+                        <p className="text-lg font-black text-slate-900 tracking-tight">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e: React.MouseEvent) => { e.stopPropagation(); openHistory(e, order); }}
+                          className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 shadow-sm active:scale-90 transition-transform"
+                          title="Ver PCP"
+                        >
+                          <Activity size={18} />
+                        </button>
+                        <div className="w-10 h-10 flex items-center justify-center bg-slate-900 text-white rounded-2xl shadow-lg active:scale-90 transition-transform">
+                          <ChevronRight size={20} />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

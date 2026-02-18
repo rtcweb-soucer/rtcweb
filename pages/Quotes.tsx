@@ -1,7 +1,9 @@
+// Quotes management component
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { dataService } from '../services/dataService';
-import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, MeasurementItem, ProductionStage, Seller } from '../types';
+import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, MeasurementItem, ProductionStage, Seller, Appointment, Installer, SystemUser } from '../types';
+import CustomerModal from '../components/CustomerModal';
 import { normalizeString } from '../utils/searchUtils';
 import { addBusinessDays } from '../utils/dateUtils';
 import {
@@ -23,6 +25,8 @@ import {
   CheckCircle2,
   DollarSign,
   CreditCard,
+  Clock,
+  MapPin,
   X
 } from 'lucide-react';
 
@@ -42,14 +46,19 @@ interface QuotesProps {
   technicalSheets: TechnicalSheet[];
   products: Product[];
   sellers: Seller[];
-  onUpdateOrder: (order: Order) => void;
-  currentUser: any;
+  installers: Installer[];
+  onUpdateOrder: (updatedOrder: Order) => Promise<void>;
+  currentUser: SystemUser | null;
   initialSelectedId?: string;
   onClearSelection?: () => void;
   onNavigateToOrders?: () => void;
+  onAddCustomer?: (c: Customer) => Promise<Customer | null>;
+  onAddAppointment?: (a: Appointment) => Promise<void>;
+  onAddTechnicalSheet?: (s: TechnicalSheet) => Promise<void>;
+  onDeleteOrder?: (id: string) => Promise<void>;
 }
 
-const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdateOrder, currentUser, initialSelectedId, onClearSelection, onNavigateToOrders }: QuotesProps) => {
+const Quotes = ({ orders, customers, technicalSheets, products, sellers, installers, onUpdateOrder, currentUser, initialSelectedId, onClearSelection, onNavigateToOrders, onAddCustomer, onAddAppointment, onAddTechnicalSheet, onDeleteOrder }: QuotesProps) => {
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(initialSelectedId || null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -88,12 +97,153 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
   const [customerSearch, setCustomerSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
 
+  // Customer Modal
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+
+  // Historical Items Modal
+  const [showHistoricalModal, setShowHistoricalModal] = useState(false);
+
+  const activeQuoteId = selectedQuoteId || initialSelectedId;
+  const printRef = useRef<HTMLDivElement>(null);
+  const selectedOrder = orders.find(o => o.id === activeQuoteId);
+  const selectedCustomer = selectedOrder ? customers.find(c => c.id === selectedOrder.customerId) : null;
+
+  const getOrderItems = () => {
+    if (!selectedOrder) return [];
+    if (selectedOrder.technicalSheetId) {
+      const sheet = technicalSheets.find(s => s.id === selectedOrder.technicalSheetId);
+      if (sheet) {
+        if (!selectedOrder.itemIds || selectedOrder.itemIds.length === 0) return sheet.items || [];
+        return (sheet.items || []).filter(it => selectedOrder.itemIds?.includes(it.id));
+      }
+    }
+
+    if (selectedOrder.itemPrices?.['__DRAFT_ITEMS__']) {
+      try {
+        return typeof selectedOrder.itemPrices['__DRAFT_ITEMS__'] === 'string'
+          ? JSON.parse(selectedOrder.itemPrices['__DRAFT_ITEMS__'])
+          : selectedOrder.itemPrices['__DRAFT_ITEMS__'];
+      } catch (e) {
+        console.error("Erro ao carregar itens temporários:", e);
+      }
+    }
+    return [];
+  };
+
+  const orderItems = getOrderItems();
+
+  const handleModalSaveCustomer = async (customer: Customer) => {
+    if (!onAddCustomer) return;
+    const saved = await onAddCustomer(customer);
+    if (saved) {
+      setQuoteFormData(prev => ({ ...prev, customerId: saved.id }));
+      setCustomerSearch(saved.name);
+      setShowCustomerModal(false);
+    }
+  };
+
+  // Schedule Visit Modal
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleData, setScheduleData] = useState<Partial<Appointment>>({
+    date: new Date().toISOString().split('T')[0],
+    time: '09:00',
+    type: 'MEASUREMENT',
+    status: 'SCHEDULED',
+    installerIds: []
+  });
+
+  const handleOpenScheduleVisit = () => {
+    if (!selectedOrder) return;
+    setScheduleData({
+      customerId: selectedOrder.customerId,
+      sellerId: selectedOrder.sellerId,
+      orderId: selectedOrder.id,
+      date: new Date().toISOString().split('T')[0],
+      time: '09:00',
+      type: 'MEASUREMENT',
+      status: 'SCHEDULED',
+      notes: `Visita técnica agendada a partir do orçamento ${selectedOrder.id}`,
+      installerIds: []
+    });
+    setShowScheduleModal(true);
+  };
+
+  const handleConfirmSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrder || !onAddAppointment || !onAddTechnicalSheet) return;
+
+    try {
+      const existingSheetId = selectedOrder.technicalSheetId;
+      const sheetId = existingSheetId || crypto.randomUUID();
+
+      const currentItems = getOrderItems();
+
+      const newSheet: TechnicalSheet = {
+        id: sheetId,
+        customerId: selectedOrder.customerId,
+        sellerId: selectedOrder.sellerId,
+        // Preserva IDs se já existirem, senão usa o ID do rascunho (que já é um UUID)
+        items: currentItems.map((it: MeasurementItem) => ({
+          ...it,
+          id: it.id || crypto.randomUUID()
+        })),
+        createdAt: new Date(),
+        notes: scheduleData.notes || `Visita técnica agendada a partir do orçamento ${selectedOrder.id}`
+      };
+
+      const newAppointment: Appointment = {
+        ...scheduleData,
+        id: crypto.randomUUID(),
+      } as Appointment;
+
+      await onAddTechnicalSheet(newSheet);
+      await onAddAppointment(newAppointment);
+
+      // Atualiza o pedido para vincular a ficha se for nova
+      if (!existingSheetId) {
+        const updatedOrder: Order = {
+          ...selectedOrder,
+          technicalSheetId: sheetId,
+          itemIds: newSheet.items.map(it => it.id)
+        };
+        await dataService.saveOrder(updatedOrder);
+        onUpdateOrder(updatedOrder);
+      }
+
+      setShowScheduleModal(false);
+      alert("Visita agendada com sucesso!");
+    } catch (err) {
+      console.error("Erro ao agendar visita:", err);
+      alert("Erro ao agendar visita");
+    }
+  };
+
+  const handleDeleteQuote = async () => {
+    if (!selectedOrder || !onDeleteOrder) return;
+    if (window.confirm("Deseja realmente excluir este orçamento? Os dados técnicos vinculados SERÃO PRESERVADOS.")) {
+      try {
+        await onDeleteOrder(selectedOrder.id);
+        setSelectedQuoteId(null);
+        onClearSelection?.();
+      } catch (err) {
+        alert("Erro ao excluir orçamento");
+      }
+    }
+  };
+
+  const handleScheduleVisit = handleOpenScheduleVisit;
+
   const handleEditQuote = (order: Order) => {
     let orderItems: any[] = [];
 
     if (order.technicalSheetId) {
       const sheet = technicalSheets.find(s => s.id === order.technicalSheetId);
-      orderItems = sheet ? (sheet.items || []).filter(it => order.itemIds?.includes(it.id)) : [];
+      if (sheet) {
+        // Se itemIds estiver definido, filtra. Se não, pega todos da ficha.
+        orderItems = order.itemIds && order.itemIds.length > 0
+          ? (sheet.items || []).filter(it => order.itemIds?.includes(it.id))
+          : (sheet.items || []);
+      }
     } else if (order.itemPrices?.['__DRAFT_ITEMS__']) {
       try {
         orderItems = typeof order.itemPrices['__DRAFT_ITEMS__'] === 'string'
@@ -103,6 +253,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         console.error("Erro ao carregar itens temporários:", e);
       }
     }
+
+    // Puxar o nome do cliente para o campo de busca
+    const customer = customers.find(c => c.id === order.customerId);
+    if (customer) setCustomerSearch(customer.name);
 
     setModalMode('edit');
     setQuoteFormData({
@@ -162,11 +316,34 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         id: it.id || crypto.randomUUID()
       }));
 
+      const existingOrder = orders.find(o => o.id === quoteFormData.id);
+      const sheetId = existingOrder?.technicalSheetId;
+
+      // Sincronizar com Ficha Técnica se ativado e a ficha existir
+      if (quoteFormData.syncToSheet && sheetId && onAddTechnicalSheet) {
+        const sheet = technicalSheets.find(s => s.id === sheetId);
+        if (sheet) {
+          const updatedSheet: TechnicalSheet = {
+            ...sheet,
+            items: itemsPayload.map((it: any) => ({
+              id: it.id,
+              environment: it.environment,
+              productId: it.productId,
+              productType: it.productType,
+              color: it.color,
+              width: it.width,
+              height: it.height
+            }))
+          };
+          await onAddTechnicalSheet(updatedSheet);
+        }
+      }
+
       // Criar ou Atualizar Pedido (Orçamento)
       const order: Order = {
         id: quoteFormData.id || `ORC-${Math.floor(Date.now() / 1000)}`,
         customerId: quoteFormData.customerId,
-        technicalSheetId: orders.find(o => o.id === quoteFormData.id)?.technicalSheetId || undefined,
+        technicalSheetId: sheetId,
         sellerId: quoteFormData.sellerId,
         itemIds: itemsPayload.map((it: any) => it.id),
         status: OrderStatus.QUOTE_SENT,
@@ -177,7 +354,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         },
         contractObservations: quoteFormData.contractObservations,
         paymentConditions: quoteFormData.paymentConditions,
-        createdAt: new Date()
+        createdAt: existingOrder?.createdAt || new Date()
       };
 
       const savedOrder = await dataService.saveOrder(order);
@@ -191,10 +368,6 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
     }
   };
 
-  const printRef = useRef<HTMLDivElement>(null);
-
-  const activeQuoteId = selectedQuoteId || initialSelectedId;
-
   const filteredOrders = orders.filter((order: Order) => {
     const isQuote = activeTab === 'open'
       ? order.status === OrderStatus.QUOTE_SENT
@@ -206,34 +379,6 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
     const matchesSeller = filterSellerId ? order.sellerId === filterSellerId : true;
     return matchesSearch && matchesSeller;
   });
-
-  const selectedOrder = orders.find((o: Order) => o.id === activeQuoteId);
-  const selectedCustomer = selectedOrder ? customers.find((c: Customer) => c.id === selectedOrder.customerId) : null;
-
-  const getOrderItems = () => {
-    if (selectedOrder?.technicalSheetId) {
-      const sheet = technicalSheets.find((s: TechnicalSheet) => s.id === selectedOrder.technicalSheetId);
-      if (!sheet) return [];
-      if (!selectedOrder?.itemIds) return sheet.items;
-      return (sheet.items || []).filter((item: MeasurementItem) => selectedOrder.itemIds?.includes(item.id));
-    }
-
-    // Tenta pegar do rascunho (pode estar em itemPrices ou quote_items)
-    const draftItems = selectedOrder?.itemPrices?.['__DRAFT_ITEMS__'] || (selectedOrder as any)?.quote_items;
-
-    if (draftItems) {
-      try {
-        return typeof draftItems === 'string'
-          ? JSON.parse(draftItems)
-          : draftItems;
-      } catch (e) {
-        console.error("Erro ao carregar itens temporários:", e);
-      }
-    }
-    return [];
-  };
-
-  const orderItems = getOrderItems();
 
   // Sincroniza os valores comerciais quando o orçamento selecionado muda
   // ou quando o valor total da proposta é alterado (enquanto o modal está fechado)
@@ -332,7 +477,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
           customerId: selectedOrder.customerId,
           sellerId: selectedOrder.sellerId,
           items: draftItems.map((it: MeasurementItem) => ({
-            id: it.id,
+            id: it.id, // Mantém o ID do rascunho
             environment: it.environment || 'Ambiente não definido',
             productId: it.productId,
             productType: it.productType,
@@ -345,6 +490,31 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         const savedSheet = await dataService.saveTechnicalSheet(newSheet);
         sheetId = savedSheet.id;
         finalItems = savedSheet.items;
+      } else if (sheetId) {
+        // Se já existe ficha, garante que os itens estão atualizados com o que está no orçamento
+        const existingSheet = technicalSheets.find(s => s.id === sheetId);
+        if (existingSheet) {
+          const draftItems = typeof selectedOrder.itemPrices?.['__DRAFT_ITEMS__'] === 'string'
+            ? JSON.parse(selectedOrder.itemPrices['__DRAFT_ITEMS__'])
+            : selectedOrder.itemPrices?.['__DRAFT_ITEMS__'] || [];
+
+          if (draftItems.length > 0) {
+            const updatedSheet: TechnicalSheet = {
+              ...existingSheet,
+              items: draftItems.map((it: MeasurementItem) => ({
+                id: it.id,
+                environment: it.environment || 'Ambiente não definido',
+                productId: it.productId,
+                productType: it.productType,
+                color: it.color,
+                width: it.width,
+                height: it.height
+              }))
+            };
+            await dataService.saveTechnicalSheet(updatedSheet);
+            finalItems = updatedSheet.items;
+          }
+        }
       }
 
       // 1. Calcular o valor atual de cada item como ele aparece no orçamento agora
@@ -597,8 +767,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
   })();
 
   return (
-    <div className={activeQuoteId && selectedOrder && selectedCustomer ? "" : "p-4 md:p-8 space-y-8 animate-in fade-in duration-700"}>
-      {activeQuoteId && selectedOrder && selectedCustomer ? (
+    <div className={selectedQuoteId && selectedOrder && selectedCustomer ? "" : "p-4 md:p-8 space-y-8 animate-in fade-in duration-700"}>
+      {selectedQuoteId && selectedOrder && selectedCustomer ? (
         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 mb-20">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 no-print">
             <button onClick={handleBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
@@ -608,6 +778,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
               <button onClick={() => handleEditQuote(selectedOrder)} className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-sm font-bold hover:bg-amber-200 transition-all shadow-sm">
                 <Edit3 size={18} /> Editar Orçamento
               </button>
+              <button onClick={handleScheduleVisit} className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-200 transition-all shadow-sm">
+                <Calendar size={18} /> Agendar Visita
+              </button>
               <button onClick={() => setShowOrderModal(true)} className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
                 <CheckCircle2 size={18} /> Transformar em Pedido
               </button>
@@ -616,6 +789,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
               </button>
               <button onClick={() => handleGeneratePrint(true)} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
                 <Printer size={18} /> Imprimir / PDF
+              </button>
+              <button onClick={handleDeleteQuote} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl text-sm font-bold hover:bg-rose-100 transition-all transition-all shadow-sm">
+                <Trash2 size={18} /> Excluir
               </button>
             </div>
           </div>
@@ -639,6 +815,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                 <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
                 <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
                 <p className="text-[9px] text-slate-500 font-medium">(21) 4062-7090 | (21) 2201-8118</p>
+                <p className="text-[9px] text-emerald-600 font-bold">WhatsApp: (21) 97078-9399 / (21) 96433-4539</p>
               </div>
             </div>
 
@@ -1021,37 +1198,55 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <Layers size={14} className="text-blue-500" /> Itens do Orçamento
                       </h4>
-                      <div className="relative w-64 lg:w-80 group">
-                        <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:scale-110 transition-transform" size={16} />
-                        <input
-                          type="text"
-                          placeholder="Adicionar produto..."
-                          value={productSearch}
-                          onChange={(e) => setProductSearch(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                        />
-                        {productSearch && (
-                          <div className="absolute top-full right-0 mt-2 w-full lg:w-96 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-50">
-                            {products
-                              .filter(p => normalizeString(p.nome).includes(normalizeString(productSearch)))
-                              .map(p => (
-                                <button
-                                  key={p.id}
-                                  onClick={() => handleAddItem(p)}
-                                  className="w-full p-4 text-left hover:bg-slate-50 transition-all flex items-center justify-between group"
-                                >
-                                  <div className="space-y-0.5">
-                                    <p className="text-xs font-black text-slate-900 group-hover:text-blue-600 uppercase tracking-tight">{p.nome}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{p.tipo} • R$ {p.valor.toLocaleString('pt-BR')} / {p.unidade}</p>
-                                  </div>
-                                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                    <Plus size={14} />
-                                  </div>
-                                </button>
-                              ))
-                            }
-                          </div>
-                        )}
+                      <div className="flex gap-2 items-center">
+                        <div className="relative w-48 lg:w-64 group">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" size={14} />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!quoteFormData.customerId) return alert("Selecione um cliente primeiro.");
+                              setShowHistoricalModal(true);
+                            }}
+                            className="w-full pl-10 pr-4 py-2 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-tighter hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center justify-between group"
+                          >
+                            <span>Importar Histórico</span>
+                            <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                          </button>
+                        </div>
+
+                        <div className="relative w-64 lg:w-80 group">
+                          <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:scale-110 transition-transform" size={16} />
+                          <input
+                            type="text"
+                            placeholder="Adicionar produto..."
+                            value={productSearch}
+                            onChange={(e) => setProductSearch(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                          />
+                          {productSearch && (
+                            <div className="absolute top-full right-0 mt-2 w-full lg:w-96 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-50">
+                              {products
+                                .filter(p => normalizeString(p.nome).includes(normalizeString(productSearch)))
+                                .map(p => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => handleAddItem(p)}
+                                    className="w-full p-4 text-left hover:bg-slate-50 transition-all flex items-center justify-between group"
+                                  >
+                                    <div className="space-y-0.5">
+                                      <p className="text-xs font-black text-slate-900 group-hover:text-blue-600 uppercase tracking-tight">{p.nome}</p>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase">{p.tipo} • R$ {p.valor.toLocaleString('pt-BR')} / {p.unidade}</p>
+                                    </div>
+                                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                      <Plus size={14} />
+                                    </div>
+                                  </button>
+                                ))
+                              }
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1225,22 +1420,22 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
         </div>
       ) : (
         <>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Gestão de Orçamentos</h2>
               <p className="text-slate-500 font-medium">Controle de propostas e conversão em pedidos.</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
               <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner">
                 <button
                   onClick={() => setActiveTab('open')}
-                  className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'open' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'open' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   Abertos
                 </button>
                 <button
                   onClick={() => setActiveTab('closed')}
-                  className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'closed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'closed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   Fechados
                 </button>
@@ -1258,7 +1453,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                   });
                   setShowAddEditModal(true);
                 }}
-                className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center gap-2"
+                className="px-6 py-3 md:py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-2"
               >
                 <Plus size={16} /> Novo Orçamento
               </button>
@@ -1354,10 +1549,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
               </table>
             </div>
 
-            <div className="md:hidden divide-y divide-slate-100">
+            <div className="md:hidden space-y-4 p-4">
               {filteredOrders.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 italic px-4">
-                  <FileText size={40} className="mx-auto text-slate-200 mb-3" />
+                <div className="py-12 bg-white rounded-3xl border border-dashed border-slate-200 text-center text-slate-400 italic px-4">
+                  <FileText size={40} className="mx-auto text-slate-200 mb-3 opacity-20" />
                   Nenhuma proposta encontrada.
                 </div>
               ) : (
@@ -1368,32 +1563,56 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
                     <div
                       key={order.id}
                       onClick={() => setSelectedQuoteId(order.id)}
-                      className="p-4 active:bg-slate-50 transition-colors flex justify-between items-center group"
+                      className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Nº {order.id}</span>
-                          <span className="text-[10px] text-slate-400 font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
-                        </div>
-                        <h3 className="font-black text-slate-900 uppercase text-sm truncate">{customer?.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="h-4 w-4 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-[8px] font-black">
-                            {seller?.name.charAt(0)}
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-bold">{seller?.name || 'Vendedor RTC'}</span>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase border border-blue-100">Nº {order.id}</span>
+                        <div className="flex items-center gap-1.5 text-slate-400">
+                          <Clock size={12} />
+                          <span className="text-[11px] font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 pl-4">
-                        <div className="text-right">
-                          <p className="text-sm font-black text-slate-900">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                          <ChevronRight size={16} className="text-slate-300 ml-auto mt-1" />
+
+                      <h3 className="font-black text-slate-900 uppercase text-sm leading-tight mb-4 pr-10">{customer?.name}</h3>
+
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="flex items-center gap-2.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                          <div className="p-1.5 bg-white text-blue-500 rounded-lg shadow-sm border border-slate-100">
+                            <User size={14} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vendedor</p>
+                            <p className="text-[11px] font-bold text-slate-700 truncate">{seller?.name || 'RTC'}</p>
+                          </div>
                         </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleEditQuote(order); }}
-                          className="p-2 text-slate-400 hover:text-blue-600 rounded-lg"
-                        >
-                          <Edit3 size={18} />
-                        </button>
+                        <div className="flex items-center gap-2.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                          <div className="p-1.5 bg-white text-indigo-500 rounded-lg shadow-sm border border-slate-100">
+                            <MapPin size={14} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bairro</p>
+                            <p className="text-[11px] font-bold text-slate-700 truncate">{customer?.address?.neighborhood || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total da Proposta</p>
+                          <p className="text-lg font-black text-slate-900 tracking-tight">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEditQuote(order); }}
+                            className="w-10 h-10 flex items-center justify-center bg-amber-50 text-amber-600 rounded-2xl border border-amber-100 shadow-sm active:scale-90 transition-transform"
+                            title="Editar Orçamento"
+                          >
+                            <Edit3 size={18} />
+                          </button>
+                          <div className="w-10 h-10 flex items-center justify-center bg-slate-900 text-white rounded-2xl shadow-lg active:scale-90 transition-transform">
+                            <ChevronRight size={20} />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1572,39 +1791,49 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
             <div className="p-6 lg:p-8 space-y-8 overflow-y-auto flex-1 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
                 <div className="space-y-2">
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Cliente</label>
-                  <div className="relative group">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                    <input
-                      type="text"
-                      placeholder="Buscar cliente..."
-                      value={customerSearch}
-                      onChange={(e) => setCustomerSearch(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none"
-                    />
-                    {customerSearch && (
-                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-50">
-                        {customers
-                          .filter(c => normalizeString(c.name).includes(normalizeString(customerSearch)))
-                          .map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => {
-                                setQuoteFormData(prev => ({ ...prev, customerId: c.id }));
-                                setCustomerSearch(c.name);
-                              }}
-                              className="w-full p-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
-                            >
-                              <div>
-                                <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{c.name}</p>
-                                <p className="text-[10px] text-slate-400 font-medium">{c.document}</p>
-                              </div>
-                              <CheckCircle2 size={16} className={`text-emerald-500 ${quoteFormData.customerId === c.id ? 'opacity-100' : 'opacity-0'}`} />
-                            </button>
-                          ))
-                        }
-                      </div>
-                    )}
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-1">Cliente</label>
+                  <div className="flex gap-2">
+                    <div className="relative group flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                      <input
+                        type="text"
+                        placeholder="Buscar cliente..."
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors"
+                      />
+                      {customerSearch && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-50">
+                          {customers
+                            .filter(c => normalizeString(c.name).includes(normalizeString(customerSearch)))
+                            .map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => {
+                                  setQuoteFormData(prev => ({ ...prev, customerId: c.id }));
+                                  setCustomerSearch(c.name);
+                                }}
+                                className="w-full p-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                              >
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{c.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-medium">{c.document}</p>
+                                </div>
+                                <CheckCircle2 size={16} className={`text-emerald-500 ${quoteFormData.customerId === c.id ? 'opacity-100' : 'opacity-0'}`} />
+                              </button>
+                            ))
+                          }
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomerModal(true)}
+                      className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20"
+                      title="Cadastrar Novo Cliente"
+                    >
+                      <Plus size={20} />
+                    </button>
                   </div>
                 </div>
 
@@ -1831,9 +2060,190 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, onUpdat
           </div>
         </div>
       )}
+      <CustomerModal
+        isOpen={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        onSave={handleModalSaveCustomer}
+        mode="add"
+      />
+
+      {/* Schedule Visit Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-900">Agendar Visita Técnica</h3>
+              <button onClick={() => setShowScheduleModal(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                <Plus className="rotate-45" size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleConfirmSchedule} className="p-8">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Cliente</label>
+                  <div className="px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700">
+                    {customers.find(c => c.id === scheduleData.customerId)?.name || 'Cliente não encontrado'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Vendedor Responsável *</label>
+                  <select
+                    required
+                    value={scheduleData.sellerId}
+                    onChange={(e) => setScheduleData({ ...scheduleData, sellerId: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    <option value="">Selecione um vendedor...</option>
+                    {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Data *</label>
+                    <input
+                      type="date"
+                      required
+                      value={scheduleData.date}
+                      onChange={(e) => setScheduleData({ ...scheduleData, date: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Hora *</label>
+                    <input
+                      type="time"
+                      required
+                      value={scheduleData.time}
+                      onChange={(e) => setScheduleData({ ...scheduleData, time: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Observações (Opcional)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Ex: Cliente solicitou catálogo de cores específicas..."
+                    value={scheduleData.notes || ''}
+                    onChange={(e) => setScheduleData({ ...scheduleData, notes: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Tipo *</label>
+                  <select
+                    required
+                    value={scheduleData.type}
+                    onChange={(e) => setScheduleData({ ...scheduleData, type: e.target.value as any })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    <option value="MEASUREMENT">Medição</option>
+                    <option value="INSTALLATION">Instalação</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-4 mt-10">
+                <button type="button" onClick={() => setShowScheduleModal(false)} className="flex-1 py-3 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">Cancelar</button>
+                <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all">Confirmar Agendamento</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal de Importação de Histórico */}
+      {showHistoricalModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[350] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[85vh]">
+            <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg text-slate-900">Medições Históricas</h3>
+                <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Importar itens técnicos anteriores</p>
+              </div>
+              <button
+                onClick={() => setShowHistoricalModal(false)}
+                className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                type="button"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+              {technicalSheets.filter(s => s.customerId === quoteFormData.customerId).length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Layers size={40} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-sm font-bold uppercase tracking-widest">Nenhuma medição encontrada</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {technicalSheets
+                    .filter(s => s.customerId === quoteFormData.customerId)
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .map(sheet => (
+                      <div key={sheet.id} className="space-y-2">
+                        <div className="flex items-center gap-2 px-2">
+                          <span className="text-[10px] font-black text-slate-800 uppercase tracking-tighter bg-slate-100 px-2 py-0.5 rounded">Ficha #{sheet.id.substring(0, 8)}</span>
+                          <span className="text-[10px] font-bold text-slate-400">{new Date(sheet.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {sheet.items.map(item => {
+                            const isAlreadyIn = quoteFormData.items.some(it => it.id === item.id);
+                            const productName = products.find(p => p.id === item.productId)?.nome || 'Item Desconhecido';
+
+                            return (
+                              <button
+                                key={item.id}
+                                disabled={isAlreadyIn}
+                                onClick={() => {
+                                  setQuoteFormData(prev => ({
+                                    ...prev,
+                                    items: [
+                                      ...prev.items,
+                                      {
+                                        ...item,
+                                        price: products.find(p => p.id === item.productId)?.valor || 0
+                                      }
+                                    ]
+                                  }));
+                                  setShowHistoricalModal(false);
+                                }}
+                                className={`p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${isAlreadyIn ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-white border-slate-200 hover:border-indigo-500 hover:shadow-md hover:-translate-y-0.5'}`}
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-900 uppercase tracking-tight group-hover:text-indigo-600">{item.environment}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-1.5 rounded">{item.productType}</span>
+                                  </div>
+                                  <p className="text-[11px] font-bold text-slate-600">{productName}</p>
+                                  <p className="text-[9px] font-mono text-indigo-500 font-black tracking-tighter">{item.width.toFixed(2)}m x {item.height.toFixed(2)}m • {item.color || 'Sem cor'}</p>
+                                </div>
+                                <div className={`p-2 rounded-xl transition-colors ${isAlreadyIn ? 'bg-emerald-50 text-emerald-500' : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'}`}>
+                                  {isAlreadyIn ? <CheckCircle2 size={16} /> : <Plus size={16} />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setShowHistoricalModal(false)}
+                className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all uppercase tracking-widest text-[10px]"
+                type="button"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Quotes;
-

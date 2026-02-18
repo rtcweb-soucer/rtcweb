@@ -180,6 +180,7 @@ export interface TechnicalSheet {
   sellerId: string;
   items: MeasurementItem[];
   createdAt: Date;
+  notes?: string;
 }
 
 export interface Appointment {
