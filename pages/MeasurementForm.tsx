@@ -120,6 +120,7 @@ const MeasurementForm = ({
   const [productionSheetData, setProductionSheetData] = useState<Partial<ProductionInstallationSheet>>({});
   const [currentSheetId, setCurrentSheetId] = useState<string | null>(editingSheet?.id || null);
   const [showUploadIframe, setShowUploadIframe] = useState(false);
+  const [showGoogleForm, setShowGoogleForm] = useState(false);
 
 
   useEffect(() => {
@@ -922,16 +923,37 @@ const MeasurementForm = ({
                           <span className="text-slate-400 font-normal ml-2 text-xs">(Drive, Fotos, etc.)</span>
                         </label>
                         <button
-                          onClick={() => setShowUploadIframe(!showUploadIframe)}
+                          onClick={() => {
+                            setShowUploadIframe(!showUploadIframe);
+                            setShowGoogleForm(false);
+                          }}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border ${showUploadIframe ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'}`}
                         >
                           {showUploadIframe ? (
                             <>
-                              <X size={12} /> Fechar Câmera/Upload
+                              <X size={12} /> Fechar
                             </>
                           ) : (
                             <>
-                              <Wrench size={12} /> Gravar / Subir Mídia (Google Drive)
+                              <Wrench size={12} /> App Script (Automático)
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowGoogleForm(!showGoogleForm);
+                            setShowUploadIframe(false);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border ${showGoogleForm ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}
+                        >
+                          {showGoogleForm ? (
+                            <>
+                              <X size={12} /> Fechar
+                            </>
+                          ) : (
+                            <>
+                              <FileText size={12} /> Google Forms (Manual)
                             </>
                           )}
                         </button>
@@ -943,7 +965,7 @@ const MeasurementForm = ({
                           <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg bg-slate-100">
                             <div className="absolute top-2 right-2 z-10">
                               <span className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
-                                Modo Upload Seguro
+                                Modo Upload Automático
                               </span>
                             </div>
                             <iframe
@@ -955,9 +977,50 @@ const MeasurementForm = ({
                             />
                           </div>
                           <p className="text-[10px] text-center text-slate-500 mt-2">
-                            * Se a câmera não abrir, verifique as permissões do navegador ou clique em "Escolher Arquivo" para selecionar da galeria.
+                            * Se a câmera não abrir ou der erro, tente usar o botão do Google Forms ao lado.
                           </p>
                         </div>
+                      )}
+
+                      {/* Google Forms Iframe Embedding */}
+                      {showGoogleForm && (
+                        <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                          <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-emerald-500 shadow-lg bg-slate-100">
+                            <div className="absolute top-2 right-2 z-10">
+                              <span className="bg-emerald-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
+                                Modo Forms Manual
+                              </span>
+                            </div>
+                            <iframe
+                              src="https://docs.google.com/forms/d/e/1FAIpQLSdLZ6DFZEOyybjs-hWGLaMcjoNFM_3IGVCNiJJOB82n9AkOrg/viewform?embedded=true"
+                              className="w-full h-full border-none"
+                              title="Google Forms Backup"
+                            />
+                          </div>
+                          <p className="text-[10px] text-center text-slate-500 mt-2">
+                            * Após enviar os arquivos, copie o link gerado e cole no campo abaixo manualmente.
+                          </p>
+                        </div>
+                      )}
+                      <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                        <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg bg-slate-100">
+                          <div className="absolute top-2 right-2 z-10">
+                            <span className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
+                              Modo Upload Seguro
+                            </span>
+                          </div>
+                          <iframe
+                            src={`https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec?clientName=${encodeURIComponent(customers.find(c => c.id === selectedCustomerId)?.name || '')}&embedded=true`}
+                            className="w-full h-full border-none"
+                            allow="camera *; microphone *; clipboard-write; encrypted-media; picture-in-picture; display-capture"
+                            sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads allow-modals"
+                            title="Upload Google Drive"
+                          />
+                        </div>
+                        <p className="text-[10px] text-center text-slate-500 mt-2">
+                          * Se a câmera não abrir, verifique as permissões do navegador ou clique em "Escolher Arquivo" para selecionar da galeria.
+                        </p>
+                      </div>
                       )}
 
                       <input
