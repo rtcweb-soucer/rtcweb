@@ -141,7 +141,10 @@ const MeasurementForm = ({
       if (event.data.type === 'DRIVE_LINK_UPLOADED') {
         setProductionSheetData(prev => ({ ...prev, videoLink: event.data.link }));
         alert("✅ Link do Google Drive recebido com sucesso!");
-        setShowUploadIframe(false); // Fecha o iframe automaticamente após sucesso
+        setShowUploadIframe(false);
+      }
+      if (event.data.type === 'CLOSE_UPLOAD_MODAL') {
+        setShowUploadIframe(false);
       }
     };
     window.addEventListener('message', handleMessage);
