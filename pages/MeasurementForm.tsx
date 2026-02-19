@@ -119,6 +119,7 @@ const MeasurementForm = ({
   const [editingProductionItemId, setEditingProductionItemId] = useState<string | null>(null);
   const [productionSheetData, setProductionSheetData] = useState<Partial<ProductionInstallationSheet>>({});
   const [currentSheetId, setCurrentSheetId] = useState<string | null>(editingSheet?.id || null);
+  const [showUploadIframe, setShowUploadIframe] = useState(false);
 
 
   useEffect(() => {
@@ -920,17 +921,48 @@ const MeasurementForm = ({
                           <span className="text-slate-400 font-normal ml-2 text-xs">(Drive, Fotos, etc.)</span>
                         </label>
                         <button
-                          onClick={openDriveUpload}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-200"
+                          onClick={() => setShowUploadIframe(!showUploadIframe)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border ${showUploadIframe ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'}`}
                         >
-                          <Wrench size={12} /> Gravar / Subir Mídia (Google Drive)
+                          {showUploadIframe ? (
+                            <>
+                              <X size={12} /> Fechar Câmera/Upload
+                            </>
+                          ) : (
+                            <>
+                              <Wrench size={12} /> Gravar / Subir Mídia (Google Drive)
+                            </>
+                          )}
                         </button>
                       </div>
+
+                      {/* Google Apps Script Iframe Embedding */}
+                      {showUploadIframe && (
+                        <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                          <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg bg-slate-100">
+                            <div className="absolute top-2 right-2 z-10">
+                              <span className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
+                                Modo Upload Seguro
+                              </span>
+                            </div>
+                            <iframe
+                              src={`https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec?clientName=${encodeURIComponent(customers.find(c => c.id === selectedCustomerId)?.name || '')}&embedded=true`}
+                              className="w-full h-full border-none"
+                              allow="camera *; microphone *; clipboard-write"
+                              title="Upload Google Drive"
+                            />
+                          </div>
+                          <p className="text-[10px] text-center text-slate-500 mt-2">
+                            * Se a câmera não abrir, verifique as permissões do navegador ou clique em "Escolher Arquivo" para selecionar da galeria.
+                          </p>
+                        </div>
+                      )}
+
                       <input
                         type="url"
                         value={productionSheetData.videoLink || ''}
                         onChange={(e) => setProductionSheetData({ ...productionSheetData, videoLink: e.target.value })}
-                        placeholder="Cole o link do vídeo aqui..."
+                        placeholder="O link aparecerá aqui automaticamente após o upload..."
                         className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-medium text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
                       />
                       {productionSheetData.videoLink && (
