@@ -60,8 +60,8 @@ export const nfEmailService = {
 
         try {
             // Nota: Devido a CORS, chamadas diretas do browser para APIs externas podem falhar se a API não permitir.
-            // Usando Proxy configurado no Vite para desenvolvimento: /api/nfemail -> https://api.nfemail.com.br/api
-            const apiUrl = import.meta.env.DEV ? '/api/nfemail/NotasFiscais' : 'https://api.nfemail.com.br/api/NotasFiscais';
+            // Usando Proxy configurado no Vite (Dev) e Vercel Rewrites (Prod)
+            const apiUrl = '/api/nfemail/NotasFiscais';
 
             const response = await fetch(apiUrl, {
                 method: "POST",
@@ -90,7 +90,7 @@ export const nfEmailService = {
 
     async getNFeStatus(keyOrId: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const apiUrl = import.meta.env.DEV ? `/api/nfemail/NotasFiscais/${keyOrId}` : `https://api.nfemail.com.br/api/NotasFiscais/${keyOrId}`;
+        const apiUrl = `/api/nfemail/NotasFiscais/${keyOrId}`;
 
         const response = await fetch(apiUrl, {
             headers: { "Authorization": authHeader }
@@ -184,8 +184,8 @@ export const nfEmailService = {
         if (numero) url += `&numero=${numero}`;
         if (pedido) url += `&pedido=${pedido}`;
 
-        const apiUrl = import.meta.env.DEV ? url : `https://api.nfemail.com.br${url}`;
-        console.log(`🔌 Chamando API: ${apiUrl}`);
+        const apiUrl = url;
+        console.log(`🔌 Chamando API (Proxy): ${apiUrl}`);
 
         const response = await fetch(apiUrl, {
             headers: { "Authorization": authHeader }
@@ -325,7 +325,7 @@ export const nfEmailService = {
         }
 
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const apiUrl = import.meta.env.DEV ? '/api/nfemail/NotasFiscais/Cancelar' : 'https://api.nfemail.com.br/api/NotasFiscais/Cancelar';
+        const apiUrl = '/api/nfemail/NotasFiscais/Cancelar';
 
         const payload = {
             nfe_chave: key,
@@ -357,7 +357,7 @@ export const nfEmailService = {
         }
 
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const apiUrl = import.meta.env.DEV ? '/api/nfemail/NotasFiscais/CCe' : 'https://api.nfemail.com.br/api/NotasFiscais/CCe';
+        const apiUrl = '/api/nfemail/NotasFiscais/CCe';
 
         const payload = {
             nfe_chave: key,
