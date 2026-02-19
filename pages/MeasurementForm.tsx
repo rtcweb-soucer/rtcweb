@@ -1002,26 +1002,7 @@ const MeasurementForm = ({
                           </p>
                         </div>
                       )}
-                      <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                        <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg bg-slate-100">
-                          <div className="absolute top-2 right-2 z-10">
-                            <span className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
-                              Modo Upload Seguro
-                            </span>
-                          </div>
-                          <iframe
-                            src={`https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec?clientName=${encodeURIComponent(customers.find(c => c.id === selectedCustomerId)?.name || '')}&embedded=true`}
-                            className="w-full h-full border-none"
-                            allow="camera *; microphone *; clipboard-write; encrypted-media; picture-in-picture; display-capture"
-                            sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads allow-modals"
-                            title="Upload Google Drive"
-                          />
-                        </div>
-                        <p className="text-[10px] text-center text-slate-500 mt-2">
-                          * Se a câmera não abrir, verifique as permissões do navegador ou clique em "Escolher Arquivo" para selecionar da galeria.
-                        </p>
-                      </div>
-                      )}
+
 
                       <input
                         type="url"
