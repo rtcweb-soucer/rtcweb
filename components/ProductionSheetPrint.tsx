@@ -322,11 +322,16 @@ const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => 
             visibility: visible;
           }
           .print-container {
-            position: absolute;
+            position: fixed;
             left: 0;
             top: 0;
-            width: 100%;
-            padding: 20mm;
+            margin: 0;
+            padding: 15mm;
+            width: 100vw;
+            min-height: 100vh;
+            z-index: 9999;
+            background-color: white !important;
+            overflow: visible;
           }
           .no-print {
             display: none !important;
@@ -336,6 +341,10 @@ const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => 
           }
           .avoid-break {
             page-break-inside: avoid;
+          }
+          @page {
+            margin: 0;
+            size: auto;
           }
         }
       `}</style>

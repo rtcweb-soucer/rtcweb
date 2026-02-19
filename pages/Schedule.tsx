@@ -20,7 +20,8 @@ import {
   CheckSquare,
   Square,
   HardHat,
-  Wrench
+  Wrench,
+  X
 } from 'lucide-react';
 
 // Helpers para tratamento de data local
@@ -182,13 +183,22 @@ const Schedule = ({
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
           />
         </div>
-        <div className="w-full md:w-auto">
+        <div className="w-full md:w-auto flex items-center gap-2">
           <input
             type="date"
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700"
           />
+          {filterDate && (
+            <button
+              onClick={() => setFilterDate('')}
+              className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"
+              title="Limpar filtro de data"
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
         {role !== UserRole.SELLER && (
           <div className="w-full md:w-48">
@@ -232,7 +242,21 @@ const Schedule = ({
             <tbody className="divide-y divide-slate-100">
               {filteredAppointments.length === 0 ? (
                 <tr>
-                  <td colSpan={role === UserRole.SELLER ? 4 : 5} className="px-6 py-12 text-center text-slate-400 italic">Nenhum agendamento encontrado</td>
+                  <td colSpan={role === UserRole.SELLER ? 4 : 5} className="px-6 py-12 text-center text-slate-400 italic">
+                    {filterDate ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <span>Nenhum agendamento para {formatDisplayDate(filterDate)}</span>
+                        <button
+                          onClick={() => setFilterDate('')}
+                          className="text-xs font-bold text-blue-600 hover:underline"
+                        >
+                          Limpar filtro de data para ver todos
+                        </button>
+                      </div>
+                    ) : (
+                      'Nenhum agendamento encontrado'
+                    )}
+                  </td>
                 </tr>
               ) : (
                 filteredAppointments.map((app) => {
@@ -304,7 +328,19 @@ const Schedule = ({
       <div className="md:hidden space-y-4">
         {filteredAppointments.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 italic">
-            Nenhum agendamento encontrado
+            {filterDate ? (
+              <div className="flex flex-col items-center gap-2">
+                <span>Nenhum agendamento para {formatDisplayDate(filterDate)}</span>
+                <button
+                  onClick={() => setFilterDate('')}
+                  className="text-xs font-bold text-blue-600 hover:underline"
+                >
+                  Limpar filtro de data para ver todos
+                </button>
+              </div>
+            ) : (
+              'Nenhum agendamento encontrado'
+            )}
           </div>
         ) : (
           filteredAppointments.map((app) => {
