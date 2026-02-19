@@ -74,6 +74,7 @@ const Schedule = ({
   const [selectedApp, setSelectedApp] = useState<Appointment | null>(null);
   const [filterSeller, setFilterSeller] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterDate, setFilterDate] = useState(getLocalISODate(new Date()));
   const [searchTerm, setSearchTerm] = useState('');
 
   // Estado para controlar a seleção de itens da ficha técnica no modal
@@ -117,13 +118,14 @@ const Schedule = ({
     const matchesSearch = customer?.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSeller = !filterSeller || app.sellerId === filterSeller;
     const matchesStatus = !filterStatus || app.status === filterStatus;
+    const matchesDate = !filterDate || app.date === filterDate;
 
     if (role === UserRole.SELLER) {
       const sellerId = currentUser?.sellerId || currentUser?.id;
-      return matchesSearch && matchesStatus && app.sellerId === sellerId;
+      return matchesSearch && matchesStatus && matchesDate && app.sellerId === sellerId;
     }
 
-    return matchesSearch && matchesSeller && matchesStatus;
+    return matchesSearch && matchesSeller && matchesStatus && matchesDate;
   });
 
   const getSheetForApp = (app: Appointment) => {
@@ -178,6 +180,14 @@ const Schedule = ({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+          />
+        </div>
+        <div className="w-full md:w-auto">
+          <input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700"
           />
         </div>
         {role !== UserRole.SELLER && (
