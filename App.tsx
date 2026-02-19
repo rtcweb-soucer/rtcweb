@@ -22,6 +22,7 @@ import Login from './pages/Login';
 import TeamRegistration from './pages/TeamRegistration';
 import Agenda from './pages/Agenda';
 import Installers from './pages/Installers';
+import NFeManagement from './pages/NFeManagement';
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon } from 'lucide-react';
 import { dataService } from './services/dataService';
 
@@ -41,6 +42,7 @@ const App = () => {
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
   const [lastGeneratedQuoteId, setLastGeneratedQuoteId] = useState<string | null>(null);
+  const [selectedOrderIdForTab, setSelectedOrderIdForTab] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -505,6 +507,8 @@ const App = () => {
           onUpdateOrder={handleUpdateOrder}
           onDeleteOrder={handleDeleteOrder}
           currentUser={currentUser}
+          initialOrderId={selectedOrderIdForTab || undefined}
+          onClearInitialOrder={() => setSelectedOrderIdForTab(null)}
         />;
       case 'pcp':
         return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} onSelectCustomer={handleSelectCustomer} />;
@@ -530,6 +534,21 @@ const App = () => {
         return <TeamRegistration users={systemUsers} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />;
       case 'installers':
         return <Installers installers={installers} appointments={appointments} onAdd={handleAddInstaller} onUpdate={handleUpdateInstaller} onDelete={handleDeleteInstaller} />;
+      case 'nfe-management':
+        return (
+          <NFeManagement
+            orders={orders}
+            customers={customers}
+            products={products}
+            technicalSheets={technicalSheets}
+            currentUser={currentUser}
+            onUpdateOrder={handleUpdateOrder}
+            onNavigateToOrder={(orderId) => {
+              setSelectedOrderIdForTab(orderId);
+              setActiveTab('orders');
+            }}
+          />
+        );
       default:
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;
     }

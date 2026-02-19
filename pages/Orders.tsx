@@ -2,6 +2,9 @@
 import * as React from 'react';
 import { useState, useRef } from 'react';
 import { Order, Customer, TechnicalSheet, Product, OrderStatus, Seller, Installment, ProductionStage, MeasurementItem, SystemUser, UserRole } from '../types';
+import { nfEmailService } from '../services/nfEmailService';
+import { SEFAZTxtGenerator } from '../services/sefazTxtGenerator';
+import { dataService } from '../services/dataService';
 import {
   Briefcase,
   Search,
@@ -15,7 +18,7 @@ import {
   Printer,
   Monitor,
   Info,
-  CreditCard,
+  CreditCard as CreditCardIcon,
   FileText,
   Edit3,
   Trash2,
@@ -27,7 +30,14 @@ import {
   Filter,
   UserCheck,
   MapPin as PinIcon,
-  CreditCard as DocIcon
+  CreditCard as DocIcon,
+  Download,
+  FileDown,
+  ExternalLink,
+  RefreshCw,
+  FileEdit,
+  Ban,
+  SendHorizontal
 } from 'lucide-react';
 
 interface OrdersProps {
@@ -39,6 +49,8 @@ interface OrdersProps {
   onUpdateOrder: (order: Order) => void;
   onDeleteOrder: (id: string) => void;
   currentUser: SystemUser;
+  initialOrderId?: string;
+  onClearInitialOrder?: () => void;
 }
 
 
@@ -50,7 +62,9 @@ const Orders = ({
   sellers,
   onUpdateOrder,
   onDeleteOrder,
-  currentUser
+  currentUser,
+  initialOrderId,
+  onClearInitialOrder
 }: OrdersProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -58,6 +72,20 @@ const Orders = ({
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+
+  // Estados para ações avançadas de NFe
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCCeModal, setShowCCeModal] = useState(false);
+  const [modalInput, setModalInput] = useState('');
+
+  // Handle deep-linking from NFe Dashboard
+  React.useEffect(() => {
+    if (initialOrderId) {
+      setSelectedOrderId(initialOrderId);
+      onClearInitialOrder?.();
+    }
+  }, [initialOrderId]);
 
   // New Filters
   const [filterSellerId, setFilterSellerId] = useState(() => {
@@ -318,6 +346,192 @@ const Orders = ({
     printWindow.document.close();
   };
 
+  const handleExportNFe = async () => {
+    if (!selectedOrder || !selectedCustomer) return;
+
+    if (selectedOrder.nfeStatus === 'AUTHORIZED') {
+      alert("Este pedido já possui uma NF-e Autorizada.");
+      return;
+    }
+
+    // Verificação de duplicidade conforme solicitado
+    if (selectedOrder.nfeNumber || selectedOrder.nfeKey) {
+      if (!confirm(`Este pedido já possui dados de exportação (Nº ${selectedOrder.nfeNumber}). Deseja transmitir novamente para o portal?`)) {
+        return;
+      }
+    }
+
+    try {
+      // 1. Obter Configurações de Numeração
+      const settings = await dataService.getNFeSettings();
+      const nNumber = settings.nextNumber;
+      const nSeries = settings.currentSeries;
+
+      const items = orderItems;
+      const customPrices: Record<string, number> = {};
+      items.forEach(item => {
+        customPrices[item.id] = calculateItemPrice(item);
+      });
+
+      // 2. Enviar para API com número sequencial
+      const response = await nfEmailService.sendOrderMethods(
+        selectedOrder,
+        selectedCustomer,
+        items,
+        products,
+        customPrices,
+        nNumber,
+        nSeries
+      );
+
+      const result = nfEmailService.parseNFeStatus(response);
+
+      // 4. Atualizar Pedido com os dados da nota
+      const updatedOrder = {
+        ...selectedOrder,
+        nfeNumber: nNumber,
+        nfeSeries: nSeries,
+        nfeKey: result?.chNFe || (response.match(/[0-9]{44}/)?.[0] || selectedOrder.nfeKey),
+        nfeStatus: result?.status || 'PENDING',
+        nfeMessage: result?.xMotivo || 'Enviada ao Portal'
+      } as Order;
+
+      await dataService.saveOrder(updatedOrder);
+      onUpdateOrder(updatedOrder);
+
+      // 5. Incrementar Numeração
+      await dataService.saveNFeSettings({
+        ...settings,
+        nextNumber: nNumber + 1
+      });
+
+      alert(`NF-e nº ${nNumber} (Série ${nSeries}) enviada com sucesso! ${updatedOrder.nfeKey ? '\nChave: ' + updatedOrder.nfeKey : ''}`);
+    } catch (error: any) {
+      alert("Erro ao enviar NF-e: " + error.message);
+    }
+  };
+
+  const handleSyncNFe = async () => {
+    if (!selectedOrder) return;
+
+    let currentKey = selectedOrder.nfeKey;
+
+    // Se não houver chave, tentamos recuperar do portal pelo número da nota
+    if (!currentKey && selectedOrder.nfeNumber) {
+      try {
+        const xmlList = await nfEmailService.listNFe(1, 10, '', selectedOrder.nfeNumber.toString());
+        const notes = nfEmailService.parseNFeList(xmlList);
+        const foundNote = notes.find((n: any) => {
+          const portalNum = parseInt(n.number || '0');
+          const localNum = parseInt(selectedOrder.nfeNumber?.toString() || '0');
+          const portalSeries = n.series ? parseInt(n.series) : null;
+          const localSeries = selectedOrder.nfeSeries || 1;
+          return portalNum === localNum && (portalSeries === null || portalSeries === localSeries) && portalNum > 0;
+        });
+
+        if (foundNote && foundNote.key) {
+          currentKey = foundNote.key;
+        }
+      } catch (e) {
+        console.error("Erro ao recuperar chave no Orders:", e);
+      }
+    }
+
+    if (!currentKey) {
+      alert("Não foi possível encontrar a chave de acesso. Verifique se a nota foi enviada corretamente.");
+      return;
+    }
+
+    try {
+      const xmlResponse = await nfEmailService.getNFeStatus(currentKey);
+      const result = nfEmailService.parseNFeStatus(xmlResponse);
+
+      if (result) {
+        const updatedOrder = {
+          ...selectedOrder,
+          nfeStatus: result.status,
+          nfeKey: result.chNFe || currentKey,
+          nfeMessage: result.xMotivo
+        } as Order;
+
+        await dataService.saveOrder(updatedOrder);
+        onUpdateOrder(updatedOrder);
+
+        if (result.status === 'AUTHORIZED') {
+          alert("Nota Autorizada! Agora você pode visualizar o DANFE e imprimir o contrato atualizado.");
+        } else {
+          alert("Status atualizado: " + result.status + "\n" + (result.xMotivo || ''));
+        }
+      } else {
+        alert("Não foi possível processar a resposta da SEFAZ.");
+      }
+    } catch (e: any) {
+      alert("Erro ao sincronizar: " + e.message);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!selectedOrder || !modalInput) return;
+    if (modalInput.length < 15) {
+      alert("A justificativa deve ter pelo menos 15 caracteres.");
+      return;
+    }
+
+    setIsProcessingAction(true);
+    try {
+      const xmlResponse = await nfEmailService.cancelNFe(selectedOrder.nfeKey!, modalInput);
+      const result = nfEmailService.parseNFeStatus(xmlResponse);
+
+      if (result && result.status === 'CANCELED') {
+        const updatedOrder = {
+          ...selectedOrder,
+          nfeStatus: 'CANCELED',
+          nfeMessage: result.xMotivo || 'Nota Cancelada'
+        } as Order;
+        onUpdateOrder(updatedOrder);
+        setShowCancelModal(false);
+        alert("Nota cancelada com sucesso!");
+      } else {
+        alert("Falha ao cancelar: " + (result?.xMotivo || "Resposta desconhecida"));
+      }
+    } catch (error: any) {
+      alert("Erro ao processar cancelamento: " + error.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleSendCorrection = async () => {
+    if (!selectedOrder || !modalInput) return;
+    if (modalInput.length < 15) {
+      alert("A correção deve ter pelo menos 15 caracteres.");
+      return;
+    }
+
+    setIsProcessingAction(true);
+    try {
+      const xmlResponse = await nfEmailService.sendCCe(selectedOrder.nfeKey!, modalInput);
+      const result = nfEmailService.parseNFeStatus(xmlResponse);
+
+      // No caso de CC-e, o status da nota continua AUTHORIZED, mas registramos a mensagem
+      if (result && (result.cStat === '135' || result.status === 'AUTHORIZED')) {
+        const updatedOrder = {
+          ...selectedOrder,
+          nfeMessage: `CC-e enviada: ${modalInput}`
+        } as Order;
+        onUpdateOrder(updatedOrder);
+        setShowCCeModal(false);
+        alert("Carta de Correção enviada com sucesso!");
+      } else {
+        alert("Falha ao enviar correção: " + (result?.xMotivo || "Resposta desconhecida"));
+      }
+    } catch (error: any) {
+      alert("Erro ao processar correção: " + error.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
   if (selectedOrderId && selectedOrder && selectedCustomer) {
     return (
       <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 mb-20">
@@ -335,6 +549,101 @@ const Orders = ({
             <button onClick={() => onDeleteOrder(selectedOrder.id)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-sm font-bold hover:bg-rose-100 transition-all shadow-sm">
               <Trash2 size={18} /> Excluir
             </button>
+            <button onClick={async () => {
+              if (!selectedOrder || !selectedCustomer) return;
+              try {
+                const issuer = {
+                  cnpj: '12655737000121',
+                  name: "RTC TOLDOS E PERSIANAS",
+                  address: {
+                    street: "RUA DO CLIENTE",
+                    number: "100",
+                    neighborhood: "CENTRO",
+                    city: "RIO DE JANEIRO",
+                    state: "RJ",
+                    cep: "20000000",
+                    ibge: "3304557"
+                  }
+                };
+                const items = orderItems;
+                const customPrices: Record<string, number> = {};
+                items.forEach(item => {
+                  customPrices[item.id] = calculateItemPrice(item);
+                });
+
+                const txtContent = SEFAZTxtGenerator.generate(selectedOrder, selectedCustomer, items, products, issuer, customPrices);
+                const blob = new Blob([txtContent], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `NFe_${selectedOrder.id}.txt`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+              } catch (e: any) {
+                alert("Erro ao gerar TXT: " + e.message);
+              }
+            }} className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all shadow-sm">
+              <Download size={18} /> Baixar TXT
+            </button>
+            <button
+              onClick={handleExportNFe}
+              disabled={selectedOrder.nfeStatus === 'AUTHORIZED'}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all ${selectedOrder.nfeStatus === 'AUTHORIZED'
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100'
+                }`}
+            >
+              <FileDown size={18} />
+              {selectedOrder.nfeStatus === 'AUTHORIZED' ? 'NFe Autorizada' : 'Exportar NF-e'}
+            </button>
+
+            {selectedOrder.nfeKey && (
+              <a
+                href={nfEmailService.getDANFEUrl(selectedOrder.nfeKey)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all shadow-sm"
+              >
+                <ExternalLink size={18} /> Ver DANFE
+              </a>
+            )}
+
+            {selectedOrder.nfeNumber && (
+              <div className="flex items-center gap-2">
+                {selectedOrder.nfeStatus === 'AUTHORIZED' && selectedOrder.nfeKey && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setModalInput('');
+                        setShowCCeModal(true);
+                      }}
+                      className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all"
+                      title="Carta de Correção (CC-e)"
+                    >
+                      <FileEdit size={18} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setModalInput('');
+                        setShowCancelModal(true);
+                      }}
+                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                      title="Cancelar NF-e"
+                    >
+                      <Ban size={18} />
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={handleSyncNFe}
+                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                  title="Sincronizar Status"
+                >
+                  <RefreshCw size={18} />
+                </button>
+              </div>
+            )}
+
             <button onClick={() => handleGeneratePrint(true)} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
               <Printer size={18} /> Imprimir / PDF
             </button>
@@ -459,7 +768,7 @@ const Orders = ({
                     <section className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                       <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60">
                         <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <CreditCard size={12} className="text-blue-500" /> Condições de Pagamento
+                          <CreditCardIcon size={12} className="text-blue-500" /> Condições de Pagamento
                         </h4>
                       </div>
 
@@ -499,7 +808,7 @@ const Orders = ({
                         {selectedOrder.paymentConditions && (
                           <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
                             <h4 className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1">
-                              <CreditCard size={10} /> Observações de Pagamento
+                              <CreditCardIcon size={10} /> Observações de Pagamento
                             </h4>
                             <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{selectedOrder.paymentConditions}</p>
                           </div>
@@ -998,6 +1307,111 @@ const Orders = ({
                 className="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors shadow-sm"
               >
                 Fechar Histórico
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Cancelamento de NFe */}
+      {showCancelModal && selectedOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-600 text-white rounded-xl shadow-lg">
+                  <Ban size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900">Cancelar NF-e</h3>
+                  <p className="text-xs text-slate-500">Nota Nº {selectedOrder.nfeNumber}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCancelModal(false)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 text-amber-700">
+                <Info size={20} className="shrink-0" />
+                <p className="text-xs font-medium">O cancelamento é irreversível. Certifique-se de que a justificativa seja clara e objetiva.</p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Justificativa (mín. 15 caracteres)</label>
+                <textarea
+                  value={modalInput}
+                  onChange={(e) => setModalInput(e.target.value)}
+                  className="w-full h-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all resize-none"
+                  placeholder="Ex: Erro nos valores dos produtos ou desistência do cliente conforme solicitação..."
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="flex-1 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={isProcessingAction || modalInput.length < 15}
+                className="flex-[2] py-3 bg-rose-600 text-white rounded-2xl text-sm font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isProcessingAction ? <RefreshCw size={18} className="animate-spin" /> : <Ban size={18} />}
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Carta de Correção (CC-e) */}
+      {showCCeModal && selectedOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-lg">
+                  <FileEdit size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900">Carta de Correção</h3>
+                  <p className="text-xs text-slate-500">Nota Nº {selectedOrder.nfeNumber}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCCeModal(false)} className="p-2 text-slate-400 hover:text-amber-500 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex gap-3 text-blue-700">
+                <Info size={20} className="shrink-0" />
+                <p className="text-xs font-medium">Use a CC-e para corrigir erros pontuais que não alterem valores, datas ou dados do destinatário.</p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Correção (mín. 15 caracteres)</label>
+                <textarea
+                  value={modalInput}
+                  onChange={(e) => setModalInput(e.target.value)}
+                  className="w-full h-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all resize-none"
+                  placeholder="Descreva aqui o que deve ser corrigido na nota..."
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setShowCCeModal(false)}
+                className="flex-1 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={handleSendCorrection}
+                disabled={isProcessingAction || modalInput.length < 15}
+                className="flex-[2] py-3 bg-amber-500 text-white rounded-2xl text-sm font-bold hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isProcessingAction ? <RefreshCw size={18} className="animate-spin" /> : <SendHorizontal size={18} />}
+                Enviar Correção
               </button>
             </div>
           </div>

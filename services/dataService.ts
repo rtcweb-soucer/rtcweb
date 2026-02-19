@@ -148,6 +148,7 @@ export const dataService = {
                 parentItemId: i.parent_item_id,
                 productType: i.product_type,
                 command: i.command, // Read command
+                quantity: i.quantity || 1
             })),
             createdAt: new Date(sheet.created_at)
         })) as TechnicalSheet[];
@@ -176,7 +177,8 @@ export const dataService = {
                 product_type: item.productType,
                 color: item.color,
                 command: item.command, // Save command
-                notes: item.notes
+                notes: item.notes,
+                quantity: item.quantity || 1 // Default to 1 if missing
             }));
             const { error: itemsError } = await supabase.from('measurement_items').upsert(itemsToSave);
             if (itemsError) throw itemsError;
@@ -295,6 +297,10 @@ export const dataService = {
                 deliveryDeadline: o.delivery_deadline,
                 contractObservations: o.contract_observations,
                 itemsSnapshot: o.items_snapshot,
+                nfeNumber: o.nfe_number,
+                nfeSeries: o.nfe_series,
+                nfeKey: o.nfe_key,
+                nfeStatus: o.nfe_status,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -319,6 +325,10 @@ export const dataService = {
             delivery_deadline: order.deliveryDeadline,
             contract_observations: order.contractObservations,
             items_snapshot: order.itemsSnapshot,
+            nfe_number: order.nfeNumber,
+            nfe_series: order.nfeSeries,
+            nfe_key: order.nfeKey,
+            nfe_status: order.nfeStatus,
         };
         console.log('💾 Saving order payload:', payload);
         let { data, error } = await supabase.from('orders').upsert(payload).select().single();
@@ -352,6 +362,10 @@ export const dataService = {
             itemPrices: data.item_prices || {},
             contractObservations: data.contract_observations,
             itemsSnapshot: data.items_snapshot,
+            nfeNumber: data.nfe_number,
+            nfeSeries: data.nfe_series,
+            nfeKey: data.nfe_key,
+            nfeStatus: data.nfe_status,
             createdAt: new Date(data.created_at)
         } as unknown as Order;
     },
@@ -886,5 +900,41 @@ export const dataService = {
     async deleteBlockedSlot(id: string) {
         const { error } = await supabase.from('seller_blocked_slots').delete().eq('id', id);
         if (error) throw error;
+    },
+
+    // NFe Settings
+    async getNFeSettings() {
+        const { data, error } = await supabase.from('nfe_settings').select('*').limit(1).maybeSingle();
+        if (error) throw error;
+        if (!data) return { nextNumber: 1, currentSeries: 1, environment: 2, cnpj: '', apiKey: '' };
+        return {
+            id: data.id,
+            nextNumber: data.next_number,
+            currentSeries: data.current_series,
+            environment: data.environment,
+            cnpj: data.cnpj || '',
+            apiKey: data.api_key || ''
+        };
+    },
+    async saveNFeSettings(settings: any) {
+        const payload = {
+            id: settings.id,
+            next_number: settings.nextNumber,
+            current_series: settings.currentSeries,
+            environment: settings.environment,
+            cnpj: settings.cnpj,
+            api_key: settings.apiKey,
+            updated_at: new Date().toISOString()
+        };
+        const { data, error } = await supabase.from('nfe_settings').upsert(payload).select().single();
+        if (error) throw error;
+        return {
+            id: data.id,
+            nextNumber: data.next_number,
+            currentSeries: data.current_series,
+            environment: data.environment,
+            cnpj: data.cnpj,
+            apiKey: data.api_key
+        };
     }
 };

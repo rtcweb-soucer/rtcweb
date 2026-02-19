@@ -54,7 +54,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, initialData, mode = 'add' }: C
                             street: data.logradouro || prev.address?.street || '',
                             neighborhood: data.bairro || prev.address?.neighborhood || '',
                             city: data.localidade || prev.address?.city || '',
-                            state: data.uf || prev.address?.state || ''
+                            state: data.uf || prev.address?.state || '',
+                            ibge: data.ibge || prev.address?.ibge || ''
                         }
                     }));
                 }
@@ -94,7 +95,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, initialData, mode = 'add' }: C
                     complement: data.complemento || '',
                     neighborhood: data.bairro || '',
                     city: data.municipio || '',
-                    state: data.uf || ''
+                    state: data.uf || '',
+                    ibge: data.ibge || ''
                 }
             }));
         } catch (error) {

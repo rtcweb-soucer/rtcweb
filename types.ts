@@ -88,6 +88,7 @@ export interface Customer {
     neighborhood: string;
     city: string;
     state: string;
+    ibge?: string;
   };
   contactName?: string;
   contactPhone?: string;
@@ -171,6 +172,7 @@ export interface MeasurementItem {
   command?: string; // Campo Comando
   notes?: string;
   productionSheet?: ProductionInstallationSheet;
+  quantity: number; // Quantidade de itens
 }
 
 export interface TechnicalSheet {
@@ -245,6 +247,12 @@ export interface Order {
   deliveryDeadline?: string; // Data limite de entrega calculada
   contractObservations?: string; // Observações do contrato
   itemsSnapshot?: any[]; // Snapshot dos itens no momento da criação/aprovação
+  nfeNumber?: number; // Número da NF-e
+  nfeSeries?: number; // Série da NF-e
+  nfeKey?: string; // Chave de acesso da NF-e
+  nfeId?: string; // New: ID interno do NFEmail para links diretos
+  nfeStatus?: 'AUTHORIZED' | 'CANCELED' | 'ERROR' | 'PENDING'; // Status da nota
+  nfeMessage?: string; // New: Mensagem de retorno da SEFAZ
   createdAt: Date;
 }
 
