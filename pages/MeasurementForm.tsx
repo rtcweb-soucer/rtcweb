@@ -943,29 +943,14 @@ const MeasurementForm = ({
                           )}
                         </button>
 
-                        <button
-                          onClick={() => {
-                            setShowGoogleForm(!showGoogleForm);
-                            setShowUploadIframe(false);
-                          }}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border ${showGoogleForm ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}
-                        >
-                          {showGoogleForm ? (
-                            <>
-                              <X size={12} /> Fechar
-                            </>
-                          ) : (
-                            <>
-                              <FileText size={12} /> Google Forms (Manual)
-                            </>
-                          )}
-                        </button>
+
                       </div>
 
                       {/* Google Apps Script Iframe Embedding */}
                       {showUploadIframe && (
                         <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                          <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg bg-slate-100">
+                          {/* Altura fixa de 500px para evitar cortes no mobile */}
+                          <div className="relative w-full h-[500px] rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg bg-slate-100">
                             <div className="absolute top-2 right-2 z-10">
                               <span className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
                                 Modo Upload Automático
@@ -980,28 +965,15 @@ const MeasurementForm = ({
                             />
                           </div>
                           <p className="text-[10px] text-center text-slate-500 mt-2">
-                            * Se a câmera não abrir ou der erro, tente usar o botão do Google Forms ao lado.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Google Forms Iframe Embedding */}
-                      {showGoogleForm && (
-                        <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                          <div className="relative w-full aspect-[3/4] md:aspect-video rounded-xl overflow-hidden border-2 border-emerald-500 shadow-lg bg-slate-100">
-                            <div className="absolute top-2 right-2 z-10">
-                              <span className="bg-emerald-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full backdrop-blur-sm">
-                                Modo Forms Manual
-                              </span>
-                            </div>
-                            <iframe
-                              src="https://docs.google.com/forms/d/e/1FAIpQLSdLZ6DFZEOyybjs-hWGLaMcjoNFM_3IGVCNiJJOB82n9AkOrg/viewform?embedded=true"
-                              className="w-full h-full border-none"
-                              title="Google Forms Backup"
-                            />
-                          </div>
-                          <p className="text-[10px] text-center text-slate-500 mt-2">
-                            * Após enviar os arquivos, copie o link gerado e cole no campo abaixo manualmente.
+                            * Se a câmera abrir direto e não deixar escolher arquivos,
+                            <a
+                              href={`https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec?clientName=${encodeURIComponent(customers.find(c => c.id === selectedCustomerId)?.name || '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 font-bold underline ml-1"
+                            >
+                              clique aqui para abrir em Nova Aba
+                            </a>
                           </p>
                         </div>
                       )}
