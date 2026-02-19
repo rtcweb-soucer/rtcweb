@@ -619,26 +619,36 @@ const MeasurementForm = ({
                               <p className="text-[11px] font-bold text-slate-700">{item.environment}</p>
                             </div>
 
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-2">
                               <p className="text-[8px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter">Produto</p>
-                              <p className="text-[11px] font-black text-blue-600">{product?.nome || 'Produto não encontrado'}</p>
+                              <p className="text-[11px] font-black text-blue-600 truncate" title={product?.nome}>{product?.nome || 'Produto não encontrado'}</p>
                             </div>
 
-                            <div className="md:col-span-2">
+                            <div className="md:col-span-1">
                               <p className="text-[8px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter">Cor</p>
-                              <p className="text-[11px] font-bold text-slate-500">{item.color || '-'}</p>
+                              <p className="text-[11px] font-bold text-slate-500 truncate" title={item.color}>{item.color || '-'}</p>
                             </div>
 
                             <div className="md:col-span-2">
                               <p className="text-[8px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter text-center">Medidas</p>
-                              <div className="flex items-center justify-center gap-2">
-                                <span className="text-[11px] font-mono font-black text-slate-900 bg-slate-100 px-2 py-1 rounded-md">{item.width.toFixed(3)}m</span>
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="text-[11px] font-mono font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded-md">{item.width.toFixed(3)}m</span>
                                 <span className="text-slate-300 text-[10px] font-black">×</span>
-                                <span className="text-[11px] font-mono font-black text-slate-900 bg-slate-100 px-2 py-1 rounded-md">{item.height.toFixed(3)}m</span>
+                                <span className="text-[11px] font-mono font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded-md">{item.height.toFixed(3)}m</span>
                               </div>
                             </div>
 
-                            <div className="md:col-span-2 flex justify-end">
+                            <div className="md:col-span-1">
+                              <p className="text-[8px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter">Comando</p>
+                              <p className="text-[10px] font-bold text-slate-700 truncate" title={item.command}>{item.command || '-'}</p>
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <p className="text-[8px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter">OBS</p>
+                              <p className="text-[10px] text-slate-500 leading-tight line-clamp-2" title={item.notes}>{item.notes || '-'}</p>
+                            </div>
+
+                            <div className="md:col-span-1 flex justify-end">
                               {isGrouped && (
                                 <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded text-[9px] font-black uppercase">Agrupado</span>
                               )}
@@ -677,6 +687,7 @@ const MeasurementForm = ({
             ) : (
               items.map((item, index) => {
                 const product = products.find(p => p.id === item.productId);
+                const productType = product?.tipo || item.productType;
                 const isAccessory = product?.acessorio;
                 const isGrouped = !!item.parentItemId;
 
@@ -722,7 +733,7 @@ const MeasurementForm = ({
                       />
                     </div>
 
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-2">
                       <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter">Produto *</label>
                       <SearchableProductSelect
                         value={item.productId}
@@ -742,10 +753,10 @@ const MeasurementForm = ({
                     </div>
 
                     <div className="md:col-span-1">
-                      <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter text-center">Largura</label>
+                      <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter text-center">Larg.</label>
                       <input
                         type="number" step="0.001"
-                        placeholder="0,000"
+                        placeholder="0.00"
                         value={item.width || ''}
                         onChange={(e) => updateItem(item.id, 'width', parseFloat(e.target.value) || 0)}
                         className="w-full px-1 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:ring-1 focus:ring-blue-500 outline-none text-right font-mono font-bold"
@@ -753,39 +764,69 @@ const MeasurementForm = ({
                     </div>
 
                     <div className="md:col-span-1">
-                      <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter text-center">Altura</label>
+                      <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter text-center">Alt.</label>
                       <input
                         type="number" step="0.001"
-                        placeholder="0,000"
+                        placeholder="0.00"
                         value={item.height || ''}
                         onChange={(e) => updateItem(item.id, 'height', parseFloat(e.target.value) || 0)}
                         className="w-full px-1 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:ring-1 focus:ring-blue-500 outline-none text-right font-mono font-bold"
                       />
                     </div>
 
-                    <div className="md:col-span-2">
-                      {isAccessory ? (
-                        <div className="animate-in fade-in duration-200">
-                          <label className="block text-[8px] uppercase font-black text-amber-500 mb-1 tracking-tighter">Agrupar ao #</label>
+                    {/* Campo Comando - Condicional */}
+                    {(productType === 'Cortina' || productType === 'Toldo') && (
+                      <div className="md:col-span-1">
+                        <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter">Cmd</label>
+                        <select
+                          value={item.command || ''}
+                          onChange={(e) => updateItem(item.id, 'command', e.target.value)}
+                          className="w-full px-1 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none font-medium"
+                        >
+                          <option value="">...</option>
+                          {productType === 'Cortina' ? (
+                            <>
+                              <option value="Manual">Man</option>
+                              <option value="Motorizado">Mot</option>
+                              <option value="Easy-Rise">Easy</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="Manual">Man</option>
+                              <option value="Motorizado">Mot</option>
+                              <option value="Automatizado">Auto</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Campo OBS - Expande se Sem Comando */}
+                    <div className={(productType === 'Cortina' || productType === 'Toldo') ? "md:col-span-2" : "md:col-span-3"}>
+                      <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter">OBS</label>
+                      <input
+                        placeholder="Obs..."
+                        value={item.notes || ''}
+                        onChange={(e) => updateItem(item.id, 'notes', e.target.value)}
+                        className="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none font-medium"
+                      />
+                      {isAccessory && (
+                        <div className="mt-1">
                           <select
                             value={item.parentItemId || ''}
                             onChange={(e) => updateItem(item.id, 'parentItemId', e.target.value)}
-                            className="w-full px-1.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-bold text-amber-700 focus:ring-1 focus:ring-amber-500 outline-none"
+                            className="w-full px-1 py-0.5 bg-amber-50 border border-amber-200 rounded text-[9px] font-bold text-amber-700 focus:ring-1 focus:ring-amber-500 outline-none"
                           >
-                            <option value="">Não agrupar</option>
+                            <option value="">Agrupar...</option>
                             {items.map((it, idx) => {
                               if (it.id === item.id) return null;
                               return (
                                 <option key={it.id} value={it.id}>
-                                  #{idx + 1} ({it.environment || 'Item'})
+                                  #{idx + 1}
                                 </option>
                               );
                             })}
                           </select>
-                        </div>
-                      ) : (
-                        <div className="h-8 border-l border-slate-100 ml-4 opacity-5 flex items-center justify-center">
-                          <LinkIcon size={14} className="text-slate-400" />
                         </div>
                       )}
                     </div>

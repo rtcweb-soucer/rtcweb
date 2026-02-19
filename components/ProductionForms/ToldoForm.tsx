@@ -30,24 +30,7 @@ export const ToldoForm: React.FC<ToldoFormProps> = ({ data, onChange }) => {
                     />
                 </div>
 
-                {/* Comando */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        COMANDO
-                    </label>
-                    <select
-                        value={data.comando || ''}
-                        onChange={(e) => updateField('comando', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                        <option value="">Selecione...</option>
-                        <option value="Direita">Direita</option>
-                        <option value="Esquerda">Esquerda</option>
-                        <option value="Mola">Mola</option>
-                        <option value="Motorizado D">Motorizado D</option>
-                        <option value="Motorizado E">Motorizado E</option>
-                    </select>
-                </div>
+
 
                 {/* Bambinela */}
                 <div>

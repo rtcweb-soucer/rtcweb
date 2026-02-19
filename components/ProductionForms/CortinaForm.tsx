@@ -15,26 +15,7 @@ export const CortinaForm: React.FC<CortinaFormProps> = ({ data, onChange }) => {
         <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-800">📋 Especificações da Cortina</h3>
 
-            {/* Comando */}
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                    COMANDO
-                </label>
-                <select
-                    value={data.comando || ''}
-                    onChange={(e) => updateField('comando', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                    <option value="">Selecione...</option>
-                    <option value="Central">Central</option>
-                    <option value="Direita">Direita</option>
-                    <option value="Esquerda">Esquerda</option>
-                    <option value="Invertido">Invertido</option>
-                    <option value="Junção">Junção</option>
-                    <option value="Motorizado D">Motorizado D</option>
-                    <option value="Motorizado E">Motorizado E</option>
-                </select>
-            </div>
+
 
             {/* Vão */}
             <div>

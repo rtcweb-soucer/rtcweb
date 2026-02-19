@@ -103,6 +103,12 @@ const Orders = ({
   const originalSheet = selectedOrder ? technicalSheets.find((s: TechnicalSheet) => s.id === selectedOrder.technicalSheetId) : null;
 
   const orderItems = (() => {
+    // PREFERÊNCIA 1: Snapshot (itens congelados no momento da aprovação/criação)
+    if (selectedOrder?.itemsSnapshot && selectedOrder.itemsSnapshot.length > 0) {
+      return selectedOrder.itemsSnapshot;
+    }
+
+    // PREFERÊNCIA 2: Live Data
     if (!originalSheet) return [];
     if (!selectedOrder?.itemIds) return originalSheet.items;
     return originalSheet.items.filter((item: MeasurementItem) => selectedOrder.itemIds?.includes(item.id));

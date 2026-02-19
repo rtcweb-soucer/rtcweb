@@ -147,6 +147,7 @@ export const dataService = {
                 productId: i.product_id,
                 parentItemId: i.parent_item_id,
                 productType: i.product_type,
+                command: i.command, // Read command
             })),
             createdAt: new Date(sheet.created_at)
         })) as TechnicalSheet[];
@@ -174,6 +175,7 @@ export const dataService = {
                 environment: item.environment,
                 product_type: item.productType,
                 color: item.color,
+                command: item.command, // Save command
                 notes: item.notes
             }));
             const { error: itemsError } = await supabase.from('measurement_items').upsert(itemsToSave);
@@ -292,6 +294,7 @@ export const dataService = {
                 deliveryDays: o.delivery_days,
                 deliveryDeadline: o.delivery_deadline,
                 contractObservations: o.contract_observations,
+                itemsSnapshot: o.items_snapshot,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -315,6 +318,7 @@ export const dataService = {
             delivery_days: order.deliveryDays,
             delivery_deadline: order.deliveryDeadline,
             contract_observations: order.contractObservations,
+            items_snapshot: order.itemsSnapshot,
         };
         console.log('💾 Saving order payload:', payload);
         let { data, error } = await supabase.from('orders').upsert(payload).select().single();
@@ -347,6 +351,7 @@ export const dataService = {
             productionHistory: data.production_history,
             itemPrices: data.item_prices || {},
             contractObservations: data.contract_observations,
+            itemsSnapshot: data.items_snapshot,
             createdAt: new Date(data.created_at)
         } as unknown as Order;
     },
@@ -806,6 +811,8 @@ export const dataService = {
                 height: item.height,
                 quantity: item.quantity,
                 color: item.color,
+                command: item.command, // New field
+                notes: item.notes, // New field: Observações
                 parentItemId: item.parent_item_id,
                 productionSheet: prodSheet ? {
                     id: prodSheet.id,

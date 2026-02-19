@@ -110,6 +110,13 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
 
   const getOrderItems = () => {
     if (!selectedOrder) return [];
+
+    // PREFERÊNCIA 1: Snapshot (itens congelados no momento da aprovação/criação)
+    if (selectedOrder.itemsSnapshot && selectedOrder.itemsSnapshot.length > 0) {
+      return selectedOrder.itemsSnapshot;
+    }
+
+    // PREFERÊNCIA 2: Itens vinculados à Ficha Técnica (Live Data)
     if (selectedOrder.technicalSheetId) {
       const sheet = technicalSheets.find(s => s.id === selectedOrder.technicalSheetId);
       if (sheet) {
@@ -118,6 +125,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       }
     }
 
+    // PREFERÊNCIA 3: Itens de rascunho (Draft)
     if (selectedOrder.itemPrices?.['__DRAFT_ITEMS__']) {
       try {
         return typeof selectedOrder.itemPrices['__DRAFT_ITEMS__'] === 'string'
@@ -346,6 +354,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         technicalSheetId: sheetId,
         sellerId: quoteFormData.sellerId,
         itemIds: itemsPayload.map((it: any) => it.id),
+        itemsSnapshot: itemsPayload, // Salva o snapshot dos itens!
         status: OrderStatus.QUOTE_SENT,
         totalValue: itemsPayload.reduce((acc: number, it: any) => acc + (it.price || 0), 0),
         itemPrices: {
@@ -852,7 +861,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
               <section>
                 <h2 className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5"><Layers size={10} className="text-slate-400" /> Itens e Especificações</h2>
                 <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full text-left border-collapse">
+                  {/* Desktop View (Table) */}
+                  <table className="w-full text-left border-collapse hidden md:table">
                     <thead className="bg-slate-900 text-white">
                       <tr>
                         <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '8%' }}>Ambiente</th>
@@ -889,6 +899,52 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                       </tr>
                     </tfoot>
                   </table>
+
+                  {/* Mobile View (Cards) */}
+                  <div className="md:hidden space-y-4 p-4 bg-slate-50">
+                    {orderItems.map((item: MeasurementItem) => (
+                      <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-2 bg-slate-100 rounded-bl-xl border-l border-b border-slate-200">
+                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-tight">{item.environment}</p>
+                        </div>
+
+                        <div className="pr-16 mb-3">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Produto</p>
+                          <p className="text-sm font-bold text-slate-900 leading-tight">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Cor</p>
+                            <p className="text-xs font-medium text-slate-700">{item.color || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Medidas</p>
+                            <p className="text-xs font-mono font-bold text-slate-700">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-2">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Subtotal</p>
+                          <div className="text-right">
+                            <div className="no-print">
+                              <CurrencyInput
+                                value={calculateItemPrice(item)}
+                                onChange={(val) => updateItemPrice(item.id, val)}
+                                className="justify-end border-b border-transparent hover:border-slate-200 transition-all focus-within:border-blue-400"
+                              />
+                            </div>
+                            <span className="hidden print:block font-black text-sm text-slate-900 whitespace-nowrap">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between shadow-lg">
+                      <span className="text-[10px] font-black uppercase tracking-widest">Total da Proposta</span>
+                      <span className="text-lg font-black whitespace-nowrap">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
                 </div>
               </section>
 

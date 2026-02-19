@@ -98,7 +98,6 @@ export interface Customer {
 export interface ProductionSheetCortina {
   id: string;
   productionSheetId: string;
-  comando?: 'Central' | 'Direita' | 'Esquerda' | 'Invertido' | 'Junção' | 'Motorizado D' | 'Motorizado E';
   vao?: 'Altura' | 'Largura' | 'Largura x Altura' | 'Fora de Vão';
   varaoCor?: 'Aço' | 'Branco' | 'Cromado' | 'Escovado' | 'Madeira' | 'Ouro Velho';
   instalacao?: 'Parede Alumínio' | 'Parede Concreto' | 'Parede Gesso' | 'Parede Madeira' | 'Teto Alumínio' | 'Teto Concreto' | 'Teto Gesso' | 'Teto Madeira';
@@ -112,7 +111,6 @@ export interface ProductionSheetToldo {
   id: string;
   productionSheetId: string;
   modelo?: string;
-  comando?: 'Direita' | 'Esquerda' | 'Mola' | 'Motorizado D' | 'Motorizado E';
   bambinela?: 'Colonial' | 'Meia Lua' | 'Reta';
   vies?: 'Mesma Cor' | 'Branca' | 'Marrom';
   entreVao?: 'Largura' | 'Altura' | 'Larg x Alt' | 'Fora de Vão';
@@ -170,6 +168,7 @@ export interface MeasurementItem {
   width: number;
   height: number;
   productType: string;
+  command?: string; // Campo Comando
   notes?: string;
   productionSheet?: ProductionInstallationSheet;
 }
@@ -245,6 +244,7 @@ export interface Order {
   deliveryDays?: number; // Prazo de entrega em dias úteis
   deliveryDeadline?: string; // Data limite de entrega calculada
   contractObservations?: string; // Observações do contrato
+  itemsSnapshot?: any[]; // Snapshot dos itens no momento da criação/aprovação
   createdAt: Date;
 }
 
