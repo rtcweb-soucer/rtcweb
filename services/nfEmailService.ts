@@ -257,10 +257,10 @@ export const nfEmailService = {
 
     async downloadDANFe(key: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const url = `/api/nfemail/DANFe?chave=${key}`;
-        const apiUrl = import.meta.env.DEV ? url : `https://api.nfemail.com.br${url}`;
+        // Usamos a Serverless Function /api/download para evitar CORS e problemas de redirect
+        const proxyUrl = `/api/download?endpoint=/DANFe?chave=${key}`;
 
-        const response = await fetch(apiUrl, {
+        const response = await fetch(proxyUrl, {
             headers: { "Authorization": authHeader }
         });
 
@@ -281,10 +281,10 @@ export const nfEmailService = {
 
     async downloadXML(key: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const url = `/api/nfemail/Xml?chave=${key}`; // Endpoint de XML costuma ser esse ou similar
-        const apiUrl = import.meta.env.DEV ? url : `https://api.nfemail.com.br${url}`;
+        // Usamos a Serverless Function /api/download
+        const proxyUrl = `/api/download?endpoint=/Xml?chave=${key}`;
 
-        const response = await fetch(apiUrl, {
+        const response = await fetch(proxyUrl, {
             headers: { "Authorization": authHeader }
         });
 
