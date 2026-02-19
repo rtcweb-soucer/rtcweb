@@ -340,7 +340,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
               productType: it.productType,
               color: it.color,
               width: it.width,
-              height: it.height
+              height: it.height,
+              quantity: it.quantity || 1,
+              notes: it.notes || ''
             }))
           };
           await onAddTechnicalSheet(updatedSheet);

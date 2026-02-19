@@ -186,7 +186,8 @@ const MeasurementForm = ({
       width: 0,
       height: 0,
       productType: 'Toldo',
-      notes: ''
+      notes: '',
+      quantity: 1
     }]);
     // Novo item é selecionado por padrão
     setSelectedItemIds((prev: Set<string>) => {
