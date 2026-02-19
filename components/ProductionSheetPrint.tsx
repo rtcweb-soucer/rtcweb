@@ -54,7 +54,7 @@ interface ProductionSheetPrintProps {
     products: Product[];
 }
 
-const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => {
+const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionSheetPrintProps, ref: React.Ref<HTMLDivElement>) => {
     const getProductName = (productId: string) => {
         return products.find(p => p.id === productId)?.nome || 'Produto não encontrado';
     };
@@ -312,43 +312,7 @@ const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => 
     };
 
     return (
-        <div className="print-container bg-white p-8 max-w-[210mm] mx-auto">
-            <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-container, .print-container * {
-            visibility: visible;
-          }
-          .print-container {
-            position: fixed;
-            left: 0;
-            top: 0;
-            margin: 0;
-            padding: 15mm;
-            width: 100vw;
-            min-height: 100vh;
-            z-index: 9999;
-            background-color: white !important;
-            overflow: visible;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .page-break {
-            page-break-after: always;
-          }
-          .avoid-break {
-            page-break-inside: avoid;
-          }
-          @page {
-            margin: 0;
-            size: auto;
-          }
-        }
-      `}</style>
-
+        <div ref={ref} className="print-container bg-white p-8 max-w-[210mm] mx-auto">
             {/* Header */}
             <div className="border-b-4 border-blue-600 pb-4 mb-6">
                 <h1 className="text-3xl font-black text-slate-900 mb-1">FICHA DE PRODUÇÃO E INSTALAÇÃO</h1>
@@ -594,6 +558,75 @@ const ProductionSheetPrint = ({ data, products }: ProductionSheetPrintProps) => 
             </div>
         </div>
     );
+});
+
+ProductionSheetPrint.displayName = 'ProductionSheetPrint';
+
+export const printHTML = (htmlContent: string) => {
+    const printWindow = window.open('', '_blank', 'width=1024,height=800');
+    if (!printWindow) {
+        alert("Por favor, habilite pop-ups para visualizar o documento.");
+        return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="pt-br">
+        <head>
+          <meta charset="UTF-8">
+          <title>Ficha de Produção</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+          <style>
+            @media print {
+              body { margin: 0; padding: 0; background: white; }
+              .no-print { display: none !important; }
+              @page { size: A4; margin: 0; }
+              
+              /* Ensure backgrounds are printed */
+              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            }
+            
+            body { 
+                font-family: 'Inter', sans-serif; 
+                background-color: #f1f5f9; 
+                padding: 40px 20px; 
+                display: flex; 
+                justify-content: center; 
+            }
+            
+            /* Wrapper to simulate A4 paper on screen */
+            .print-wrapper { 
+                background: white; 
+                width: 210mm; 
+                min-height: 297mm; 
+                padding: 0; 
+                margin: 0 auto; 
+                box-shadow: 0 0 40px rgba(0,0,0,0.1); 
+                box-sizing: border-box; 
+                position: relative; 
+            }
+            
+            @media print {
+                .print-wrapper {
+                    width: 100%;
+                    box-shadow: none;
+                    margin: 0;
+                }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-wrapper">
+            ${htmlContent}
+          </div>
+          <script>
+            window.onload = () => { setTimeout(() => { window.print(); }, 1000); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
 };
 
 export default ProductionSheetPrint;

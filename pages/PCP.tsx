@@ -48,6 +48,7 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
+  const printRef = React.useRef<HTMLDivElement>(null);
 
   /* REMOVED OLD LOGIC */
   // Internal state for orders with production tracking
@@ -169,7 +170,12 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
   };
 
   const handlePrint = () => {
-    window.print();
+    if (printRef.current) {
+      const htmlContent = printRef.current.innerHTML;
+      import('../components/ProductionSheetPrint').then(mod => {
+        mod.printHTML(htmlContent);
+      });
+    }
   };
 
   const closePrintModal = () => {
@@ -292,22 +298,9 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
                         >
                           <ChevronLeft size={16} />
                         </button>
-                        <button
-                          onClick={() => handleAdvanceStage(order.id)}
-                          className="flex-1 flex items-center justify-center gap-2 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-blue-600 transition-all shadow-lg shadow-slate-900/10"
-                        >
-                          Encaminhar <ArrowRightCircle size={14} />
-                        </button>
                       </div>
                     </div>
                   ))}
-
-                  {stageOrders.length === 0 && (
-                    <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl gap-2 bg-white/50">
-                      <Package size={24} className="text-slate-200" />
-                      <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest">Aguardando Itens</p>
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -315,60 +308,41 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
         </div>
       </div>
 
-      {/* Footer Informativo */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between shrink-0">
-        <div className="flex gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-            <span className="text-xs font-bold text-slate-600">Provisionado</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-            <span className="text-xs font-bold text-slate-600">Em Alerta</span>
-          </div>
-        </div>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total em produção: {pcpOrders.length} pedidos</p>
-      </div>
-
-      {/* Print Modal */}
       {showPrintModal && printData && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-[900px] w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 p-6 rounded-t-3xl flex items-center justify-between z-10 no-print">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-xl">
-                  <Printer size={24} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-white">Ficha de Produção e Instalação</h3>
-                  <p className="text-xs text-blue-100 font-medium">Preview para impressão</p>
-                </div>
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-black text-slate-800">Visualizar Ficha de Produção</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all"
+                >
+                  <Printer size={18} /> Imprimir
+                </button>
+                <button
+                  onClick={closePrintModal}
+                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X size={20} />
+                </button>
               </div>
+            </div>
+            <div className="p-6 overflow-x-auto">
+              <ProductionSheetPrint ref={printRef} data={printData} products={products} />
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl flex justify-end gap-3 sticky bottom-0">
               <button
                 onClick={closePrintModal}
-                className="p-2 hover:bg-white/20 rounded-xl transition-colors no-print"
+                className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-colors"
               >
-                <X size={24} className="text-white" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <ProductionSheetPrint data={printData} products={products} />
-            </div>
-
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 p-6 rounded-b-3xl flex gap-3 no-print">
-              <button
-                onClick={closePrintModal}
-                className="flex-1 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-all active:scale-[0.98]"
-              >
-                Cancelar
+                Fechar
               </button>
               <button
                 onClick={handlePrint}
-                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
               >
-                <Printer size={18} />
-                Imprimir
+                <Printer size={18} /> Imprimir Ficha
               </button>
             </div>
           </div>
