@@ -22,7 +22,8 @@ import {
     FileEdit,
     SendHorizontal,
     X,
-    Trash2
+    Trash2,
+    FileCode
 } from 'lucide-react';
 
 interface NFeManagementProps {
@@ -431,15 +432,31 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                         <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2 text-right">
                                 {order.nfeKey && (
-                                    <a
-                                        href={nfEmailService.getDANFEUrl(order.nfeKey, order.nfeId)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
-                                        title="Ver DANFE"
-                                    >
-                                        <ExternalLink size={18} />
-                                    </a>
+                                    <>
+                                        <a
+                                            href={nfEmailService.getDANFEUrl(order.nfeKey, order.nfeId)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                                            title="Visualizar DANFE no Portal"
+                                        >
+                                            <ExternalLink size={18} />
+                                        </a>
+                                        <button
+                                            onClick={() => order.nfeKey && nfEmailService.downloadDANFe(order.nfeKey)}
+                                            className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
+                                            title="Baixar DANFE (PDF)"
+                                        >
+                                            <FileText size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => order.nfeKey && nfEmailService.downloadXML(order.nfeKey)}
+                                            className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"
+                                            title="Baixar XML"
+                                        >
+                                            <FileCode size={18} />
+                                        </button>
+                                    </>
                                 )}
                                 <button
                                     onClick={() => handleSyncStatus(order)}
@@ -536,10 +553,24 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
-                                        title="Ver DANFE"
+                                        title="Visualizar DANFE no Portal"
                                     >
                                         <ExternalLink size={18} />
                                     </a>
+                                    <button
+                                        onClick={() => note.key && nfEmailService.downloadDANFe(note.key)}
+                                        className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
+                                        title="Baixar DANFE (PDF)"
+                                    >
+                                        <FileText size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => note.key && nfEmailService.downloadXML(note.key)}
+                                        className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"
+                                        title="Baixar XML"
+                                    >
+                                        <FileCode size={18} />
+                                    </button>
                                     {note.status !== 'Autorizada' && (
                                         <button
                                             onClick={() => handleTransmit(note)}

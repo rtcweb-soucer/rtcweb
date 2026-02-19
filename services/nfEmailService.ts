@@ -255,6 +255,55 @@ export const nfEmailService = {
         }
     },
 
+    async downloadDANFe(key: string) {
+        const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
+        const url = `/api/nfemail/DANFe?chave=${key}`;
+        const apiUrl = import.meta.env.DEV ? url : `https://api.nfemail.com.br${url}`;
+
+        const response = await fetch(apiUrl, {
+            headers: { "Authorization": authHeader }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erro ao baixar DANFe: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `DANFe_${key}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+    },
+
+    async downloadXML(key: string) {
+        const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
+        const url = `/api/nfemail/Xml?chave=${key}`; // Endpoint de XML costuma ser esse ou similar
+        const apiUrl = import.meta.env.DEV ? url : `https://api.nfemail.com.br${url}`;
+
+        const response = await fetch(apiUrl, {
+            headers: { "Authorization": authHeader }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erro ao baixar XML: ${response.status}`);
+        }
+
+        const text = await response.text();
+        const blob = new Blob([text], { type: 'text/xml' });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `${key}.xml`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+    },
+
     getDANFEUrl(key: string, id?: string) {
         // Se tivermos o ID interno (nfeId), usamos ele pois é mais garantido no integrador
         if (id) return `https://integrador.nfemail.com.br/Danfe/Visualizar/${id}`;
