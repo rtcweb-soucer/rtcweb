@@ -167,7 +167,7 @@ const MeasurementForm = ({
     const top = (window.screen.height / 2) - (height / 2);
 
     window.open(
-      `${gasUrl}?clientName=${encodeURIComponent(customerName)}`,
+      `${gasUrl}?clientName=${encodeURIComponent(customerName)}&v=${new Date().getTime()}`,
       'DriveUpload',
       `width=${width},height=${height},left=${left},top=${top}`
     );
@@ -957,7 +957,7 @@ const MeasurementForm = ({
                               </span>
                             </div>
                             <iframe
-                              src={`https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec?clientName=${encodeURIComponent(customers.find(c => c.id === selectedCustomerId)?.name || '')}&embedded=true`}
+                              src={`https://script.google.com/macros/s/AKfycbxK57Cc9WDZFYDUiWDe42zpf3aVTeloRxAW6lKzX9emfKbS7gDQM4VAinKPp-78IGCr/exec?clientName=${encodeURIComponent(customers.find(c => c.id === selectedCustomerId)?.name || '')}&embedded=true&v=${new Date().getTime()}`}
                               className="w-full h-full border-none"
                               allow="camera *; microphone *; clipboard-write; encrypted-media; picture-in-picture; display-capture"
                               sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads allow-modals"
