@@ -347,7 +347,8 @@ export const dataService = {
             throw error;
         }
         return {
-            ...data,
+            ...order, // Start with original order data to preserve tracking info in state
+            ...data,  // Overwrite with DB results ( snake_case to camelCase mapping below )
             customerId: data.customer_id,
             technicalSheetId: data.technical_sheet_id,
             sellerId: data.seller_id,
@@ -357,8 +358,9 @@ export const dataService = {
             paymentConditions: data.payment_conditions,
             installationDate: data.installation_date,
             installationTime: data.installation_time,
-            productionStage: data.production_stage,
-            productionHistory: data.production_history,
+            // Specifically ensure we don't overwrite if DB has null and input has data
+            productionStage: data.production_stage || order.productionStage,
+            productionHistory: data.production_history || order.productionHistory,
             itemPrices: data.item_prices || {},
             contractObservations: data.contract_observations,
             itemsSnapshot: data.items_snapshot,

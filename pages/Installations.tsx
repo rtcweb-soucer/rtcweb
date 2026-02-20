@@ -46,12 +46,19 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
     time: '',
     installerIds: []
   });
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualSelection, setManualSelection] = useState<{ customerId: string; orderId: string }>({
+    customerId: '',
+    orderId: ''
+  });
+  const [customerSearch, setCustomerSearch] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
 
-  // Pedidos prontos para instalar (Finished no PCP, em Instalação no PCP, ou status FINISHED)
+  // Pedidos prontos para instalar (READY no PCP ou INSTALLATION no PCP)
   const installationOrders = orders.filter(o =>
-    o.productionStage === ProductionStage.INSTALLATION
+    o.productionStage === ProductionStage.INSTALLATION ||
+    o.productionStage === ProductionStage.READY
   ).filter(o => {
     const customer = customers.find(c => c.id === o.customerId);
     return customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || o.id.includes(searchTerm);
@@ -120,6 +127,18 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Agenda de Instalações</h2>
           <p className="text-slate-500">Gestão de pedidos prontos para entrega e montagem externa.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setSelectedOrderForSchedule(null);
+              setScheduleData({ date: '', time: '', installerIds: [] });
+              setShowManualModal(true);
+            }}
+            className="flex items-center gap-2 px-6 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+          >
+            <Truck size={18} /> Nova Instalação
+          </button>
         </div>
       </div>
 
@@ -213,68 +232,70 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
       </div>
 
       {/* Modal de Agendamento */}
-      {selectedOrderForSchedule && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-bold text-lg text-slate-900">Agendar Instalação</h3>
-              <button onClick={() => setSelectedOrderForSchedule(null)} className="p-2 text-slate-400 hover:text-rose-500">
-                <X size={20} />
-              </button>
+      {
+        selectedOrderForSchedule && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="font-bold text-lg text-slate-900">Agendar Instalação</h3>
+                <button onClick={() => setSelectedOrderForSchedule(null)} className="p-2 text-slate-400 hover:text-rose-500">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleSchedule} className="p-8 space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Instaladores Escalados</label>
+                  <div className="max-h-40 overflow-y-auto p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    {installers.filter((i: Installer) => i.active).map((i: Installer) => (
+                      <label key={i.id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-lg transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={scheduleData.installerIds.includes(i.id)}
+                          onChange={(e) => {
+                            const current = scheduleData.installerIds;
+                            const next = e.target.checked
+                              ? [...current, i.id]
+                              : current.filter(id => id !== i.id);
+                            setScheduleData({ ...scheduleData, installerIds: next });
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <span className="text-sm font-medium text-slate-700">{i.name}</span>
+                      </label>
+                    ))}
+                    {installers.filter((i: Installer) => i.active).length === 0 && (
+                      <p className="text-xs text-slate-400 italic text-center py-2">Nenhum instalador ativo cadastrado.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Data</label>
+                    <input
+                      type="date" required
+                      value={scheduleData.date}
+                      onChange={(e) => setScheduleData({ ...scheduleData, date: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Hora</label>
+                    <input
+                      type="time" required
+                      value={scheduleData.time}
+                      onChange={(e) => setScheduleData({ ...scheduleData, time: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-500/30 hover:bg-emerald-700 transition-all">
+                  Confirmar Agendamento
+                </button>
+              </form>
             </div>
-            <form onSubmit={handleSchedule} className="p-8 space-y-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Instaladores Escalados</label>
-                <div className="max-h-40 overflow-y-auto p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                  {installers.filter((i: Installer) => i.active).map((i: Installer) => (
-                    <label key={i.id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-lg transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={scheduleData.installerIds.includes(i.id)}
-                        onChange={(e) => {
-                          const current = scheduleData.installerIds;
-                          const next = e.target.checked
-                            ? [...current, i.id]
-                            : current.filter(id => id !== i.id);
-                          setScheduleData({ ...scheduleData, installerIds: next });
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm font-medium text-slate-700">{i.name}</span>
-                    </label>
-                  ))}
-                  {installers.filter((i: Installer) => i.active).length === 0 && (
-                    <p className="text-xs text-slate-400 italic text-center py-2">Nenhum instalador ativo cadastrado.</p>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Data</label>
-                  <input
-                    type="date" required
-                    value={scheduleData.date}
-                    onChange={(e) => setScheduleData({ ...scheduleData, date: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Hora</label>
-                  <input
-                    type="time" required
-                    value={scheduleData.time}
-                    onChange={(e) => setScheduleData({ ...scheduleData, time: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                  />
-                </div>
-              </div>
-              <button type="submit" className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-500/30 hover:bg-emerald-700 transition-all">
-                Confirmar Agendamento
-              </button>
-            </form>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Template de Impressão (Escondido) */}
       <div className="hidden">
@@ -370,6 +391,153 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
           </div>
         </div>
       </div>
+      {/* Modal de Instalação Avulsa */}
+      {showManualModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-bold text-lg text-slate-900">Nova Instalação Avulsa</h3>
+              <button onClick={() => setShowManualModal(false)} className="p-2 text-slate-400 hover:text-rose-500">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-8 space-y-6">
+              {/* Seleção de Cliente */}
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">1. Selecione o Cliente</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="text"
+                    placeholder="Nome do cliente..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {customerSearch && (
+                  <div className="mt-2 max-h-40 overflow-y-auto border border-slate-100 rounded-xl bg-white shadow-sm divide-y divide-slate-50">
+                    {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setManualSelection({ ...manualSelection, customerId: c.id, orderId: '' });
+                          setCustomerSearch(c.name);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${manualSelection.customerId === c.id ? 'bg-blue-50 font-bold text-blue-600' : 'text-slate-600'}`}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Seleção de Contrato (Opcional) */}
+              {manualSelection.customerId && (
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">2. Selecione o Contrato (Opcional)</label>
+                  <select
+                    value={manualSelection.orderId}
+                    onChange={(e) => setManualSelection({ ...manualSelection, orderId: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Sem contrato vinculado</option>
+                    {orders.filter(o => o.customerId === manualSelection.customerId).map(o => (
+                      <option key={o.id} value={o.id}>Contrato #{o.id} - R$ {o.totalValue.toLocaleString('pt-BR')}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Programação */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Data</label>
+                  <input
+                    type="date"
+                    value={scheduleData.date}
+                    onChange={(e) => setScheduleData({ ...scheduleData, date: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Hora</label>
+                  <input
+                    type="time"
+                    value={scheduleData.time}
+                    onChange={(e) => setScheduleData({ ...scheduleData, time: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Equipe */}
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Equipe de Instaladores</label>
+                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  {installers.filter(i => i.active).map(i => (
+                    <label key={i.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${scheduleData.installerIds.includes(i.id) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-600'}`}>
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={scheduleData.installerIds.includes(i.id)}
+                        onChange={(e) => {
+                          const next = e.target.checked ? [...scheduleData.installerIds, i.id] : scheduleData.installerIds.filter(id => id !== i.id);
+                          setScheduleData({ ...scheduleData, installerIds: next });
+                        }}
+                      />
+                      <span className="text-xs font-bold">{i.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  if (!manualSelection.customerId || !scheduleData.date || !scheduleData.time) {
+                    alert('Por favor, selecione o cliente, data e hora.');
+                    return;
+                  }
+
+                  const selectedOrder = orders.find(o => o.id === manualSelection.orderId);
+
+                  const newApp: Appointment = {
+                    id: crypto.randomUUID(),
+                    customerId: manualSelection.customerId,
+                    orderId: manualSelection.orderId || undefined,
+                    sellerId: selectedOrder?.sellerId || 'legacy-rtc', // Fallback
+                    installerIds: scheduleData.installerIds,
+                    date: scheduleData.date,
+                    time: scheduleData.time,
+                    type: 'INSTALLATION',
+                    status: 'SCHEDULED'
+                  };
+
+                  onAddAppointment(newApp);
+
+                  if (selectedOrder) {
+                    onUpdateOrder({
+                      ...selectedOrder,
+                      installationDate: scheduleData.date,
+                      installationTime: scheduleData.time,
+                      installerIds: scheduleData.installerIds
+                    });
+                  }
+
+                  setShowManualModal(false);
+                  setManualSelection({ customerId: '', orderId: '' });
+                  setScheduleData({ date: '', time: '', installerIds: [] });
+                  setCustomerSearch('');
+                }}
+                className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all active:scale-[0.98]"
+              >
+                Confirmar Agendamento Avulso
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
