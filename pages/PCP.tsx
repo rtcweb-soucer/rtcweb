@@ -298,6 +298,16 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
                         >
                           <ChevronLeft size={16} />
                         </button>
+                        <button
+                          onClick={() => handleAdvanceStage(order.id)}
+                          className="ml-auto p-2 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 group/btn"
+                          title="Avançar Etapa"
+                        >
+                          <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter pr-1">
+                            <span>Próxima</span>
+                            <ChevronRight size={16} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                          </div>
+                        </button>
                       </div>
                     </div>
                   ))}
