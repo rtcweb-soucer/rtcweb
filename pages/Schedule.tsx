@@ -23,6 +23,7 @@ import {
   Wrench,
   X
 } from 'lucide-react';
+import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 
 // Helpers para tratamento de data local
 const getLocalISODate = (date: Date) => {
@@ -600,14 +601,12 @@ const Schedule = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Cliente *</label>
-                  <select
-                    required
-                    onChange={(e) => setNewApp({ ...newApp, customerId: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                  >
-                    <option value="">Selecione um cliente...</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <SearchableCustomerSelect
+                    customers={customers}
+                    value={newApp.customerId || ''}
+                    onChange={(cid) => setNewApp({ ...newApp, customerId: cid })}
+                    placeholder="Selecione um cliente..."
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Vendedor Responsável *</label>
@@ -664,6 +663,7 @@ const Schedule = ({
                     >
                       <option value="MEASUREMENT">Medição</option>
                       <option value="INSTALLATION">Instalação</option>
+                      <option value="VISTORIA">Vistoria</option>
                     </select>
                   </div>
                   {newApp.type === 'INSTALLATION' && (

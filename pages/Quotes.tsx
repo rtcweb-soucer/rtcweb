@@ -29,6 +29,7 @@ import {
   MapPin,
   X
 } from 'lucide-react';
+import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 
 const PAYMENT_METHODS = [
   'PIX',
@@ -474,6 +475,16 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     setIsSaving(true);
 
     try {
+      // Validação crítica: a soma das parcelas deve ser igual ao valor final
+      const sumInstallments = installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0);
+      const diffValidation = Math.abs(sumInstallments - finalValue);
+
+      if (diffValidation > 0.01) {
+        alert(`ERRO DE VALIDAÇÃO: A soma das parcelas (R$ ${sumInstallments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) não coincide com o valor total do pedido (R$ ${finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).\n\nPor favor, ajuste os valores das parcelas para que o total seja EXATO.`);
+        setIsSaving(false);
+        return;
+      }
+
       let finalItems = orderItems;
       let sheetId = selectedOrder.technicalSheetId;
 
@@ -1202,39 +1213,16 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="space-y-2">
                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Cliente</label>
-                      <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
-                        <input
-                          type="text"
-                          placeholder="Buscar cliente..."
-                          value={customerSearch}
-                          onChange={(e) => setCustomerSearch(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                        />
-                        {customerSearch && (
-                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-50">
-                            {customers
-                              .filter(c => normalizeString(c.name).includes(normalizeString(customerSearch)))
-                              .map(c => (
-                                <button
-                                  key={c.id}
-                                  onClick={() => {
-                                    setQuoteFormData(prev => ({ ...prev, customerId: c.id }));
-                                    setCustomerSearch(c.name);
-                                  }}
-                                  className="w-full p-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
-                                >
-                                  <div>
-                                    <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{c.name}</p>
-                                    <p className="text-[10px] text-slate-400 font-medium">{c.document} • {c.address?.neighborhood}</p>
-                                  </div>
-                                  <CheckCircle2 size={16} className={`text-emerald-500 ${quoteFormData.customerId === c.id ? 'opacity-100' : 'opacity-0'}`} />
-                                </button>
-                              ))
-                            }
-                          </div>
-                        )}
-                      </div>
+                      <SearchableCustomerSelect
+                        customers={customers}
+                        value={quoteFormData.customerId}
+                        onChange={(id) => {
+                          setQuoteFormData(prev => ({ ...prev, customerId: id }));
+                          const c = customers.find(cust => cust.id === id);
+                          if (c) setCustomerSearch(c.name);
+                        }}
+                        placeholder="Buscar cliente..."
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -1777,8 +1765,21 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot className="bg-slate-50 border-t border-slate-200">
+                        <tr>
+                          <td colSpan={3} className="px-4 py-2 text-right font-black text-slate-500 uppercase">Soma das Parcelas:</td>
+                          <td className={`px-4 py-2 text-right font-black ${Math.abs(installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0) - finalValue) > 0.01 ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
+                            R$ {installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
+                  {Math.abs(installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0) - finalValue) > 0.01 && (
+                    <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1 mt-1 px-1">
+                      <X size={12} /> A soma das parcelas deve ser EXATAMENTE R$ {finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

@@ -192,7 +192,7 @@ export interface Appointment {
   technicianName?: string; // Nome do instalador
   date: string;
   time: string;
-  type: 'MEASUREMENT' | 'INSTALLATION';
+  type: 'MEASUREMENT' | 'INSTALLATION' | 'VISTORIA';
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
   installerIds?: string[]; // IDs dos instaladores vinculados (múltiplos)

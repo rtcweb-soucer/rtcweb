@@ -8,6 +8,7 @@ import { dataService } from '../services/dataService';
 import { fuzzyMatch } from '../utils/searchUtils';
 import { QRCodeSVG } from 'qrcode.react';
 import { CortinaForm, ToldoForm, CoberturaForm } from '../components/ProductionForms';
+import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 
 interface MeasurementFormProps {
   customers: Customer[];
@@ -489,15 +490,13 @@ const MeasurementForm = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Cliente *</label>
-              <select
+              <SearchableCustomerSelect
                 value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                disabled={!!initialCustomerId}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed font-medium text-xs text-slate-900"
-              >
-                <option value="">Buscar cliente...</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                onChange={setSelectedCustomerId}
+                customers={customers}
+                placeholder="Buscar cliente..."
+                className={initialCustomerId ? 'opacity-75 pointer-events-none' : ''}
+              />
             </div>
 
             <div className="flex items-end">
