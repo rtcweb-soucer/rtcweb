@@ -1,6 +1,6 @@
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer } from './types';
 import { MENU_ITEMS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -27,8 +27,13 @@ import { Search, LogOut, User as UserIcon, Menu as MenuIcon } from 'lucide-react
 import { dataService } from './services/dataService';
 
 const App = () => {
-  const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<SystemUser | null>(() => {
+    const saved = localStorage.getItem('rtc_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sellers, setSellers] = useState<Seller[]>([]);
@@ -47,45 +52,79 @@ const App = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Load initial data from Supabase
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers] = await Promise.all([
-          dataService.getSellers(),
-          dataService.getCustomers(),
-          dataService.getProducts(),
-          dataService.getAppointments(),
-          dataService.getOrders(),
-          dataService.getSystemUsers(),
-          dataService.getTechnicalSheets(),
-          dataService.getBlockedSlots(),
-          dataService.getInstallers()
-        ]);
+  const loadData = useCallback(async (isAuto = false) => {
+    if (isAuto) setIsSyncing(true);
+    try {
+      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers] = await Promise.all([
+        dataService.getSellers(),
+        dataService.getCustomers(),
+        dataService.getProducts(),
+        dataService.getAppointments(),
+        dataService.getOrders(),
+        dataService.getSystemUsers(),
+        dataService.getTechnicalSheets(),
+        dataService.getBlockedSlots(),
+        dataService.getInstallers()
+      ]);
 
-        setSellers(dbSellers);
-        setCustomers(dbCustomers);
-        setProducts(dbProducts);
-        setSystemUsers(dbUsers);
-        setAppointments(dbAppointments);
-        setOrders(dbOrders);
-        setTechnicalSheets(dbTechnicalSheets);
-        setBlockedSlots(dbBlockedSlots);
-        setInstallers(dbInstallers);
+      setSellers(dbSellers);
+      setCustomers(dbCustomers);
+      setProducts(dbProducts);
+      setSystemUsers(dbUsers);
+      setAppointments(dbAppointments);
+      setOrders(dbOrders);
+      setTechnicalSheets(dbTechnicalSheets);
+      setBlockedSlots(dbBlockedSlots);
+      setInstallers(dbInstallers);
+      setLastSync(new Date());
 
-        // Se ainda não houver usuários (primeiro acesso), criar o MASTER
-        if (dbUsers.length === 0) {
-          const master: SystemUser = { id: 'm1', name: 'Administrador Master', login: 'Master', password: '123', role: UserRole.ADMIN, active: true };
-          dataService.saveSystemUser(master).then((saved: SystemUser) => setSystemUsers([saved]));
-        }
-      } catch (err) {
-        console.error("Failed to load data from Supabase:", err);
-      } finally {
-        setLoading(false);
+      // Se ainda não houver usuários (primeiro acesso), criar o MASTER
+      if (dbUsers.length === 0) {
+        const master: SystemUser = { id: 'm1', name: 'Administrador Master', login: 'Master', password: '123', role: UserRole.ADMIN, active: true };
+        dataService.saveSystemUser(master).then((saved: SystemUser) => setSystemUsers([saved]));
       }
+    } catch (err) {
+      console.error("Failed to load data from Supabase:", err);
+    } finally {
+      setLoading(false);
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Persistir usuário logado
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('rtc_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('rtc_user');
+    }
+  }, [currentUser]);
+
+  // Auto-Sync: Intervalo e Foco da Janela
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Refresh a cada 5 minutos
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 5 * 60 * 1000);
+
+    // Refresh ao voltar para a aba
+    const handleFocus = () => {
+      loadData(true);
     };
 
-    loadData();
-  }, []);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentUser, loadData]);
 
   const filteredMenu = MENU_ITEMS.filter((item: any) => {
     if (!currentUser) return false;
@@ -592,6 +631,14 @@ const App = () => {
             <div className="relative group hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input type="text" placeholder="Pesquisar..." className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64 transition-all" />
+            </div>
+
+            {/* Status de Sincronização */}
+            <div className="hidden lg:flex items-center gap-2 pl-4 border-l border-slate-200">
+              <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {isSyncing ? 'Sincronizando...' : `Sincronizado: ${lastSync ? lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}`}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
