@@ -224,6 +224,15 @@ const Orders = ({
 
   const saveEdits = () => {
     if (editingOrder) {
+      // Validação crítica: a soma das parcelas deve ser igual ao valor total do pedido
+      const sumInstallments = editingOrder.installments?.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0) || 0;
+      const diffValidation = Math.abs(sumInstallments - editingOrder.totalValue);
+
+      if (diffValidation > 0.01) {
+        alert(`ERRO DE VALIDAÇÃO: A soma das parcelas (R$ ${sumInstallments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) não coincide com o valor total do pedido (R$ ${editingOrder.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).\n\nPor favor, ajuste os valores das parcelas para que o total seja EXATO.`);
+        return;
+      }
+
       onUpdateOrder(editingOrder);
       setShowEditModal(false);
       setEditingOrder(null);
@@ -943,8 +952,22 @@ const Orders = ({
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot className="bg-slate-50 border-t border-slate-200 text-[10px]">
+                        <tr>
+                          <td colSpan={1} className="px-4 py-2 text-right font-black text-slate-500 uppercase">Soma:</td>
+                          <td className={`px-4 py-2 text-right font-black ${Math.abs((editingOrder.installments?.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0) || 0) - editingOrder.totalValue) > 0.01 ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
+                            R$ {(editingOrder.installments?.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
+                  {Math.abs((editingOrder.installments?.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0) || 0) - editingOrder.totalValue) > 0.01 && (
+                    <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1 mt-1 px-1">
+                      <X size={12} /> A soma das parcelas deve ser R$ {(editingOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-4">
