@@ -5,10 +5,11 @@ import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallat
 import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3 } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
-import { fuzzyMatch } from '../utils/searchUtils';
+import { normalizeString, fuzzyMatch } from '../utils/searchUtils';
 import { QRCodeSVG } from 'qrcode.react';
 import { CortinaForm, ToldoForm, CoberturaForm } from '../components/ProductionForms';
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
+import ThreeDecimalInput from '../components/ThreeDecimalInput';
 
 interface MeasurementFormProps {
   customers: Customer[];
@@ -760,22 +761,18 @@ const MeasurementForm = ({
 
                     <div className="md:col-span-1">
                       <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter text-center">Larg.</label>
-                      <input
-                        type="number" step="0.001"
-                        placeholder="0.00"
-                        value={item.width || ''}
-                        onChange={(e) => updateItem(item.id, 'width', parseFloat(e.target.value) || 0)}
+                      <ThreeDecimalInput
+                        value={item.width || 0}
+                        onChange={(val) => updateItem(item.id, 'width', val)}
                         className="w-full px-1 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:ring-1 focus:ring-blue-500 outline-none text-right font-mono font-bold"
                       />
                     </div>
 
                     <div className="md:col-span-1">
                       <label className="block text-[8px] uppercase font-black text-slate-400 mb-1 tracking-tighter text-center">Alt.</label>
-                      <input
-                        type="number" step="0.001"
-                        placeholder="0.00"
-                        value={item.height || ''}
-                        onChange={(e) => updateItem(item.id, 'height', parseFloat(e.target.value) || 0)}
+                      <ThreeDecimalInput
+                        value={item.height || 0}
+                        onChange={(val) => updateItem(item.id, 'height', val)}
                         className="w-full px-1 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:ring-1 focus:ring-blue-500 outline-none text-right font-mono font-bold"
                       />
                     </div>

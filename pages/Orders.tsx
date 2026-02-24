@@ -195,12 +195,7 @@ const Orders = ({
     const updated = [...editingOrder.installments];
     updated[index] = { ...updated[index], [field]: value };
 
-    if (field === 'value') {
-      const newTotal = updated.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0);
-      setEditingOrder({ ...editingOrder, installments: updated, totalValue: parseFloat(newTotal.toFixed(2)) });
-    } else {
-      setEditingOrder({ ...editingOrder, installments: updated });
-    }
+    setEditingOrder({ ...editingOrder, installments: updated });
   };
 
   const handleUpdateItemPrice = (itemId: string, newPrice: number) => {
@@ -226,10 +221,12 @@ const Orders = ({
     if (editingOrder) {
       // Validação crítica: a soma das parcelas deve ser igual ao valor total do pedido
       const sumInstallments = editingOrder.installments?.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0) || 0;
-      const diffValidation = Math.abs(sumInstallments - editingOrder.totalValue);
 
-      if (diffValidation > 0.01) {
-        alert(`ERRO DE VALIDAÇÃO: A soma das parcelas (R$ ${sumInstallments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) não coincide com o valor total do pedido (R$ ${editingOrder.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).\n\nPor favor, ajuste os valores das parcelas para que o total seja EXATO.`);
+      const sumCents = Math.round(sumInstallments * 100);
+      const totalCents = Math.round(editingOrder.totalValue * 100);
+
+      if (sumCents !== totalCents) {
+        alert(`ERRO DE VALIDAÇÃO: A soma das parcelas (R$ ${sumInstallments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) não coincide com o valor total do pedido (R$ ${editingOrder.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).\n\nA diferença é de R$ ${Math.abs((sumCents - totalCents) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.\n\nPor favor, ajuste os valores das parcelas para que o total seja EXATO.`);
         return;
       }
 

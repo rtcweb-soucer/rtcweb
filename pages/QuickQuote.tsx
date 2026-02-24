@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useState, useMemo } from 'react';
 import { Product } from '../types';
 import { normalizeString, fuzzyMatch } from '../utils/searchUtils';
+import ThreeDecimalInput from '../components/ThreeDecimalInput';
 import {
   Search,
   Zap,
@@ -244,18 +245,18 @@ const QuickQuote = ({ products }: QuickQuoteProps) => {
                           <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
                             <div className="space-y-0.5">
                               <span className="text-[8px] font-black text-slate-400 uppercase px-1">Larg</span>
-                              <input
-                                type="number" step="0.01" value={item.width}
-                                onChange={(e) => updateItem(item.id, 'width', parseFloat(e.target.value) || 0)}
+                              <ThreeDecimalInput
+                                value={item.width}
+                                onChange={(val) => updateItem(item.id, 'width', val)}
                                 className="w-16 text-center text-xs font-bold bg-slate-50 rounded p-1 border-none focus:ring-1 focus:ring-blue-500"
                               />
                             </div>
                             <span className="text-slate-300 font-bold">×</span>
                             <div className="space-y-0.5">
                               <span className="text-[8px] font-black text-slate-400 uppercase px-1">Alt</span>
-                              <input
-                                type="number" step="0.01" value={item.height}
-                                onChange={(e) => updateItem(item.id, 'height', parseFloat(e.target.value) || 0)}
+                              <ThreeDecimalInput
+                                value={item.height}
+                                onChange={(val) => updateItem(item.id, 'height', val)}
                                 className="w-16 text-center text-xs font-bold bg-slate-50 rounded p-1 border-none focus:ring-1 focus:ring-blue-500"
                               />
                             </div>

@@ -30,6 +30,7 @@ import {
   X
 } from 'lucide-react';
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
+import ThreeDecimalInput from '../components/ThreeDecimalInput';
 
 const PAYMENT_METHODS = [
   'PIX',
@@ -463,11 +464,6 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     updated[index] = { ...updated[index], [field]: value };
     setInstallments(updated);
 
-    // Se mudou o valor individual de uma parcela, atualiza o total final para manter consistência
-    if (field === 'value') {
-      const newTotal = updated.reduce((acc: number, curr: Installment) => acc + (parseFloat(curr.value.toString()) || 0), 0);
-      setFinalValue(parseFloat(newTotal.toFixed(2)));
-    }
   };
 
   const handleTransformToOrder = async () => {
@@ -477,10 +473,13 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     try {
       // Validação crítica: a soma das parcelas deve ser igual ao valor final
       const sumInstallments = installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0);
-      const diffValidation = Math.abs(sumInstallments - finalValue);
 
-      if (diffValidation > 0.01) {
-        alert(`ERRO DE VALIDAÇÃO: A soma das parcelas (R$ ${sumInstallments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) não coincide com o valor total do pedido (R$ ${finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).\n\nPor favor, ajuste os valores das parcelas para que o total seja EXATO.`);
+      // Comparação robusta usando centavos
+      const sumCents = Math.round(sumInstallments * 100);
+      const totalCents = Math.round(finalValue * 100);
+
+      if (sumCents !== totalCents) {
+        alert(`ERRO DE VALIDAÇÃO: A soma das parcelas (R$ ${sumInstallments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) não coincide com o valor total do pedido (R$ ${finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).\n\nA diferença é de R$ ${Math.abs((sumCents - totalCents) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.\n\nPor favor, ajuste os valores das parcelas para que o total seja EXATO.`);
         setIsSaving(false);
         return;
       }
@@ -980,17 +979,20 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                   <section>
                     <h3 className="text-[8px] font-black text-slate-900 uppercase mb-2">Observações Gerais</h3>
                     <div className="p-4 bg-slate-50 rounded-xl border-l-3 border-slate-300 text-[9px] text-slate-600 leading-relaxed italic whitespace-pre-line">
-                      {selectedOrder.contractObservations || `Garantia RTC Decor de 01 ano contra defeitos de fabricação. Prazo de instalação: ${deliveryDays} Dias Úteis. Proposta válida por 07 dias.`}
+                      {selectedOrder.contractObservations || `Prazo de instalação: ${deliveryDays} Dias Úteis.\nGarantia RTC Decor de 01 ano contra defeitos de fabricação.\nProposta válida por 07 dias.`}
                     </div>
                   </section>
                 </div>
 
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100">
-                      <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Garantia</p>
-                      <p className="text-md font-black text-slate-900">12 Meses</p>
+                <div className="space-y-4">
+                  <section>
+                    <h3 className="text-[8px] font-black text-slate-900 uppercase mb-2">Condição de Pagamento</h3>
+                    <div className="p-4 bg-blue-50/50 rounded-xl border-l-3 border-blue-400 text-[9px] text-blue-700 font-bold italic">
+                      {selectedOrder.paymentConditions || 'Conforme negociado'}
                     </div>
+                  </section>
+
+                  <div className="space-y-3">
                     <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100 group/prazo relative">
                       <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Prazo</p>
                       <div className="flex items-center justify-center gap-1">
@@ -1003,6 +1005,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                         />
                         <span className="text-md font-black text-slate-900 truncate">Dias Úteis</span>
                       </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100">
+                      <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Garantia</p>
+                      <p className="text-md font-black text-slate-900">RTC DECOR (12 Meses)</p>
                     </div>
                   </div>
                   <div className="pt-4 text-center">
@@ -1356,14 +1362,12 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                                 <div className="lg:col-span-4 grid grid-cols-2 gap-3">
                                   <div className="space-y-1">
                                     <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest pl-1">Largura (m)</label>
-                                    <input
-                                      type="number" step="0.001"
+                                    <ThreeDecimalInput
                                       value={it.width}
-                                      onChange={(e) => {
+                                      onChange={(val) => {
                                         const newItems = [...quoteFormData.items];
-                                        const val = parseFloat(e.target.value) || 0;
                                         newItems[idx].width = val;
-                                        // Recalcular preço se for M2 e preço for zero/default
+                                        // Recalcular preço se for M2
                                         const p = products.find(prod => prod.id === it.productId);
                                         if (p?.unidade === 'M2') {
                                           newItems[idx].price = p.valor * val * it.height;
@@ -1375,12 +1379,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                                   </div>
                                   <div className="space-y-1">
                                     <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest pl-1">Altura (m)</label>
-                                    <input
-                                      type="number" step="0.001"
+                                    <ThreeDecimalInput
                                       value={it.height}
-                                      onChange={(e) => {
+                                      onChange={(val) => {
                                         const newItems = [...quoteFormData.items];
-                                        const val = parseFloat(e.target.value) || 0;
                                         newItems[idx].height = val;
                                         const p = products.find(prod => prod.id === it.productId);
                                         if (p?.unidade === 'M2') {
@@ -1494,7 +1496,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                     sellerId: currentUser?.sellerId || '',
                     items: [],
                     syncToSheet: true,
-                    contractObservations: `Garantia RTC Decor de 01 ano contra defeitos de fabricação. Prazo de instalação: ${deliveryDays} Dias Úteis. Proposta válida por 07 dias.`,
+                    contractObservations: `Prazo de instalação: ${deliveryDays} Dias Úteis.\nGarantia RTC Decor de 01 ano contra defeitos de fabricação.\nProposta válida por 07 dias.`,
                     paymentConditions: 'Cartão de Crédito 10x sem juros (Parcela mínima R$ 300,00)'
                   });
                   setShowAddEditModal(true);

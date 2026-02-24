@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { ProductionSheetToldo } from '../../types';
+import ThreeDecimalInput from '../ThreeDecimalInput';
 
 interface ToldoFormProps {
     data: Partial<ProductionSheetToldo>;
@@ -232,11 +233,9 @@ export const ToldoForm: React.FC<ToldoFormProps> = ({ data, onChange }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         LARGURA DO BEIRAL
                     </label>
-                    <input
-                        type="text"
-                        value={data.larguraBeiral || ''}
-                        onChange={(e) => updateField('larguraBeiral', e.target.value)}
-                        placeholder="Digite a medida"
+                    <ThreeDecimalInput
+                        value={parseFloat(data.larguraBeiral?.toString() || '0') || 0}
+                        onChange={(val) => updateField('larguraBeiral', val)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>
@@ -246,11 +245,9 @@ export const ToldoForm: React.FC<ToldoFormProps> = ({ data, onChange }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         CAÍDA
                     </label>
-                    <input
-                        type="text"
-                        value={data.caida || ''}
-                        onChange={(e) => updateField('caida', e.target.value)}
-                        placeholder="Digite a medida"
+                    <ThreeDecimalInput
+                        value={parseFloat(data.caida?.toString() || '0') || 0}
+                        onChange={(val) => updateField('caida', val)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>
@@ -260,11 +257,9 @@ export const ToldoForm: React.FC<ToldoFormProps> = ({ data, onChange }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         ALTURA DA INSTALAÇÃO
                     </label>
-                    <input
-                        type="text"
-                        value={data.alturaInstalacao || ''}
-                        onChange={(e) => updateField('alturaInstalacao', e.target.value)}
-                        placeholder="Digite a altura"
+                    <ThreeDecimalInput
+                        value={parseFloat(data.alturaInstalacao?.toString() || '0') || 0}
+                        onChange={(val) => updateField('alturaInstalacao', val)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { ProductionSheetCobertura } from '../../types';
+import ThreeDecimalInput from '../ThreeDecimalInput';
 
 interface CoberturaFormProps {
     data: Partial<ProductionSheetCobertura>;
@@ -35,11 +36,9 @@ export const CoberturaForm: React.FC<CoberturaFormProps> = ({ data, onChange }) 
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         ALTURA DA INSTALAÇÃO
                     </label>
-                    <input
-                        type="text"
-                        value={data.alturaInstalacao || ''}
-                        onChange={(e) => updateField('alturaInstalacao', e.target.value)}
-                        placeholder="Digite a altura"
+                    <ThreeDecimalInput
+                        value={parseFloat(data.alturaInstalacao?.toString() || '0') || 0}
+                        onChange={(val) => updateField('alturaInstalacao', val)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>
@@ -49,11 +48,9 @@ export const CoberturaForm: React.FC<CoberturaFormProps> = ({ data, onChange }) 
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         CAÍDA
                     </label>
-                    <input
-                        type="text"
-                        value={data.caida || ''}
-                        onChange={(e) => updateField('caida', e.target.value)}
-                        placeholder="Digite a medida"
+                    <ThreeDecimalInput
+                        value={parseFloat(data.caida?.toString() || '0') || 0}
+                        onChange={(val) => updateField('caida', val)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>

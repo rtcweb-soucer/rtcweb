@@ -1,34 +1,43 @@
-
-import * as React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Search, User, X, Check } from 'lucide-react';
 import { Customer } from '../types';
-import { Search, CheckCircle2 } from 'lucide-react';
-import { normalizeString } from '../utils/searchUtils';
 
 interface SearchableCustomerSelectProps {
-    value: string;
-    onChange: (customerId: string) => void;
     customers: Customer[];
+    value: string;
+    onChange: (id: string) => void;
     placeholder?: string;
     className?: string;
 }
 
-const SearchableCustomerSelect = ({
+const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
+    customers,
     value,
     onChange,
-    customers,
-    placeholder = "Selecionar cliente...",
+    placeholder = "Buscar cliente...",
     className = ""
-}: SearchableCustomerSelectProps) => {
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const wrapperRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
-    const selectedCustomer = customers.find(c => c.id === value);
+    const selectedCustomer = useMemo(() =>
+        customers.find(c => c.id === value),
+        [customers, value]
+    );
+
+    const filteredCustomers = useMemo(() => {
+        if (!searchTerm) return customers.slice(0, 10);
+        const normalized = searchTerm.toLowerCase().trim();
+        return customers.filter(c =>
+            c.name.toLowerCase().includes(normalized) ||
+            (c.document && c.document.replace(/\D/g, '').includes(normalized.replace(/\D/g, '')))
+        ).slice(0, 20);
+    }, [customers, searchTerm]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
             }
         };
@@ -36,62 +45,75 @@ const SearchableCustomerSelect = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const filtered = customers.filter(c =>
-        !searchTerm ||
-        normalizeString(c.name).includes(normalizeString(searchTerm)) ||
-        (c.document && normalizeString(c.document).includes(normalizeString(searchTerm)))
-    );
-
     return (
-        <div className={`relative ${className}`} ref={wrapperRef}>
+        <div className={`relative ${className}`} ref={containerRef}>
             <div
-                onClick={() => {
-                    setIsOpen(!isOpen);
-                    if (!isOpen) setSearchTerm('');
-                }}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus-within:ring-2 focus-within:ring-blue-500 cursor-pointer flex items-center justify-between transition-all"
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none flex items-center justify-between cursor-pointer group"
             >
-                <span className={`font-medium truncate ${selectedCustomer ? 'text-slate-900' : 'text-slate-400'}`}>
-                    {selectedCustomer ? selectedCustomer.name : placeholder}
-                </span>
-                <Search size={16} className="text-slate-400" />
+                <div className="flex items-center gap-2 truncate">
+                    <User size={16} className={selectedCustomer ? "text-blue-500" : "text-slate-400"} />
+                    <span className={selectedCustomer ? "text-slate-900" : "text-slate-400"}>
+                        {selectedCustomer ? selectedCustomer.name : placeholder}
+                    </span>
+                </div>
+                <Search size={16} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
             </div>
 
             {isOpen && (
-                <div className="absolute z-[200] top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                    <div className="p-3 border-b border-slate-50 bg-slate-50/50">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
-                            <input
-                                autoFocus
-                                type="text"
-                                placeholder="Pesquisar..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </div>
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[300] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="p-3 border-b border-slate-50 relative">
+                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                        <input
+                            autoFocus
+                            type="text"
+                            autoComplete="off"
+                            name="customer-search-input"
+                            placeholder="Digite o nome ou CPF/CNPJ..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-xs font-bold text-slate-700 focus:ring-0 outline-none"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
                     </div>
-                    <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                        {filtered.length === 0 ? (
-                            <div className="p-4 text-center text-xs text-slate-400">Nenhum cliente encontrado</div>
+
+                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 custom-scrollbar">
+                        {filteredCustomers.length === 0 ? (
+                            <div className="px-4 py-8 text-center text-slate-400">
+                                <p className="text-xs font-medium">Nenhum cliente encontrado</p>
+                            </div>
                         ) : (
-                            filtered.map(c => (
+                            filteredCustomers.map(c => (
                                 <button
                                     key={c.id}
                                     type="button"
                                     onClick={() => {
                                         onChange(c.id);
                                         setIsOpen(false);
+                                        setSearchTerm('');
                                     }}
-                                    className={`w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center justify-between group ${c.id === value ? 'bg-blue-50/50' : ''}`}
+                                    className={`w-full p-3 md:p-4 text-left hover:bg-slate-50 transition-all flex items-center justify-between group ${value === c.id ? 'bg-blue-50/50' : ''}`}
                                 >
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{c.name}</span>
-                                        <span className="text-[10px] text-slate-400 font-medium">{c.document} • {c.address?.neighborhood}</span>
+                                    <div className="space-y-0.5 min-w-0 flex-1">
+                                        <p className={`text-[11px] md:text-xs font-black uppercase tracking-tight truncate ${value === c.id ? 'text-blue-600' : 'text-slate-900'}`}>
+                                            {c.name}
+                                        </p>
+                                        <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase truncate">
+                                            {c.document} • {c.address.city}/{c.address.state}
+                                        </p>
                                     </div>
-                                    {c.id === value && <CheckCircle2 size={16} className="text-emerald-500" />}
+                                    {value === c.id && (
+                                        <div className="shrink-0 ml-2 p-1 bg-blue-600 text-white rounded-full">
+                                            <Check size={10} />
+                                        </div>
+                                    )}
                                 </button>
                             ))
                         )}
