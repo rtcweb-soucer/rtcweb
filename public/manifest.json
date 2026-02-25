@@ -1,0 +1,18 @@
+{
+    "short_name": "RTC WEB",
+    "name": "RTC WEB - Sistema de Gestão",
+    "icons": [
+        {
+            "src": "/logo-rtc.jpg",
+            "sizes": "512x512",
+            "type": "image/jpeg",
+            "purpose": "any maskable"
+        }
+    ],
+    "start_url": "/",
+    "background_color": "#0f172a",
+    "display": "standalone",
+    "theme_color": "#0f172a",
+    "lang": "pt-BR",
+    "description": "Sistema de Gestão RTC - Toldos, Cortinas e Coberturas"
+}

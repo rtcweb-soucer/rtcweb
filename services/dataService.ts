@@ -1,12 +1,67 @@
 import { supabase } from './supabase';
 import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer } from '../types';
 
+const SYNC_QUEUE_KEY = 'rtc_sync_queue';
+
+const getSyncQueue = (): any[] => {
+    try {
+        const queue = localStorage.getItem(SYNC_QUEUE_KEY);
+        return queue ? JSON.parse(queue) : [];
+    } catch {
+        return [];
+    }
+};
+
+const saveSyncQueue = (queue: any[]) => {
+    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+};
+
 export const dataService = {
+    // Sincronização
+    async processSyncQueue() {
+        const queue = getSyncQueue();
+        if (queue.length === 0) return;
+
+        console.log(`🔄 Sincronizando ${queue.length} item(s) pendente(s)...`);
+        const remainingQueue: any[] = [];
+
+        for (const item of queue) {
+            try {
+                if (item.type === 'order') {
+                    await this.saveOrder(item.data, true); // true = force bypass queue
+                }
+            } catch (err) {
+                console.error('Falha ao sincronizar item, mantendo na fila:', err);
+                remainingQueue.push(item);
+            }
+        }
+
+        saveSyncQueue(remainingQueue);
+        if (remainingQueue.length === 0) {
+            console.log('✅ Sincronização concluída com sucesso!');
+        }
+    },
+
+    addToSyncQueue(type: string, data: any) {
+        const queue = getSyncQueue();
+        queue.push({ type, data, timestamp: Date.now() });
+        saveSyncQueue(queue);
+        console.warn(`📦 Item salvo na fila de sincronização offline (${type})`);
+    },
+
     // Products
     async getProducts() {
-        const { data, error } = await supabase.from('products').select('*');
-        if (error) throw error;
-        return data as Product[];
+        try {
+            const { data, error } = await supabase.from('products').select('*');
+            if (error) throw error;
+            localStorage.setItem('rtc_cache_products', JSON.stringify(data));
+            return data as Product[];
+        } catch (error) {
+            console.error('Offline Mode: Usando cache de produtos local');
+            const cached = localStorage.getItem('rtc_cache_products');
+            if (cached) return JSON.parse(cached) as Product[];
+            throw error;
+        }
     },
     async saveProduct(product: Product) {
         const { data, error } = await supabase.from('products').upsert(product).select().single();
@@ -25,15 +80,26 @@ export const dataService = {
 
     // Customers
     async getCustomers() {
-        const { data, error } = await supabase.from('customers').select('*');
-        if (error) throw error;
-        return (data || []).map(c => ({
-            ...c,
-            tradeName: c.trade_name, // Map snake_case from DB to camelCase
-            contactName: c.contact_name,
-            contactPhone: c.contact_phone,
-            contactEmail: c.contact_email,
-        })) as Customer[];
+        try {
+            const { data, error } = await supabase.from('customers').select('*');
+            if (error) throw error;
+
+            const normalized = (data || []).map(c => ({
+                ...c,
+                tradeName: c.trade_name,
+                contactName: c.contact_name,
+                contactPhone: c.contact_phone,
+                contactEmail: c.contact_email,
+            })) as Customer[];
+
+            localStorage.setItem('rtc_cache_customers', JSON.stringify(normalized));
+            return normalized;
+        } catch (error) {
+            console.error('Offline Mode: Usando cache de clientes local');
+            const cached = localStorage.getItem('rtc_cache_customers');
+            if (cached) return JSON.parse(cached) as Customer[];
+            throw error;
+        }
     },
     async saveCustomer(customer: Customer) {
         try {
@@ -76,9 +142,17 @@ export const dataService = {
 
     // Sellers
     async getSellers() {
-        const { data, error } = await supabase.from('sellers').select('*');
-        if (error) throw error;
-        return data as Seller[];
+        try {
+            const { data, error } = await supabase.from('sellers').select('*');
+            if (error) throw error;
+            localStorage.setItem('rtc_cache_sellers', JSON.stringify(data));
+            return data as Seller[];
+        } catch (error) {
+            console.error('Offline Mode: Usando cache de vendedores local');
+            const cached = localStorage.getItem('rtc_cache_sellers');
+            if (cached) return JSON.parse(cached) as Seller[];
+            throw error;
+        }
     },
     async saveSeller(seller: Seller) {
         const { data, error } = await supabase.from('sellers').upsert(seller).select().single();
@@ -305,7 +379,7 @@ export const dataService = {
             };
         }) as unknown as Order[];
     },
-    async saveOrder(order: Order) {
+    async saveOrder(order: Order, force = false) {
         const payload = {
             id: order.id,
             customer_id: order.customerId,
@@ -331,45 +405,50 @@ export const dataService = {
             nfe_status: order.nfeStatus,
         };
         console.log('💾 Saving order payload:', payload);
-        let { data, error } = await supabase.from('orders').upsert(payload).select().single();
 
-        // Robustez: Se a coluna item_prices não existir no banco, tenta salvar sem ela
-        if (error && error.message?.includes('item_prices')) {
-            console.warn('⚠️ Coluna item_prices não encontrada. Tentando salvar sem preços customizados.');
-            const { item_prices, ...payloadWithoutPrices } = payload;
-            const retry = await supabase.from('orders').upsert(payloadWithoutPrices).select().single();
-            data = retry.data;
-            error = retry.error;
-        }
+        try {
+            let { data, error } = await supabase.from('orders').upsert(payload).select().single();
 
-        if (error) {
-            console.error('❌ Supabase error saving order:', error);
+            if (error && error.message?.includes('item_prices')) {
+                console.warn('⚠️ Coluna item_prices não encontrada. Tentando salvar sem preços customizados.');
+                const { item_prices, ...payloadWithoutPrices } = payload;
+                const retry = await supabase.from('orders').upsert(payloadWithoutPrices).select().single();
+                data = retry.data;
+                error = retry.error;
+            }
+
+            if (error) throw error;
+
+            return {
+                ...order,
+                ...data,
+                customerId: data.customer_id,
+                technicalSheetId: data.technical_sheet_id,
+                sellerId: data.seller_id,
+                itemIds: data.item_ids,
+                totalValue: data.total_value || 0,
+                paymentMethod: data.payment_method,
+                paymentConditions: data.payment_conditions,
+                installationDate: data.installation_date,
+                installationTime: data.installation_time,
+                productionStage: data.production_stage || order.productionStage,
+                productionHistory: data.production_history || order.productionHistory,
+                itemPrices: data.item_prices || {},
+                contractObservations: data.contract_observations,
+                itemsSnapshot: data.items_snapshot,
+                nfeNumber: data.nfe_number,
+                nfeSeries: data.nfe_series,
+                nfeKey: data.nfe_key,
+                nfeStatus: data.nfe_status,
+                createdAt: new Date(data.created_at)
+            } as unknown as Order;
+        } catch (error) {
+            if (!force) {
+                this.addToSyncQueue('order', order);
+                return { ...order, status: 'PENDING_SYNC' as any };
+            }
             throw error;
         }
-        return {
-            ...order, // Start with original order data to preserve tracking info in state
-            ...data,  // Overwrite with DB results ( snake_case to camelCase mapping below )
-            customerId: data.customer_id,
-            technicalSheetId: data.technical_sheet_id,
-            sellerId: data.seller_id,
-            itemIds: data.item_ids,
-            totalValue: data.total_value || 0,
-            paymentMethod: data.payment_method,
-            paymentConditions: data.payment_conditions,
-            installationDate: data.installation_date,
-            installationTime: data.installation_time,
-            // Specifically ensure we don't overwrite if DB has null and input has data
-            productionStage: data.production_stage || order.productionStage,
-            productionHistory: data.production_history || order.productionHistory,
-            itemPrices: data.item_prices || {},
-            contractObservations: data.contract_observations,
-            itemsSnapshot: data.items_snapshot,
-            nfeNumber: data.nfe_number,
-            nfeSeries: data.nfe_series,
-            nfeKey: data.nfe_key,
-            nfeStatus: data.nfe_status,
-            createdAt: new Date(data.created_at)
-        } as unknown as Order;
     },
 
     // PCP (Production Tracking)
@@ -940,3 +1019,10 @@ export const dataService = {
         };
     }
 };
+
+// Registrar monitor de sincronização
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => dataService.processSyncQueue());
+    // Tenta sincronizar ao iniciar o app também
+    setTimeout(() => dataService.processSyncQueue(), 2000);
+}
