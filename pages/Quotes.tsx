@@ -2099,12 +2099,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                             <div className="md:col-span-3 grid grid-cols-2 gap-2">
                               <div className="space-y-1">
                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest pl-1">Largura (m)</label>
-                                <input
-                                  type="number" step="0.001"
+                                <ThreeDecimalInput
                                   value={it.width}
-                                  onChange={(e) => {
+                                  onChange={(val) => {
                                     const newItems = [...quoteFormData.items];
-                                    const val = parseFloat(e.target.value) || 0;
                                     newItems[idx].width = val;
                                     const p = products.find(prod => prod.id === it.productId);
                                     if (p?.unidade === 'M2') {
@@ -2122,12 +2120,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                               </div>
                               <div className="space-y-1">
                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest pl-1">Altura (m)</label>
-                                <input
-                                  type="number" step="0.001"
+                                <ThreeDecimalInput
                                   value={it.height}
-                                  onChange={(e) => {
+                                  onChange={(val) => {
                                     const newItems = [...quoteFormData.items];
-                                    const val = parseFloat(e.target.value) || 0;
                                     newItems[idx].height = val;
                                     const p = products.find(prod => prod.id === it.productId);
                                     if (p?.unidade === 'M2') {
