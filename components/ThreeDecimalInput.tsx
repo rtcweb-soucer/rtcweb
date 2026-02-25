@@ -15,10 +15,13 @@ const ThreeDecimalInput = ({
     placeholder = "0,000"
 }: ThreeDecimalInputProps) => {
     const [displayValue, setDisplayValue] = useState("");
+    const [isFocused, setIsFocused] = useState(false);
 
     // Sincroniza o valor externo com o estado local formatado
     useEffect(() => {
-        if (value === 0 && !displayValue) {
+        if (isFocused) return; // Não atualiza enquanto o usuário está digitando
+
+        if (value === 0) {
             setDisplayValue("");
         } else {
             // Formata o número para 3 casas decimais com vírgula
@@ -27,7 +30,7 @@ const ThreeDecimalInput = ({
                 maximumFractionDigits: 3
             }));
         }
-    }, [value]);
+    }, [value, isFocused]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         // Permite apenas números e Backspace
@@ -43,12 +46,16 @@ const ThreeDecimalInput = ({
 
         e.preventDefault();
 
-        // Pega apenas os dígitos do valor atual
-        let digits = value.toFixed(3).replace(/\D/g, "");
+        // Se é o primeiro caractere após o foco, começamos do zero 
+        // a menos que o valor já fosse zero e o usuário esteja apenas continuando
+        let digits = "";
 
-        // Remove zeros à esquerda (exceto se for apenas zero)
-        digits = digits.replace(/^0+/, "");
-        if (digits === "") digits = "";
+        // Se já tiver algo no display ou se o valor for diferente de zero, 
+        // e ele NÃO acabou de focar (ou seja, já começou a digitar), pegamos os dígitos atuais.
+        // Mas a regra do usuário é: clicou -> limpa -> começa do zero.
+        if (displayValue !== "") {
+            digits = displayValue.replace(/\D/g, "");
+        }
 
         if (isNumber) {
             digits += e.key;
@@ -56,15 +63,33 @@ const ThreeDecimalInput = ({
             digits = digits.slice(0, -1);
         }
 
-        // Se estiver vazio, o valor é zero
-        if (digits === "") {
+        // Se estiver vazio, o valor é zero e mostramos vazio no foco
+        if (digits === "" || digits === "000") {
+            setDisplayValue("");
             onChange(0);
             return;
         }
 
         // Converte de volta para número (tratando como milésimos)
         const newValue = parseInt(digits, 10) / 1000;
+
+        // Atualiza o display local imediatamente para feedback visual
+        setDisplayValue(newValue.toLocaleString('pt-BR', {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3
+        }));
+
         onChange(newValue);
+    };
+
+    const handleFocus = () => {
+        setIsFocused(true);
+        setDisplayValue(""); // Limpa ao focar
+    };
+
+    const handleBlur = () => {
+        setIsFocused(false);
+        // O useEffect vai cuidar de restaurar o valor formatado se o valor for > 0
     };
 
     return (
@@ -72,8 +97,10 @@ const ThreeDecimalInput = ({
             type="text"
             inputMode="numeric"
             value={displayValue}
-            onChange={() => { }} // Controlado via handleKeyDown
+            onChange={() => { }}
             onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             placeholder={placeholder}
             className={`text-right ${className}`}
         />
