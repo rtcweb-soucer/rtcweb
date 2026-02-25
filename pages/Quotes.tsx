@@ -31,6 +31,10 @@ import {
 } from 'lucide-react';
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 import ThreeDecimalInput from '../components/ThreeDecimalInput';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const PAYMENT_METHODS = [
   'PIX',
@@ -652,6 +656,97 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     `);
     printWindow.document.close();
   };
+  const handleExportPDF = async () => {
+    if (!printRef.current || !selectedOrder) return;
+
+    // Criamos um clone do elemento para poder ajustar estilos sem afetar a tela
+    const element = printRef.current.cloneNode(true) as HTMLElement;
+
+    // Configurações para garantir que o clone tenha o layout correto para captura
+    element.style.position = 'fixed';
+    element.style.left = '-9999px';
+    element.style.top = '0';
+    element.style.width = '1024px';
+    element.style.boxShadow = 'none';
+    element.style.border = 'none';
+    element.style.borderRadius = '0';
+    element.style.backgroundColor = 'white';
+
+    // FORÇAR LAYOUT DE IMPRESSÃO NO CLONE
+    // 1. Remover elementos que não devem sair no print
+    const noPrintElements = element.querySelectorAll('.no-print');
+    noPrintElements.forEach(el => (el as HTMLElement).style.display = 'none');
+
+    // 2. Forçar visibilidade de elementos que só aparecem no print
+    const printOnlyElements = element.querySelectorAll('.print\\:block, .hidden.print\\:block');
+    printOnlyElements.forEach(el => {
+      el.classList.remove('hidden', 'print:block');
+      (el as HTMLElement).style.display = 'block';
+    });
+
+    const printInlineElements = element.querySelectorAll('.print\\:inline');
+    printInlineElements.forEach(el => {
+      el.classList.remove('print:inline');
+      (el as HTMLElement).style.display = 'inline';
+    });
+
+    // 3. Garantir que o logo e imagens sejam carregados
+    const images = element.querySelectorAll('img');
+    await Promise.all(Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+
+    // Remove truncagens para mostrar o conteúdo completo
+    const truncatedElements = element.querySelectorAll('.truncate');
+    truncatedElements.forEach(el => {
+      el.classList.remove('truncate');
+      (el as HTMLElement).style.overflow = 'visible';
+      (el as HTMLElement).style.whiteSpace = 'normal';
+    });
+
+    document.body.appendChild(element);
+
+    // Pequeno delay para garantir que o navegador processou os estilos do clone
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2, // Alta qualidade
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: 1024,
+        windowWidth: 1024
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+
+      // Calcula a proporção para caber na largura do PDF com margens
+      const margin = 10;
+      const contentWidth = pdfWidth - (2 * margin);
+      const ratio = contentWidth / canvasWidth;
+      const contentHeight = canvasHeight * ratio;
+
+      // Adiciona a imagem ao PDF
+      pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, contentHeight);
+
+      pdf.save(`RTC_DECOR_Proposta_${selectedOrder.id}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente.');
+    } finally {
+      document.body.removeChild(element);
+    }
+  };
 
   // Componente de Input de Moeda com Estado Local para evitar travamentos
   const CurrencyInput = ({
@@ -809,7 +904,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                 <Monitor size={18} /> Visualizar HTML
               </button>
               <button onClick={() => handleGeneratePrint(true)} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
-                <Printer size={18} /> Imprimir / PDF
+                <Printer size={18} /> Imprimir
+              </button>
+              <button onClick={handleExportPDF} className="flex items-center gap-2 px-6 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 active:scale-95">
+                <FileText size={18} /> Exportar PDF
               </button>
               <button onClick={handleDeleteQuote} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl text-sm font-bold hover:bg-rose-100 transition-all transition-all shadow-sm">
                 <Trash2 size={18} /> Excluir
@@ -821,11 +919,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
             <div className="p-4 bg-slate-50 border-b-2 border-slate-100 flex justify-between items-start gap-4">
               <div className="flex items-center gap-4">
                 <div className="h-16 w-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
-                  <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="logo-img object-contain" />
+                  <img src="/logo-rtc.jpg" alt="RTC Logo" className="logo-img object-contain" />
                 </div>
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Proposta Comercial</h1>
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-2 mt-10">
                     <span className="bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">Nº {selectedOrder.id}</span>
                     <span className="text-slate-400 font-medium text-[9px]">Data: {new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
                   </div>
@@ -975,22 +1073,22 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
               )}
 
               <div className="grid grid-cols-2 gap-8 pt-2">
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <section>
                     <h3 className="text-[8px] font-black text-slate-900 uppercase mb-2">Observações Gerais</h3>
                     <div className="p-4 bg-slate-50 rounded-xl border-l-3 border-slate-300 text-[9px] text-slate-600 leading-relaxed italic whitespace-pre-line">
                       {selectedOrder.contractObservations || `Prazo de instalação: ${deliveryDays} Dias Úteis.\nGarantia RTC Decor de 01 ano contra defeitos de fabricação.\nProposta válida por 07 dias.`}
                     </div>
                   </section>
-                </div>
-
-                <div className="space-y-4">
                   <section>
                     <h3 className="text-[8px] font-black text-slate-900 uppercase mb-2">Condição de Pagamento</h3>
                     <div className="p-4 bg-blue-50/50 rounded-xl border-l-3 border-blue-400 text-[9px] text-blue-700 font-bold italic">
                       {selectedOrder.paymentConditions || 'Conforme negociado'}
                     </div>
                   </section>
+                </div>
+
+                <div className="space-y-6">
 
                   <div className="space-y-3">
                     <div className="p-3 bg-slate-50 rounded-xl text-center border border-slate-100 group/prazo relative">
@@ -1222,7 +1320,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                       <SearchableCustomerSelect
                         customers={customers}
                         value={quoteFormData.customerId}
-                        onChange={(id) => {
+                        onChange={(id: string) => {
                           setQuoteFormData(prev => ({ ...prev, customerId: id }));
                           const c = customers.find(cust => cust.id === id);
                           if (c) setCustomerSearch(c.name);
