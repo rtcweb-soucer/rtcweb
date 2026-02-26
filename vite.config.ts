@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => {
           enabled: true
         },
         manifestFilename: 'manifest.json',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo_rtc_square.jpg'],
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo_rtc_square.png'],
         manifest: {
           id: '/',
           name: 'RTC WEB - Sistema de Gestão',
@@ -44,23 +44,23 @@ export default defineConfig(({ mode }) => {
           categories: ['productivity', 'business'],
           icons: [
             {
-              src: 'logo_rtc_square.jpg',
+              src: 'logo_rtc_square.png',
               sizes: '640x640',
-              type: 'image/jpeg',
+              type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_rtc_square.jpg',
+              src: 'logo_rtc_square.png',
               sizes: '640x640',
-              type: 'image/jpeg',
+              type: 'image/png',
               purpose: 'maskable'
             }
           ],
           screenshots: [
             {
-              src: 'screenshot.jpg',
-              sizes: '1280x720',
-              type: 'image/jpeg',
+              src: 'screenshot.png',
+              sizes: '640x640',
+              type: 'image/png',
               form_factor: 'wide'
             }
           ]
