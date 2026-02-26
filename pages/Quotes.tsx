@@ -1952,39 +1952,17 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                 <div className="space-y-2">
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-1">Cliente</label>
                   <div className="flex gap-2">
-                    <div className="relative group flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                      <input
-                        type="text"
-                        placeholder="Buscar cliente..."
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors"
-                      />
-                      {customerSearch && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-50">
-                          {customers
-                            .filter(c => normalizeString(c.name).includes(normalizeString(customerSearch)))
-                            .map(c => (
-                              <button
-                                key={c.id}
-                                onClick={() => {
-                                  setQuoteFormData(prev => ({ ...prev, customerId: c.id }));
-                                  setCustomerSearch(c.name);
-                                }}
-                                className="w-full p-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
-                              >
-                                <div>
-                                  <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{c.name}</p>
-                                  <p className="text-[10px] text-slate-400 font-medium">{c.document}</p>
-                                </div>
-                                <CheckCircle2 size={16} className={`text-emerald-500 ${quoteFormData.customerId === c.id ? 'opacity-100' : 'opacity-0'}`} />
-                              </button>
-                            ))
-                          }
-                        </div>
-                      )}
-                    </div>
+                    <SearchableCustomerSelect
+                      customers={customers}
+                      value={quoteFormData.customerId}
+                      onChange={(id: string) => {
+                        setQuoteFormData(prev => ({ ...prev, customerId: id }));
+                        const c = customers.find(cust => cust.id === id);
+                        if (c) setCustomerSearch(c.name);
+                      }}
+                      placeholder="Buscar cliente..."
+                      className="flex-1"
+                    />
                     <button
                       type="button"
                       onClick={() => setShowCustomerModal(true)}

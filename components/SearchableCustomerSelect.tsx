@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, User, X, Check } from 'lucide-react';
 import { Customer } from '../types';
+import { normalizeString } from '../utils/searchUtils';
 
 interface SearchableCustomerSelectProps {
     customers: Customer[];
@@ -28,11 +29,14 @@ const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
 
     const filteredCustomers = useMemo(() => {
         if (!searchTerm) return customers.slice(0, 10);
-        const normalized = searchTerm.toLowerCase().trim();
-        return customers.filter(c =>
-            c.name.toLowerCase().includes(normalized) ||
-            (c.document && c.document.replace(/\D/g, '').includes(normalized.replace(/\D/g, '')))
-        ).slice(0, 20);
+        const normalizedSearch = normalizeString(searchTerm).trim();
+        const documentSearch = searchTerm.replace(/\D/g, '');
+
+        return customers.filter(c => {
+            const nameMatch = normalizeString(c.name).includes(normalizedSearch);
+            const docMatch = documentSearch && c.document && c.document.replace(/\D/g, '').includes(documentSearch);
+            return nameMatch || docMatch;
+        }).slice(0, 20);
     }, [customers, searchTerm]);
 
     useEffect(() => {
@@ -65,7 +69,6 @@ const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
                     <div className="p-3 border-b border-slate-50 relative">
                         <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                         <input
-                            autoFocus
                             type="text"
                             autoComplete="off"
                             name="customer-search-input"

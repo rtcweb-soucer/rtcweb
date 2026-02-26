@@ -10,6 +10,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { CortinaForm, ToldoForm, CoberturaForm } from '../components/ProductionForms';
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 import ThreeDecimalInput from '../components/ThreeDecimalInput';
+import { CORTINA_COMMAND_OPTIONS, TOLDO_COMMAND_OPTIONS } from '../constants';
 
 interface MeasurementFormProps {
   customers: Customer[];
@@ -789,15 +790,15 @@ const MeasurementForm = ({
                           <option value="">...</option>
                           {productType === 'Cortina' ? (
                             <>
-                              <option value="Manual">Man</option>
-                              <option value="Motorizado">Mot</option>
-                              <option value="Easy-Rise">Easy</option>
+                              {CORTINA_COMMAND_OPTIONS.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
                             </>
                           ) : (
                             <>
-                              <option value="Manual">Man</option>
-                              <option value="Motorizado">Mot</option>
-                              <option value="Automatizado">Auto</option>
+                              {TOLDO_COMMAND_OPTIONS.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
                             </>
                           )}
                         </select>

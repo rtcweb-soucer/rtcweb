@@ -1,6 +1,6 @@
 
 import * as React from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer } from './types';
 import { MENU_ITEMS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -23,8 +23,12 @@ import TeamRegistration from './pages/TeamRegistration';
 import Agenda from './pages/Agenda';
 import Installers from './pages/Installers';
 import NFeManagement from './pages/NFeManagement';
-import { Search, LogOut, User as UserIcon, Menu as MenuIcon } from 'lucide-react';
+import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw } from 'lucide-react';
 import { dataService } from './services/dataService';
+
+// Singleton lock para evitar loops globais em dev e prod
+let isGlobalSyncing = false;
+let lastGlobalSyncTime = 0;
 
 const App = () => {
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(() => {
@@ -53,7 +57,17 @@ const App = () => {
 
   // Load initial data from Supabase
   const loadData = useCallback(async (isAuto = false) => {
+    if (isGlobalSyncing) return;
+
+    // Bloqueia múltiplas chamadas rápidas (proteção contra loops de foco/mount)
+    const now = Date.now();
+    if (now - lastGlobalSyncTime < 10000) return;
+
+    isGlobalSyncing = true;
+    lastGlobalSyncTime = now;
+
     if (isAuto) setIsSyncing(true);
+
     try {
       const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers] = await Promise.all([
         dataService.getSellers(),
@@ -86,8 +100,9 @@ const App = () => {
     } catch (err) {
       console.error("Failed to load data from Supabase:", err);
     } finally {
-      setLoading(false);
+      isGlobalSyncing = false;
       setIsSyncing(false);
+      setLoading(false);
     }
   }, []);
 
@@ -104,7 +119,7 @@ const App = () => {
     }
   }, [currentUser]);
 
-  // Auto-Sync: Intervalo e Foco da Janela
+  // Auto-Sync: Intervalo (Sincronização em segundo plano)
   useEffect(() => {
     if (!currentUser) return;
 
@@ -113,39 +128,34 @@ const App = () => {
       loadData(true);
     }, 5 * 60 * 1000);
 
-    // Refresh ao voltar para a aba
-    const handleFocus = () => {
-      loadData(true);
-    };
-
-    window.addEventListener('focus', handleFocus);
-
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
     };
   }, [currentUser, loadData]);
 
-  const filteredMenu = MENU_ITEMS.filter((item: any) => {
-    if (!currentUser) return false;
+  const filteredMenu = useMemo(() => {
+    return MENU_ITEMS.filter((item: any) => {
+      if (!currentUser) return false;
 
-    // Usuário MASTER tem acesso a tudo sempre
-    if (currentUser.login === 'Master') return true;
+      // Usuário MASTER tem acesso a tudo sempre
+      if (currentUser.login === 'Master') return true;
 
-    // Se o usuário tiver permissões específicas definidas no cadastro dele
-    if (currentUser.permissions && currentUser.permissions.length > 0) {
-      return currentUser.permissions.includes(item.id);
-    }
+      // Se o usuário tiver permissões específicas definidas no cadastro dele
+      if (currentUser.permissions && currentUser.permissions.length > 0) {
+        return currentUser.permissions.includes(item.id);
+      }
 
-    // Fallback: Se for antigo e não tiver array de permissions, usa a ROLE
-    return item.roles.includes(currentUser.role);
-  });
+      // Fallback: Se for antigo e não tiver array de permissions, usa a ROLE
+      return item.roles.includes(currentUser.role);
+    });
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser && !filteredMenu.some((item: any) => item.id === activeTab)) {
       setActiveTab(filteredMenu[0]?.id || 'dashboard');
     }
   }, [currentUser, activeTab, filteredMenu]);
+
 
   if (!currentUser) {
     return <Login onLogin={setCurrentUser} systemUsers={systemUsers} />;
@@ -155,6 +165,7 @@ const App = () => {
     try {
       const saved = await dataService.saveSystemUser(user);
       setSystemUsers([...systemUsers, saved]);
+      loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar usuário: " + (err.message || err));
     }
@@ -164,6 +175,7 @@ const App = () => {
     try {
       await dataService.saveSystemUser(user);
       setSystemUsers((prev: SystemUser[]) => prev.map((u: SystemUser) => u.id === user.id ? user : u));
+      loadData(true);
     } catch (err) {
       alert("Erro ao atualizar usuário");
     }
@@ -174,6 +186,7 @@ const App = () => {
       try {
         await dataService.deleteSystemUser(id);
         setSystemUsers((prev: SystemUser[]) => prev.filter((u: SystemUser) => u.id !== id));
+        loadData(true);
       } catch (err) {
         alert("Erro ao remover usuário");
       }
@@ -197,6 +210,7 @@ const App = () => {
       };
       const savedUser = await dataService.saveSystemUser(newUser);
       setSystemUsers((prev: SystemUser[]) => [...prev, savedUser]);
+      loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar vendedor: " + (err.message || err));
     }
@@ -212,6 +226,7 @@ const App = () => {
         }
         return u;
       }));
+      loadData(true);
     } catch (err) {
       alert("Erro ao atualizar vendedor");
     }
@@ -254,6 +269,7 @@ const App = () => {
 
     dataService.saveOrder(newOrder).then(saved => {
       setOrders((prev: Order[]) => [...prev, saved]);
+      loadData(true);
       setTimeout(() => {
         setLastGeneratedQuoteId(quoteId);
         setActiveTab('quotes');
@@ -271,6 +287,7 @@ const App = () => {
         }
         return [...prev, saved];
       });
+      loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar/atualizar pedido: " + (err.message || err));
     }
@@ -281,6 +298,7 @@ const App = () => {
       try {
         await dataService.deleteOrder(orderId);
         setOrders((prev: Order[]) => prev.filter((o: Order) => o.id !== orderId));
+        loadData(true);
       } catch (err) {
         alert("Erro ao remover pedido");
       }
@@ -291,6 +309,7 @@ const App = () => {
     try {
       const saved = await dataService.saveProduct(p);
       setProducts([...products, saved]);
+      loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar produto: " + (err.message || err));
     }
@@ -300,6 +319,7 @@ const App = () => {
     try {
       await dataService.saveProduct(p);
       setProducts((prev: Product[]) => prev.map((item: Product) => item.id === p.id ? p : item));
+      loadData(true);
     } catch (err) {
       alert("Erro ao atualizar produto");
     }
@@ -309,6 +329,7 @@ const App = () => {
     try {
       await dataService.deleteProduct(id);
       setProducts((prev: Product[]) => prev.filter((p: Product) => p.id !== id));
+      loadData(true);
     } catch (err) {
       alert("Erro ao deletar produto");
     }
@@ -318,6 +339,7 @@ const App = () => {
     try {
       const saved = await dataService.saveCustomer(c);
       setCustomers([...customers, saved]);
+      loadData(true);
       return saved;
     } catch (err: any) {
       alert("Erro ao salvar cliente: " + (err.message || err));
@@ -329,6 +351,7 @@ const App = () => {
     try {
       await dataService.saveCustomer(c);
       setCustomers((prev: Customer[]) => prev.map((item: Customer) => item.id === c.id ? c : item));
+      loadData(true);
     } catch (err) {
       alert("Erro ao atualizar cliente");
     }
@@ -338,6 +361,7 @@ const App = () => {
     try {
       const saved = await dataService.saveAppointment(a);
       setAppointments([...appointments, saved]);
+      loadData(true);
     } catch (err) {
       alert("Erro ao salvar agendamento");
     }
@@ -350,6 +374,7 @@ const App = () => {
         const exists = prev.some((s: TechnicalSheet) => s.id === saved.id);
         return exists ? prev.map((s: TechnicalSheet) => s.id === saved.id ? saved : s) : [...prev, saved];
       });
+      loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar ficha técnica: " + (err.message || err));
     }
@@ -360,6 +385,7 @@ const App = () => {
       try {
         await dataService.deleteTechnicalSheet(id);
         setTechnicalSheets((prev: TechnicalSheet[]) => prev.filter((s: TechnicalSheet) => s.id !== id));
+        loadData(true);
       } catch (err: any) {
         alert("Erro ao excluir medição: " + (err.message || err));
       }
@@ -370,6 +396,7 @@ const App = () => {
     try {
       const saved = await dataService.saveInstaller(i);
       setInstallers([...installers, saved]);
+      loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar instalador: " + (err.message || err));
     }
@@ -379,6 +406,7 @@ const App = () => {
     try {
       await dataService.saveInstaller(i);
       setInstallers((prev: Installer[]) => prev.map((item: Installer) => item.id === i.id ? i : item));
+      loadData(true);
     } catch (err) {
       alert("Erro ao atualizar instalador");
     }
@@ -388,6 +416,7 @@ const App = () => {
     try {
       await dataService.deleteInstaller(id);
       setInstallers((prev: Installer[]) => prev.filter((i: Installer) => i.id !== id));
+      loadData(true);
     } catch (err) {
       alert("Erro ao excluir instalador");
     }
@@ -397,6 +426,7 @@ const App = () => {
     try {
       const saved = await dataService.saveBlockedSlot(slot);
       setBlockedSlots((prev) => [...prev, saved]);
+      loadData(true);
     } catch (err) {
       alert("Erro ao salvar bloqueio de horário");
     }
@@ -406,6 +436,7 @@ const App = () => {
     try {
       await dataService.deleteBlockedSlot(id);
       setBlockedSlots((prev) => prev.filter(s => s.id !== id));
+      loadData(true);
     } catch (err) {
       alert("Erro ao remover bloqueio de horário");
     }
@@ -510,7 +541,7 @@ const App = () => {
         />;
       case 'quotes':
         return <Quotes
-          orders={viewOrders} customers={viewCustomers} technicalSheets={viewTechnicalSheets} products={products} sellers={sellers}
+          orders={viewOrders} customers={customers} technicalSheets={viewTechnicalSheets} products={products} sellers={sellers}
           installers={installers}
           onUpdateOrder={handleUpdateOrder} initialSelectedId={lastGeneratedQuoteId || undefined}
           onClearSelection={() => setLastGeneratedQuoteId(null)} onNavigateToOrders={() => setActiveTab('orders')}
@@ -636,9 +667,17 @@ const App = () => {
             {/* Status de Sincronização */}
             <div className="hidden lg:flex items-center gap-2 pl-4 border-l border-slate-200">
               <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
                 {isSyncing ? 'Sincronizando...' : `Sincronizado: ${lastSync ? lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}`}
               </p>
+              <button
+                onClick={() => loadData(true)}
+                disabled={isSyncing}
+                className={`p-1.5 rounded-lg transition-all ${isSyncing ? 'text-blue-400 animate-spin' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                title="Sincronizar agora"
+              >
+                <RefreshCw size={14} />
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-4">

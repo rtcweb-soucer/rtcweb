@@ -54,3 +54,20 @@ export const STATUS_COLORS = {
   DELIVERED: 'bg-slate-100 text-slate-800',
 };
 
+export const CORTINA_COMMAND_OPTIONS = [
+  'Central',
+  'Direita Esquerda',
+  'Invertido',
+  'Junção',
+  'Motorizado D',
+  'Motorizado E'
+];
+
+export const TOLDO_COMMAND_OPTIONS = [
+  'Direita',
+  'Esquerda',
+  'Mola',
+  'Motorizado D',
+  'Motorizado E'
+];
+
