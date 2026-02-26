@@ -45,27 +45,23 @@ export default defineConfig(({ mode }) => {
           icons: [
             {
               src: 'logo_rtc_square.jpg',
-              sizes: '192x192',
+              sizes: '640x640',
               type: 'image/jpeg',
               purpose: 'any'
             },
             {
               src: 'logo_rtc_square.jpg',
-              sizes: '192x192',
+              sizes: '640x640',
               type: 'image/jpeg',
               purpose: 'maskable'
-            },
+            }
+          ],
+          screenshots: [
             {
-              src: 'logo_rtc_square.jpg',
-              sizes: '512x512',
+              src: 'screenshot.jpg',
+              sizes: '1280x720',
               type: 'image/jpeg',
-              purpose: 'any'
-            },
-            {
-              src: 'logo_rtc_square.jpg',
-              sizes: '512x512',
-              type: 'image/jpeg',
-              purpose: 'maskable'
+              form_factor: 'wide'
             }
           ]
         }
