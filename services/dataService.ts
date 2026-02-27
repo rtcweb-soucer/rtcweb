@@ -375,6 +375,8 @@ export const dataService = {
                 nfeSeries: o.nfe_series,
                 nfeKey: o.nfe_key,
                 nfeStatus: o.nfe_status,
+                quoteNumber: o.quote_number,
+                contractNumber: o.contract_number,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -403,6 +405,8 @@ export const dataService = {
             nfe_series: order.nfeSeries,
             nfe_key: order.nfeKey,
             nfe_status: order.nfeStatus,
+            quote_number: order.quoteNumber,
+            contract_number: order.contractNumber,
         };
         console.log('💾 Saving order payload:', payload);
 
@@ -440,6 +444,8 @@ export const dataService = {
                 nfeSeries: data.nfe_series,
                 nfeKey: data.nfe_key,
                 nfeStatus: data.nfe_status,
+                quoteNumber: data.quote_number,
+                contractNumber: data.contract_number,
                 createdAt: new Date(data.created_at)
             } as unknown as Order;
         } catch (error) {
@@ -499,9 +505,55 @@ export const dataService = {
         const { error } = await supabase.from('production_tracking').update({
             stage: stage,
             history: history,
-            updated_at: new Date()
+            updated_at: new Date().toISOString()
         }).eq('order_id', orderId);
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Supabase error updating production stage:', error);
+            throw error;
+        }
+    },
+
+    async getNextSequenceNumber(type: 'ORC' | 'CONTRATO'): Promise<string> {
+        const currentYear = new Date().getFullYear();
+        const column = type === 'ORC' ? 'quote_number' : 'contract_number';
+        const prefix = type === 'ORC' ? 'ORC' : 'Contrato';
+
+        // Buscar o último número gerado para este ano
+        const { data, error } = await supabase
+            .from('orders')
+            .select(column)
+            .ilike(column, `${prefix} ${currentYear}-%`)
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.error(`Erro ao buscar sequência para ${type}:`, error);
+            const startNumber = currentYear === 2026 ? 101 : 1;
+            return `${prefix} ${currentYear}-${startNumber}`;
+        }
+
+        let maxNum = 0;
+        if (data && data.length > 0) {
+            data.forEach(row => {
+                const val = (row as any)[column];
+                if (val) {
+                    const parts = val.split('-');
+                    if (parts.length === 2) {
+                        const num = parseInt(parts[1]);
+                        if (!isNaN(num) && num > maxNum) {
+                            maxNum = num;
+                        }
+                    }
+                }
+            });
+        }
+
+        if (maxNum === 0) {
+            const startNumber = currentYear === 2026 ? 101 : 1;
+            return `${prefix} ${currentYear}-${startNumber}`;
+        }
+
+        return `${prefix} ${currentYear}-${maxNum + 1}`;
     },
 
     async deleteOrder(id: string) {

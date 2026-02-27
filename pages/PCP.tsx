@@ -232,7 +232,9 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
                     <div key={order.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all group animate-in fade-in slide-in-from-bottom-2 duration-300">
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit mb-1">CONTRATO #{order.id}</span>
+                          <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit mb-1">
+                            {order.contractNumber || order.quoteNumber || order.id}
+                          </span>
                           <p className="text-sm font-black text-slate-900 leading-tight">Pedido de Produção</p>
                         </div>
                         <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">

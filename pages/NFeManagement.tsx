@@ -391,7 +391,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                                 className="inline-flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase ring-1 ring-blue-200 hover:bg-blue-100 transition-colors"
                                 title="Ver Pedido Completo"
                             >
-                                <Hash size={12} /> #{order.id.slice(0, 8)}...
+                                <Hash size={12} /> {order.contractNumber || order.quoteNumber || order.id}
                             </button>
                         </td>
                         <td className="px-6 py-4">

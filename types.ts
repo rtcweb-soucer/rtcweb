@@ -253,6 +253,8 @@ export interface Order {
   nfeId?: string; // New: ID interno do NFEmail para links diretos
   nfeStatus?: 'AUTHORIZED' | 'CANCELED' | 'ERROR' | 'PENDING'; // Status da nota
   nfeMessage?: string; // New: Mensagem de retorno da SEFAZ
+  quoteNumber?: string; // New: Número formatado do orçamento (ORC YEAR-XXX)
+  contractNumber?: string; // New: Número formatado do pedido (CONTRATO YEAR-XXX)
   createdAt: Date;
 }
 

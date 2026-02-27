@@ -105,7 +105,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
         printWindow.document.write(`
           <html>
             <head>
-              <title>Ficha de Instalação - ${order.id}</title>
+              <title>Ficha de Instalação - ${order.contractNumber || order.quoteNumber || order.id}</title>
               <script src="https://cdn.tailwindcss.com"></script>
               <style>
                 @media print { body { padding: 0; } }
@@ -307,7 +307,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             </div>
             <div className="text-right">
               <p className="text-sm font-black uppercase">Contrato Nº</p>
-              <p className="text-3xl font-black text-blue-600">{printOrder?.id}</p>
+              <p className="text-3xl font-black text-blue-600">{printOrder?.contractNumber || printOrder?.quoteNumber || printOrder?.id}</p>
             </div>
           </div>
 

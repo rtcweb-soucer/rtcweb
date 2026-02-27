@@ -104,7 +104,11 @@ const Orders = ({
 
   const printRef = useRef<HTMLDivElement>(null);
 
-  const filteredOrders = orders.filter((order: Order) => {
+  const sortedOrders = [...orders].sort((a, b) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  const filteredOrders = sortedOrders.filter((order: Order) => {
     const isOrder = order.status !== OrderStatus.QUOTE_SENT && order.status !== OrderStatus.PENDING_MEASUREMENT;
     if (!isOrder) return false;
 
@@ -312,7 +316,7 @@ const Orders = ({
       <html lang="pt-br">
         <head>
           <meta charset="UTF-8">
-          <title>RTC DECOR - Contrato ${selectedOrder.id}</title>
+          <title>RTC DECOR - ${selectedOrder.contractNumber || selectedOrder.quoteNumber || selectedOrder.id}</title>
           <script src="https://cdn.tailwindcss.com"></script>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
           <style>
@@ -669,7 +673,11 @@ const Orders = ({
                     <div>
                       <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Contrato de Venda</h1>
                       <div className="flex items-center gap-2 mt-1.5">
-                        <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">Nº {selectedOrder.id}</span>
+                        <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">
+                          {selectedOrder.contractNumber
+                            ? `${selectedOrder.quoteNumber || selectedOrder.id} / ${selectedOrder.contractNumber}`
+                            : `Nº ${selectedOrder.quoteNumber || selectedOrder.id}`}
+                        </span>
                         <span className="text-slate-400 font-medium text-[9px]">Data: {new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
                       </div>
                       <div className="mt-2 flex items-center gap-1.5 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded-md w-fit">
@@ -1126,7 +1134,9 @@ const Orders = ({
                   return (
                     <tr key={order.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setSelectedOrderId(order.id)}>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <p className="font-black text-blue-600">#{order.id}</p>
+                        <p className="font-black text-blue-600">
+                          {order.contractNumber || order.quoteNumber || order.id}
+                        </p>
                         <p className="text-[10px] text-slate-500">{new Date(order.createdAt).toLocaleDateString()}</p>
                       </td>
                       <td className="px-4 py-4 font-black text-slate-900 uppercase">{customer?.name}</td>
@@ -1193,7 +1203,9 @@ const Orders = ({
                   <div className="space-y-4">
                     <div>
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase border border-blue-100">#{order.id}</span>
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase border border-blue-100">
+                          {order.contractNumber || order.quoteNumber || order.id}
+                        </span>
                         <div className="flex items-center gap-1.5 text-slate-400">
                           <Clock size={12} />
                           <span className="text-[11px] font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>
@@ -1260,7 +1272,9 @@ const Orders = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-lg text-slate-900">Histórico de Produção PCP</h3>
-                  <p className="text-xs text-slate-500">Contrato Nº {historyOrder.id}</p>
+                  <p className="text-xs text-slate-500">
+                    {historyOrder.contractNumber || historyOrder.quoteNumber || historyOrder.id}
+                  </p>
                 </div>
               </div>
               <button onClick={() => setShowHistoryModal(false)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">

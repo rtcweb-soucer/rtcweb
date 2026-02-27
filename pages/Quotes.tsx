@@ -374,6 +374,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         createdAt: existingOrder?.createdAt || new Date()
       };
 
+      // Gerar número de orçamento se for novo
+      if (modalMode === 'add' && !order.quoteNumber) {
+        order.quoteNumber = await dataService.getNextSequenceNumber('ORC');
+      }
+
       const savedOrder = await dataService.saveOrder(order);
       onUpdateOrder(savedOrder);
       setShowAddEditModal(false);
@@ -385,7 +390,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     }
   };
 
-  const filteredOrders = orders.filter((order: Order) => {
+  const sortedOrders = [...orders].sort((a, b) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  const filteredOrders = sortedOrders.filter((order: Order) => {
     const isQuote = activeTab === 'open'
       ? order.status === OrderStatus.QUOTE_SENT
       : (order.status !== OrderStatus.QUOTE_SENT && order.status !== OrderStatus.PENDING_MEASUREMENT);
@@ -590,6 +599,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         createdAt: new Date()
       };
 
+      // Gerar número de contrato
+      if (!updatedOrder.contractNumber) {
+        updatedOrder.contractNumber = await dataService.getNextSequenceNumber('CONTRATO');
+      }
+
       // 3. Save Order (Commercial data)
       await dataService.saveOrder(updatedOrder);
 
@@ -629,7 +643,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       <html lang="pt-br">
         <head>
           <meta charset="UTF-8">
-          <title>RTC DECOR - Proposta ${selectedOrder.id}</title>
+          <title>RTC DECOR - ${selectedOrder.contractNumber || selectedOrder.quoteNumber || selectedOrder.id}</title>
           <script src="https://cdn.tailwindcss.com"></script>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
           <style>
@@ -739,7 +753,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       // Adiciona a imagem ao PDF
       pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, contentHeight);
 
-      pdf.save(`RTC_DECOR_Proposta_${selectedOrder.id}.pdf`);
+      pdf.save(`RTC_DECOR_${(selectedOrder.contractNumber || selectedOrder.quoteNumber || selectedOrder.id).replace(/\//g, '_')}.pdf`);
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
       alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente.');
@@ -924,7 +938,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Proposta Comercial</h1>
                   <div className="flex items-center gap-2 mt-10">
-                    <span className="bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">Nº {selectedOrder.id}</span>
+                    <span className="bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">
+                      {selectedOrder.contractNumber
+                        ? `${selectedOrder.quoteNumber || selectedOrder.id} / ${selectedOrder.contractNumber}`
+                        : `Nº ${selectedOrder.quoteNumber || selectedOrder.id}`}
+                    </span>
                     <span className="text-slate-400 font-medium text-[9px]">Data: {new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -1658,7 +1676,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                           className="hover:bg-slate-50 transition-colors cursor-pointer group"
                         >
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <p className="font-black text-blue-600 uppercase text-[10px]">Nº {order.id}</p>
+                            <p className="font-black text-blue-600 uppercase text-[10px]">
+                              {order.contractNumber || order.quoteNumber || order.id}
+                            </p>
                             <p className="text-[10px] text-slate-500 font-bold">{new Date(order.createdAt).toLocaleDateString()}</p>
                           </td>
                           <td className="px-6 py-4">
@@ -1712,7 +1732,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                       className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden"
                     >
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase border border-blue-100">Nº {order.id}</span>
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase border border-blue-100">
+                          {order.contractNumber || order.quoteNumber || order.id}
+                        </span>
                         <div className="flex items-center gap-1.5 text-slate-400">
                           <Clock size={12} />
                           <span className="text-[11px] font-bold">{new Date(order.createdAt).toLocaleDateString()}</span>

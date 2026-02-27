@@ -64,7 +64,11 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
 
    const filteredInstallments = useMemo(() => {
       return flattenedInstallments.filter(item => {
-         const matchesSearch = item.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.order.id.includes(searchTerm);
+         const matchesSearch =
+            item.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.order.id.includes(searchTerm) ||
+            item.order.contractNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.order.quoteNumber?.toLowerCase().includes(searchTerm.toLowerCase());
          const matchesStatus = statusFilter === 'ALL' || item.installment.status === statusFilter;
 
          let matchesDate = true;
@@ -313,7 +317,9 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
                                  </td>
                                  <td className="px-6 py-4">
                                     <p className="text-sm font-bold text-slate-900 truncate max-w-[200px]">{item.customer?.name}</p>
-                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">Pedido {item.order.id}</p>
+                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">
+                                       {item.order.contractNumber || item.order.quoteNumber || item.order.id}
+                                    </p>
                                  </td>
                                  <td className="px-6 py-4 text-center">
                                     <span className="text-xs font-black text-slate-400">
@@ -421,7 +427,9 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
                                     <td className="py-3 text-center font-bold">
                                        {String(item.installment.number).padStart(2, '0')}/{String(item.order.installments?.length || 1).padStart(2, '0')}
                                     </td>
-                                    <td className="py-3 font-mono text-[10px]">#{item.order.id}</td>
+                                    <td className="py-3 font-mono text-[10px]">
+                                       {item.order.contractNumber || item.order.quoteNumber || item.order.id}
+                                    </td>
                                     <td className="py-3 text-right font-black">R$ {item.installment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                     <td className="py-3 text-center">
                                        <span className={`text-[8px] font-black uppercase ${item.installment.status === 'PAID' ? 'text-emerald-600' : 'text-amber-600'}`}>
