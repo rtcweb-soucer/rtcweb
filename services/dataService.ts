@@ -407,6 +407,7 @@ export const dataService = {
             nfe_status: order.nfeStatus,
             quote_number: order.quoteNumber,
             contract_number: order.contractNumber,
+            created_at: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
         };
         console.log('💾 Saving order payload:', payload);
 

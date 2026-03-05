@@ -5,6 +5,10 @@ import { Order, Customer, TechnicalSheet, Product, OrderStatus, Seller, Installm
 import { nfEmailService } from '../services/nfEmailService';
 import { SEFAZTxtGenerator } from '../services/sefazTxtGenerator';
 import { dataService } from '../services/dataService';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import {
   Briefcase,
   Search,
@@ -356,6 +360,95 @@ const Orders = ({
     printWindow.document.close();
   };
 
+  const handleExportPDF = async () => {
+    if (!printRef.current || !selectedOrder) return;
+
+    // Criamos um clone do elemento para poder ajustar estilos sem afetar a tela
+    const element = printRef.current.cloneNode(true) as HTMLElement;
+
+    // Configurações para garantir que o clone tenha o layout correto para captura
+    element.style.position = 'fixed';
+    element.style.left = '-9999px';
+    element.style.top = '0';
+    element.style.width = '1024px';
+    element.style.boxShadow = 'none';
+    element.style.border = 'none';
+    element.style.borderRadius = '0';
+    element.style.backgroundColor = 'white';
+
+    // Remover elementos que não devem sair no print
+    const noPrintElements = element.querySelectorAll('.no-print');
+    noPrintElements.forEach(el => (el as HTMLElement).style.display = 'none');
+
+    // Forçar visibilidade de elementos que só aparecem no print
+    const printOnlyElements = element.querySelectorAll('.print\\:block, .hidden.print\\:block');
+    printOnlyElements.forEach(el => {
+      el.classList.remove('hidden', 'print:block');
+      (el as HTMLElement).style.display = 'block';
+    });
+
+    const printInlineElements = element.querySelectorAll('.print\\:inline');
+    printInlineElements.forEach(el => {
+      el.classList.remove('print:inline');
+      (el as HTMLElement).style.display = 'inline';
+    });
+
+    // Garantir que o logo e imagens sejam carregados
+    const images = element.querySelectorAll('img');
+    await Promise.all(Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+
+    // Remove truncagens para mostrar o conteúdo completo
+    const truncatedElements = element.querySelectorAll('.truncate');
+    truncatedElements.forEach(el => {
+      el.classList.remove('truncate');
+      (el as HTMLElement).style.overflow = 'visible';
+      (el as HTMLElement).style.whiteSpace = 'normal';
+    });
+
+    document.body.appendChild(element);
+
+    // Pequeno delay para garantir que o navegador processou os estilos do clone
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: 1024,
+        windowWidth: 1024
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+
+      const margin = 10;
+      const contentWidth = pdfWidth - (2 * margin);
+      const ratio = contentWidth / canvasWidth;
+      const contentHeight = canvasHeight * ratio;
+
+      pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, contentHeight);
+
+      pdf.save(`RTC_DECOR_${(selectedOrder.contractNumber || selectedOrder.quoteNumber || selectedOrder.id).replace(/\//g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente.');
+    } finally {
+      document.body.removeChild(element);
+    }
+  };
+
   const handleExportNFe = async () => {
     if (!selectedOrder || !selectedCustomer) return;
 
@@ -654,6 +747,9 @@ const Orders = ({
               </div>
             )}
 
+            <button onClick={handleExportPDF} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all shadow-sm active:scale-95">
+              <FileDown size={18} /> Exportar PDF
+            </button>
             <button onClick={() => handleGeneratePrint(true)} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
               <Printer size={18} /> Imprimir / PDF
             </button>
@@ -918,6 +1014,21 @@ const Orders = ({
               </div>
               <div className="p-8 space-y-6 max-h-[85vh] overflow-y-auto">
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Pedido</h4>
+                    <input
+                      type="date"
+                      value={new Date(editingOrder.createdAt).toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const newDate = new Date(e.target.value);
+                        newDate.setHours(12, 0, 0, 0);
+                        setEditingOrder({ ...editingOrder, createdAt: newDate });
+                      }}
+                      className="bg-slate-50 border border-slate-200 rounded-lg font-bold text-blue-600 px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    />
+                  </div>
+                  <hr className="border-slate-100" />
+
                   <div className="flex items-center justify-between">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade de Recebimento</h4>
                     <div className="bg-blue-50 px-3 py-1 rounded-full border border-blue-100">

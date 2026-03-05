@@ -27,7 +27,11 @@ import {
   CreditCard,
   Clock,
   MapPin,
-  X
+  X,
+  Filter,
+  Phone,
+  FileText as DocIcon,
+  MapPin as PinIcon
 } from 'lucide-react';
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 import ThreeDecimalInput from '../components/ThreeDecimalInput';
@@ -79,6 +83,15 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
   const [isSaving, setIsSaving] = useState(false);
   const [deliveryDays, setDeliveryDays] = useState(25);
   const [contractObservations, setContractObservations] = useState('');
+
+  // Estados dos Filtros Avançados
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterNeighborhood, setFilterNeighborhood] = useState('');
+  const [filterAddress, setFilterAddress] = useState('');
+  const [filterPhone, setFilterPhone] = useState('');
+  const [filterCPF, setFilterCPF] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
 
   // New Quote / Edit Quote State
   const [showAddEditModal, setShowAddEditModal] = useState(false);
@@ -396,14 +409,26 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
 
   const filteredOrders = sortedOrders.filter((order: Order) => {
     const isQuote = activeTab === 'open'
-      ? order.status === OrderStatus.QUOTE_SENT
+      ? (order.status === OrderStatus.QUOTE_SENT || order.status === OrderStatus.PENDING_MEASUREMENT)
       : (order.status !== OrderStatus.QUOTE_SENT && order.status !== OrderStatus.PENDING_MEASUREMENT);
 
     if (!isQuote) return false;
+
     const customer = customers.find((c: Customer) => c.id === order.customerId);
-    const matchesSearch = customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || order.id.includes(searchTerm);
-    const matchesSeller = filterSellerId ? order.sellerId === filterSellerId : true;
-    return matchesSearch && matchesSeller;
+    const orderDate = new Date(order.createdAt);
+
+    // Filter Logic
+    const matchSearch = customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || order.id.includes(searchTerm);
+    const matchSeller = filterSellerId === '' || order.sellerId === filterSellerId;
+    const matchNeighborhood = filterNeighborhood === '' || customer?.address.neighborhood.toLowerCase().includes(filterNeighborhood.toLowerCase());
+    const matchAddress = filterAddress === '' || customer?.address.street.toLowerCase().includes(filterAddress.toLowerCase());
+    const matchPhone = filterPhone === '' || customer?.phone.includes(filterPhone);
+    const matchCPF = filterCPF === '' || customer?.document.includes(filterCPF);
+
+    const matchDateStart = filterStartDate === '' || orderDate >= new Date(filterStartDate);
+    const matchDateEnd = filterEndDate === '' || orderDate <= new Date(filterEndDate + 'T23:59:59');
+
+    return matchSearch && matchSeller && matchNeighborhood && matchAddress && matchPhone && matchCPF && matchDateStart && matchDateEnd;
   });
 
   // Sincroniza os valores comerciais quando o orçamento selecionado muda
@@ -1148,14 +1173,15 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                     <X size={20} />
                   </button>
                 </div>
-                <div className="p-8 space-y-6 max-h-[85vh] overflow-y-auto">
+                <div className="p-4 sm:p-8 space-y-6 max-h-[85vh] overflow-y-auto">
                   <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Valor Original da Proposta</p>
                     <p className="text-2xl font-black text-slate-900">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
 
                   <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
+                    {/* Campos: Valor Final (full), depois Entrada + Parcelas */}
+                    <div className="space-y-3">
                       <div className="space-y-2">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Final</label>
                         <CurrencyInput
@@ -1165,81 +1191,77 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                           className="w-full px-3 py-2.5 bg-blue-50/30 border border-blue-100 rounded-xl text-md font-black text-blue-600 focus-within:ring-2 focus-within:ring-blue-500 transition-all cursor-text"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Entrada</label>
-                        <CurrencyInput
-                          value={downPayment}
-                          onChange={(val) => setDownPayment(val)}
-                          prefixColor="text-emerald-400"
-                          className="w-full px-3 py-2.5 bg-emerald-50/30 border border-emerald-100 rounded-xl text-md font-black text-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500 transition-all cursor-text"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd. Parcelas</label>
-                        <select
-                          value={numInstallments}
-                          onChange={(e) => setNumInstallments(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-md font-bold text-slate-700 outline-none"
-                        >
-                          {[1, 2, 3, 4, 5, 6, 10, 12].map(n => <option key={n} value={n}>{n}x</option>)}
-                        </select>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Entrada</label>
+                          <CurrencyInput
+                            value={downPayment}
+                            onChange={(val) => setDownPayment(val)}
+                            prefixColor="text-emerald-400"
+                            className="w-full px-3 py-2.5 bg-emerald-50/30 border border-emerald-100 rounded-xl text-md font-black text-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500 transition-all cursor-text"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Qtd. Parcelas</label>
+                          <select
+                            value={numInstallments}
+                            onChange={(e) => setNumInstallments(parseInt(e.target.value))}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-md font-bold text-slate-700 outline-none"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 10, 12].map(n => <option key={n} value={n}>{n}x</option>)}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Grade de Parcelas Editável */}
+                    {/* Grade de Parcelas - Cards (funciona em mobile e desktop) */}
                     <div className="space-y-3">
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade de Parcelamento (Editável)</h4>
-                      <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                        <table className="w-full text-left text-[11px]">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="px-4 py-2 font-black text-slate-500 uppercase">Parc.</th>
-                              <th className="px-4 py-2 font-black text-slate-500 uppercase">Vencimento</th>
-                              <th className="px-4 py-2 font-black text-slate-500 uppercase">Forma de Pagto</th>
-                              <th className="px-4 py-2 font-black text-slate-500 uppercase text-right">Valor (R$)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {installments.map((inst, idx) => (
-                              <tr key={idx}>
-                                <td className="px-4 py-2 font-bold text-slate-400">
-                                  {String(inst.number).padStart(2, '0')}/{String(installments.length).padStart(2, '0')}
-                                </td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center gap-1 group">
-                                    <Calendar size={12} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
-                                    <input
-                                      type="date"
-                                      value={inst.dueDate}
-                                      onChange={(e) => updateInstallment(idx, 'dueDate', e.target.value)}
-                                      className="bg-transparent border-none font-bold text-slate-700 p-0 focus:ring-0 w-full outline-none text-[11px]"
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2">
-                                  <select
-                                    value={inst.paymentMethod || ''}
-                                    onChange={(e) => updateInstallment(idx, 'paymentMethod', e.target.value)}
-                                    className="bg-transparent border-none font-medium text-slate-600 p-0 focus:ring-0 w-full outline-none text-[11px]"
-                                  >
-                                    <option value="">Selecione...</option>
-                                    {PAYMENT_METHODS.map(m => (
-                                      <option key={m} value={m}>{m}</option>
-                                    ))}
-                                  </select>
-                                </td>
-                                <td className="px-4 py-2 text-right">
-                                  <CurrencyInput
-                                    value={inst.value}
-                                    onChange={(val) => updateInstallment(idx, 'value', val)}
-                                    prefixColor="text-blue-400"
-                                    className="justify-end bg-blue-50/50 p-1.5 rounded-lg border border-transparent focus-within:border-blue-300 transition-all"
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div className="space-y-2">
+                        {installments.map((inst, idx) => (
+                          <div key={idx} className="bg-slate-50 rounded-2xl p-3 border border-slate-100 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Parcela {String(inst.number).padStart(2, '0')}/{String(installments.length).padStart(2, '0')}
+                              </span>
+                              <CurrencyInput
+                                value={inst.value}
+                                onChange={(val) => updateInstallment(idx, 'value', val)}
+                                prefixColor="text-blue-400"
+                                className="justify-end bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 font-black"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Vencimento</p>
+                                <input
+                                  type="date"
+                                  value={inst.dueDate}
+                                  onChange={(e) => updateInstallment(idx, 'dueDate', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div>
+                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Forma de Pagto</p>
+                                <select
+                                  value={inst.paymentMethod || ''}
+                                  onChange={(e) => updateInstallment(idx, 'paymentMethod', e.target.value)}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="">Selecione...</option>
+                                  {PAYMENT_METHODS.map(m => (
+                                    <option key={m} value={m}>{m}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-end">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                          Soma das Parcelas: <span className="text-slate-700">R$ {installments.reduce((s, i) => s + (i.value || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </span>
                       </div>
                     </div>
 
@@ -1624,25 +1646,52 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="text"
-                placeholder="Buscar por cliente ou Nº..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-              />
-            </div>
-            <select
-              value={filterSellerId}
-              onChange={(e) => setFilterSellerId(e.target.value)}
-              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700"
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div
+              className="flex items-center justify-between cursor-pointer md:cursor-default"
+              onClick={() => setShowFilters(!showFilters)}
             >
-              <option value="">Todos os Vendedores</option>
-              {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+              <div className="flex items-center gap-2 text-blue-600">
+                <Filter size={18} />
+                <h3 className="text-sm font-black uppercase tracking-widest">Filtros Avançados</h3>
+              </div>
+              <div className="md:hidden">
+                <ChevronRight size={20} className={`text-slate-400 transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+              </div>
+            </div>
+
+            <div className={`${showFilters ? 'block' : 'hidden'} md:block space-y-4`}>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input type="text" placeholder="ID ou Cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+                </div>
+
+                <select value={filterSellerId} onChange={(e) => setFilterSellerId(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
+                  <option value="">Todos os Vendedores</option>
+                  {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+
+                <input type="text" placeholder="Bairro..." value={filterNeighborhood} onChange={(e) => setFilterNeighborhood(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+                <input type="text" placeholder="Endereço..." value={filterAddress} onChange={(e) => setFilterAddress(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <input type="text" placeholder="Telefone..." value={filterPhone} onChange={(e) => setFilterPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+                <input type="text" placeholder="CPF/Documento..." value={filterCPF} onChange={(e) => setFilterCPF(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+
+                <div className="flex items-center gap-2 md:col-span-2">
+                  <div className="flex-1 relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">De</span>
+                    <input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600" />
+                  </div>
+                  <div className="flex-1 relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">Até</span>
+                    <input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">

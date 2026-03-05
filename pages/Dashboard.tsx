@@ -49,21 +49,21 @@ const Dashboard = ({ orders, appointments, products, technicalSheets }: Dashboar
 
     currentMonthOrders.forEach((order: Order) => {
       const sheet = technicalSheets.find((s: TechnicalSheet) => s.id === order.technicalSheetId);
-      if (!sheet) return;
 
-      const items = order.itemIds ? sheet.items.filter((i: any) => order.itemIds?.includes(i.id)) : sheet.items;
       let orderToldoRaw = 0;
       let orderCortinaRaw = 0;
 
-      items.forEach((item: any) => {
-        const product = products.find((p: Product) => p.id === item.productId);
-        if (!product) return;
-        const area = (item.width * item.height) || 1;
-        const val = product.unidade === 'M2' ? product.valor * area : product.valor;
-        if (product.tipo === 'Toldo') orderToldoRaw += val;
-        // Fix: Use orderCortinaRaw instead of undefined orderCortinaTotal
-        else orderCortinaRaw += val; // Corrigido: acumular no total de cortina
-      });
+      if (sheet) {
+        const items = order.itemIds ? sheet.items.filter((i: any) => order.itemIds?.includes(i.id)) : sheet.items;
+        items.forEach((item: any) => {
+          const product = products.find((p: Product) => p.id === item.productId);
+          if (!product) return;
+          const area = (item.width * item.height) || 1;
+          const val = product.unidade === 'M2' ? product.valor * area : product.valor;
+          if (product.tipo === 'Toldo') orderToldoRaw += val;
+          else orderCortinaRaw += val;
+        });
+      }
 
       // Prorate based on items to split the actual final totalValue
       const totalRaw = orderToldoRaw + orderCortinaRaw;
@@ -73,7 +73,8 @@ const Dashboard = ({ orders, appointments, products, technicalSheets }: Dashboar
         toldoTotal += order.totalValue * ratioToldo;
         cortinaTotal += order.totalValue * ratioCortina;
       } else {
-        // Fallback se não houver itens com valor: assume pela maioria (mock)
+        // Fallback: If no sheet or items with values, assume Toldo (most frequent)
+        // This ensures the order is at least counted in totalGeral
         toldoTotal += order.totalValue;
       }
     });

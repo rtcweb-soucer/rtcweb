@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura } from '../types';
-import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3 } from 'lucide-react';
+import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3, ArrowUp, ArrowDown, Copy } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
 import { normalizeString, fuzzyMatch } from '../utils/searchUtils';
@@ -244,6 +244,39 @@ const MeasurementForm = ({
     }));
   };
 
+  const moveItemUp = (index: number) => {
+    if (index === 0) return;
+    const newItems = [...items];
+    const temp = newItems[index];
+    newItems[index] = newItems[index - 1];
+    newItems[index - 1] = temp;
+    setItems(newItems);
+  };
+
+  const moveItemDown = (index: number) => {
+    if (index === items.length - 1) return;
+    const newItems = [...items];
+    const temp = newItems[index];
+    newItems[index] = newItems[index + 1];
+    newItems[index + 1] = temp;
+    setItems(newItems);
+  };
+
+  const duplicateItem = (itemToDuplicate: MeasurementItem) => {
+    const newId = crypto.randomUUID();
+    const duplicatedItem = { ...itemToDuplicate, id: newId };
+    if (duplicatedItem.productionSheet) {
+      delete duplicatedItem.productionSheet;
+    }
+    setItems([...items, duplicatedItem]);
+    setSelectedItemIds((prev: Set<string>) => {
+      const next = new Set(prev);
+      next.add(newId);
+      return next;
+    });
+  };
+
+
   const handleAiInsights = async () => {
     if (items.length === 0) return;
     setLoadingAi(true);
@@ -368,7 +401,9 @@ const MeasurementForm = ({
       alert("Por favor, selecione pelo menos um item desta medição antiga para compor o orçamento.");
       return;
     }
-    onGenerateQuote(sheet, Array.from(selectedIds));
+    // Preservar a ordem original da ficha
+    const orderedSelectedIds = sheet.items.filter(item => selectedIds.has(item.id)).map(item => item.id);
+    onGenerateQuote(sheet, orderedSelectedIds);
   };
 
   const openProductionModal = async (itemId: string) => {
@@ -835,8 +870,31 @@ const MeasurementForm = ({
                       )}
                     </div>
 
-                    <div className="md:col-span-1 flex justify-end">
-                      <button onClick={() => removeItem(item.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
+                    <div className="md:col-span-1 flex justify-end gap-1">
+                      <button
+                        onClick={() => moveItemUp(index)}
+                        disabled={index === 0}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30"
+                        title="Subir posição"
+                      >
+                        <ArrowUp size={16} />
+                      </button>
+                      <button
+                        onClick={() => moveItemDown(index)}
+                        disabled={index === items.length - 1}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30"
+                        title="Descer posição"
+                      >
+                        <ArrowDown size={16} />
+                      </button>
+                      <button
+                        onClick={() => duplicateItem(item)}
+                        className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
+                        title="Duplicar Item"
+                      >
+                        <Copy size={16} />
+                      </button>
+                      <button onClick={() => removeItem(item.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Remover Item">
                         <Trash2 size={16} />
                       </button>
                     </div>
