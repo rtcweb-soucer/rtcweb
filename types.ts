@@ -93,6 +93,8 @@ export interface Customer {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
+  legacyId?: number;
+  legacyHistory?: string;
 }
 
 // Interfaces para campos específicos por tipo de produto
@@ -273,4 +275,58 @@ export interface SellerBlockedSlot {
   endTime: string; // HH:MM
   reason: string;
   createdAt?: string;
+}
+
+// Financial Module Types
+
+export interface AccountCategory {
+  id: string;
+  code: string;
+  name: string;
+  type: 'INCOME' | 'EXPENSE';
+  parent_id?: string;
+  active: boolean;
+  created_at?: string;
+}
+
+export interface FinancialTransaction {
+  id: string;
+  description: string;
+  amount: number;
+  type: 'INCOME' | 'EXPENSE';
+  status: 'PENDING' | 'PAID' | 'CANCELED';
+  due_date: string;
+  paid_date?: string;
+  category_id?: string;
+  order_id?: string;
+  installment_id?: string;
+  installer_id?: string;
+  seller_id?: string;
+  notes?: string;
+  payment_method?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PurchaseRequest {
+  id: string;
+  order_id?: string;
+  requester_name?: string;
+  items_requested: any[]; // e.g: { name: string, quantity: number, unit: string }[]
+  status: 'PENDING' | 'ORDERED' | 'RECEIVED' | 'CANCELED';
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  supplier_name: string;
+  total_amount: number;
+  status: 'PENDING' | 'RECEIVED' | 'CANCELED';
+  expected_delivery_date?: string;
+  received_date?: string;
+  linked_request_ids?: string[];
+  created_at?: string;
+  updated_at?: string;
 }

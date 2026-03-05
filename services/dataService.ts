@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer } from '../types';
+import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder } from '../types';
 
 const SYNC_QUEUE_KEY = 'rtc_sync_queue';
 
@@ -90,6 +90,8 @@ export const dataService = {
                 contactName: c.contact_name,
                 contactPhone: c.contact_phone,
                 contactEmail: c.contact_email,
+                legacyId: c.legacy_id,
+                legacyHistory: c.legacy_history,
             })) as Customer[];
 
             localStorage.setItem('rtc_cache_customers', JSON.stringify(normalized));
@@ -109,6 +111,8 @@ export const dataService = {
                 contact_name: customer.contactName,
                 contact_phone: customer.contactPhone,
                 contact_email: customer.contactEmail,
+                legacy_id: customer.legacyId,
+                legacy_history: customer.legacyHistory,
             };
             // @ts-ignore
             delete payload.tradeName;
@@ -118,6 +122,10 @@ export const dataService = {
             delete payload.contactPhone;
             // @ts-ignore
             delete payload.contactEmail;
+            // @ts-ignore
+            delete payload.legacyId;
+            // @ts-ignore
+            delete payload.legacyHistory;
 
             console.log("Saving customer payload:", payload);
             const { data, error } = await supabase.from('customers').upsert(payload).select().single();
@@ -133,6 +141,8 @@ export const dataService = {
                 contactName: data.contact_name,
                 contactPhone: data.contact_phone,
                 contactEmail: data.contact_email,
+                legacyId: data.legacy_id,
+                legacyHistory: data.legacy_history,
             } as Customer;
         } catch (err: any) {
             console.error("DataService Exception:", err);
@@ -1070,6 +1080,48 @@ export const dataService = {
             cnpj: data.cnpj,
             apiKey: data.api_key
         };
+    },
+
+    // Financial & Purchasing Module
+    async getAccountCategories() {
+        const { data, error } = await supabase.from('account_categories').select('*');
+        if (error) throw error;
+        return data as AccountCategory[];
+    },
+    async saveAccountCategory(category: AccountCategory) {
+        const { data, error } = await supabase.from('account_categories').upsert(category).select().single();
+        if (error) throw error;
+        return data as AccountCategory;
+    },
+    async getFinancialTransactions() {
+        const { data, error } = await supabase.from('financial_transactions').select('*');
+        if (error) throw error;
+        return data as FinancialTransaction[];
+    },
+    async saveFinancialTransaction(transaction: FinancialTransaction) {
+        const { data, error } = await supabase.from('financial_transactions').upsert(transaction).select().single();
+        if (error) throw error;
+        return data as FinancialTransaction;
+    },
+    async getPurchaseRequests() {
+        const { data, error } = await supabase.from('purchase_requests').select('*');
+        if (error) throw error;
+        return data as PurchaseRequest[];
+    },
+    async savePurchaseRequest(request: PurchaseRequest) {
+        const { data, error } = await supabase.from('purchase_requests').upsert(request).select().single();
+        if (error) throw error;
+        return data as PurchaseRequest;
+    },
+    async getPurchaseOrders() {
+        const { data, error } = await supabase.from('purchase_orders').select('*');
+        if (error) throw error;
+        return data as PurchaseOrder[];
+    },
+    async savePurchaseOrder(order: PurchaseOrder) {
+        const { data, error } = await supabase.from('purchase_orders').upsert(order).select().single();
+        if (error) throw error;
+        return data as PurchaseOrder;
     }
 };
 

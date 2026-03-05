@@ -267,6 +267,9 @@ const Customers = ({
                 </div>
                 <h3 className="font-bold text-xl text-slate-900 leading-tight mb-1">{selectedCustomer.name}</h3>
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{selectedCustomer.document}</p>
+                {selectedCustomer.legacyId && (
+                  <span className="mt-2 text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md uppercase inline-block">ID Antigo: {selectedCustomer.legacyId}</span>
+                )}
               </div>
 
               <div className="space-y-6 flex-1">
@@ -380,6 +383,18 @@ const Customers = ({
                         {customerAppointments.length === 0 && <p className="text-sm text-slate-400 italic">Nenhuma atividade recente encontrada.</p>}
                       </div>
                     </div>
+
+                    {selectedCustomer.legacyHistory && (
+                      <div className="space-y-4">
+                        <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                          <History size={18} className="text-emerald-500" />
+                          Histórico (Sistema Antigo)
+                        </h4>
+                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
+                          <pre className="text-xs font-medium text-amber-900 whitespace-pre-wrap font-sans">{selectedCustomer.legacyHistory}</pre>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

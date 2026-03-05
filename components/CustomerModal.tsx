@@ -234,6 +234,21 @@ const CustomerModal = ({ isOpen, onClose, onSave, initialData, mode = 'add' }: C
                                 </div>
                             </div>
                         )}
+                        <div className="col-span-full border-t border-slate-100 pt-4 mt-2">
+                            <div className="flex items-center gap-2 mb-4">
+                                <h4 className="text-sm font-black text-slate-700 uppercase tracking-widest">Integração Sistema Antigo (Opcional)</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Código Antigo (ID)</label>
+                                    <input type="number" value={formData.legacyId || ''} onChange={(e) => setFormData({ ...formData, legacyId: e.target.value ? Number(e.target.value) : undefined })} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Ex: 1234" />
+                                </div>
+                                <div className="md:col-span-3">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Histórico em Texto (Cole os pedidos antigos aqui)</label>
+                                    <textarea value={formData.legacyHistory || ''} onChange={(e) => setFormData({ ...formData, legacyHistory: e.target.value })} rows={4} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-sm" placeholder="Ex: Pedido 05/03/2026 - Cortina Rolo Motorizada - R$ 2.500,00..."></textarea>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div className="flex gap-4 pt-4 border-t border-slate-100 mt-6">
                         <button type="button" onClick={onClose} className="flex-1 py-3 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">Cancelar</button>

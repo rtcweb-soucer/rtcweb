@@ -23,7 +23,8 @@ import TeamRegistration from './pages/TeamRegistration';
 import Agenda from './pages/Agenda';
 import Installers from './pages/Installers';
 import NFeManagement from './pages/NFeManagement';
-import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw } from 'lucide-react';
+import Buyer from './pages/Buyer';
+import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
 
 // Singleton lock para evitar loops globais em dev e prod
@@ -582,6 +583,8 @@ const App = () => {
         />;
       case 'pcp':
         return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} onSelectCustomer={handleSelectCustomer} />;
+      case 'buyer':
+        return <Buyer orders={orders} customers={customers} />;
       case 'installations':
         return <Installations
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products}

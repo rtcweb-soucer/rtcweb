@@ -23,7 +23,10 @@ import {
   X,
   Users,
   User as UserIcon,
-  Calendar
+  Calendar,
+  ShoppingCart,
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 interface PCPProps {
@@ -49,6 +52,13 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
+
+  // Módulo de Compras (Requisição de Material)
+  const [showRequestMaterialModal, setShowRequestMaterialModal] = useState(false);
+  const [requestMaterialOrder, setRequestMaterialOrder] = useState<Order | null>(null);
+  const [requestMaterialItems, setRequestMaterialItems] = useState([{ name: '', quantity: 1, unit: 'un' }]);
+  const [requestNotes, setRequestNotes] = useState('');
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
   /* REMOVED OLD LOGIC */
   // Internal state for orders with production tracking
@@ -183,6 +193,49 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
     setPrintData(null);
   };
 
+  // Funções para Requisição de Material
+  const handleOpenRequestMaterial = (order: Order) => {
+    setRequestMaterialOrder(order);
+    setRequestMaterialItems([{ name: '', quantity: 1, unit: 'un' }]);
+    setRequestNotes('');
+    setShowRequestMaterialModal(true);
+  };
+
+  const handleCloseRequestMaterial = () => {
+    setShowRequestMaterialModal(false);
+    setRequestMaterialOrder(null);
+  };
+
+  const handleSaveRequestMaterial = async () => {
+    if (!requestMaterialOrder) return;
+
+    // Validate
+    const validItems = requestMaterialItems.filter(item => item.name.trim() !== '');
+    if (validItems.length === 0) {
+      alert("Adicione pelo menos um item válido com nome.");
+      return;
+    }
+
+    setIsSubmittingRequest(true);
+    try {
+      await dataService.savePurchaseRequest({
+        id: crypto.randomUUID(),
+        order_id: requestMaterialOrder.id,
+        requester_name: 'PCP', // ideal seria pegar logado
+        items_requested: validItems,
+        status: 'PENDING',
+        notes: requestNotes
+      });
+      alert('Solicitação de material enviada ao Comprador com sucesso!');
+      handleCloseRequestMaterial();
+    } catch (error) {
+      console.error('Failed to save purchase request:', error);
+      alert('Erro ao enviar solicitação.');
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-h-full flex flex-col">
       <div className="flex justify-between items-center shrink-0">
@@ -283,6 +336,17 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
                         </div>
                       </div>
 
+                      {stage.id === ProductionStage.PROVISIONING && (
+                        <div className="mb-4">
+                          <button
+                            onClick={() => handleOpenRequestMaterial(order)}
+                            className="w-full flex justify-center items-center gap-2 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-colors border border-indigo-200"
+                          >
+                            <ShoppingCart size={16} /> Solicitar Material
+                          </button>
+                        </div>
+                      )}
+
                       {/* Controles de Movimentação (Forward/Encaminhar) */}
                       <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-50">
                         <button
@@ -355,6 +419,124 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
               >
                 <Printer size={18} /> Imprimir Ficha
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Solicitar Material */}
+      {showRequestMaterialModal && requestMaterialOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-100/50">
+            <div className="p-6 border-b border-slate-100/60 bg-white/50 backdrop-blur-md sticky top-0 z-10 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Solicitar Material (Compras)</h3>
+                <p className="text-sm font-medium text-slate-500 mt-1">
+                  Pedido {requestMaterialOrder.contractNumber || requestMaterialOrder.quoteNumber} - {customers.find(c => c.id === requestMaterialOrder.customerId)?.name}
+                </p>
+              </div>
+              <button onClick={handleCloseRequestMaterial} className="p-2.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-full text-slate-400 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/30">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 block">Itens Solicitados</label>
+                  <div className="space-y-2">
+                    {requestMaterialItems.map((item, index) => (
+                      <div key={index} className="flex gap-2 items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => {
+                            const newItems = [...requestMaterialItems];
+                            newItems[index].name = e.target.value;
+                            setRequestMaterialItems(newItems);
+                          }}
+                          placeholder="Nome do Material (ex: Lona Cristal)"
+                          className="flex-1 bg-transparent border-none text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:ring-0 px-2"
+                        />
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const newItems = [...requestMaterialItems];
+                            newItems[index].quantity = Number(e.target.value);
+                            setRequestMaterialItems(newItems);
+                          }}
+                          min="0.1"
+                          step="0.1"
+                          className="w-20 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 text-center px-1"
+                        />
+                        <select
+                          value={item.unit}
+                          onChange={(e) => {
+                            const newItems = [...requestMaterialItems];
+                            newItems[index].unit = e.target.value;
+                            setRequestMaterialItems(newItems);
+                          }}
+                          className="w-20 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 px-1"
+                        >
+                          <option value="un">UN</option>
+                          <option value="m">M</option>
+                          <option value="m2">M²</option>
+                          <option value="kg">KG</option>
+                          <option value="cx">CX</option>
+                        </select>
+                        <button
+                          onClick={() => {
+                            const newItems = requestMaterialItems.filter((_, i) => i !== index);
+                            setRequestMaterialItems(newItems.length ? newItems : [{ name: '', quantity: 1, unit: 'un' }]);
+                          }}
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setRequestMaterialItems([...requestMaterialItems, { name: '', quantity: 1, unit: 'un' }])}
+                      className="w-full py-3 flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 font-bold text-sm hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all"
+                    >
+                      <Plus size={16} /> Adicionar Item
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 block mt-6">Observações para o Comprador</label>
+                  <textarea
+                    value={requestNotes}
+                    onChange={(e) => setRequestNotes(e.target.value)}
+                    placeholder="Especifique urgência, fabricante preferido, etc..."
+                    rows={3}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none shadow-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white sticky bottom-0 z-10 flex justify-end gap-3">
+              <button
+                onClick={handleCloseRequestMaterial}
+                disabled={isSubmittingRequest}
+                className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveRequestMaterial}
+                disabled={isSubmittingRequest}
+                className="px-6 py-2.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmittingRequest ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <><ShoppingCart size={18} /> Enviar ao Comprador</>
+                )}
               </button>
             </div>
           </div>
