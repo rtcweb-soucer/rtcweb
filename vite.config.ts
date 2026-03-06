@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => {
         devOptions: {
           enabled: true
         },
+        workbox: {
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024
+        },
         manifestFilename: 'manifest.json',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo_rtc_square.png'],
         manifest: {
