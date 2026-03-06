@@ -4,10 +4,13 @@ import { useState } from 'react';
 import { Customer, Appointment, Order, Seller, OrderStatus, TechnicalSheet, SystemUser } from '../types';
 import { fuzzyMatch } from '../utils/searchUtils';
 import CustomerModal from '../components/CustomerModal';
+import { dataService } from '../services/dataService';
+import * as XLSX from 'xlsx';
 import {
   Plus,
   Search,
   MapPin,
+  FileDown,
   Phone,
   Mail,
   Building2,
@@ -79,6 +82,9 @@ const Customers = ({
     status: 'SCHEDULED'
   });
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
   React.useEffect(() => {
     if (preselectedCustomerId) {
       const customer = customers.find(c => c.id === preselectedCustomerId);
@@ -130,6 +136,102 @@ const Customers = ({
     setShowDetailModal(true);
   };
 
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        let duplicateCount = 0;
+        const importedDocuments = new Set<string>();
+        const toSave: Customer[] = [];
+
+        for (const row of data as any[]) {
+          const rawDoc = String(row.document || '').replace(/\D/g, '');
+
+          if (rawDoc.length === 0) continue; // Pula se não tiver nenhum documento
+
+          // Verifica se já existe na base de dados ou na própria planilha
+          const isDuplicateInDB = customers.some(c => c.document.replace(/\D/g, '') === rawDoc);
+          if (isDuplicateInDB || importedDocuments.has(rawDoc)) {
+            duplicateCount++;
+            continue; // Pula este cliente duplicado
+          }
+          importedDocuments.add(rawDoc);
+
+          const inferType = rawDoc.length > 11 ? 'CNPJ' : 'CPF';
+          const finalType = row.type ? (String(row.type).toUpperCase().includes('J') ? 'CNPJ' : 'CPF') : inferType;
+
+          const newCust: Customer = {
+            id: crypto.randomUUID(),
+            type: finalType as 'CPF' | 'CNPJ',
+            document: rawDoc,
+            name: row.name || 'Cliente Sem Nome',
+            tradeName: row.tradeName || '',
+            email: row.email ? String(row.email).trim() : '',
+            phone: String(row.phone || '').substring(0, 150),
+            phone2: row.phone2 ? String(row.phone2).substring(0, 150) : undefined,
+            address: {
+              cep: String(row.cep || '').replace(/\D/g, ''),
+              street: row.street || '',
+              number: String(row.number || ''),
+              complement: row.complement || '',
+              neighborhood: row.neighborhood || '',
+              city: row.city || '',
+              state: row.state || ''
+            },
+            contactName: row.contactName || '',
+            contactPhone: row.contactPhone ? String(row.contactPhone).substring(0, 150) : undefined,
+            contactEmail: row.contactEmail ? String(row.contactEmail).trim() : '',
+            legacyId: row.legacyId ? Number(row.legacyId) : undefined,
+            legacyHistory: row.legacyHistory || ''
+          };
+          toSave.push(newCust);
+        }
+
+        if (toSave.length === 0) {
+          alert(`Nenhum cliente novo encontrado.${duplicateCount > 0 ? ` (${duplicateCount} duplicados ignorados)` : ''}`);
+          setIsImporting(false);
+          return;
+        }
+
+        const confirmMsg = `Encontrei ${toSave.length} clientes novos para importar.\n` +
+          (duplicateCount > 0 ? `${duplicateCount} duplicados serão ignorados.\n` : '') +
+          `Deseja realizar a gravação definitiva no banco de dados?`;
+
+        if (!window.confirm(confirmMsg)) {
+          setIsImporting(false);
+          return;
+        }
+
+        let successCount = 0;
+        for (const cust of toSave) {
+          await dataService.saveCustomer(cust);
+          successCount++;
+        }
+
+        alert(`Sucesso! ${successCount} clientes importados.`);
+        window.location.reload();
+
+      } catch (err) {
+        console.error("Erro na importação:", err);
+        alert("Erro ao ler arquivo Excel. Verifique se o modelo está correto.");
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   const filteredCustomers = customers.filter((c: Customer) =>
     fuzzyMatch(c.name || '', searchTerm) ||
     (c.document || '').includes(searchTerm)
@@ -148,13 +250,33 @@ const Customers = ({
           <h2 className="text-2xl font-bold text-slate-900">Clientes</h2>
           <p className="text-slate-500">Gerencie sua base de clientes e leads.</p>
         </div>
-        <button
-          onClick={() => { setSelectedCustomer(null); setShowModal(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-        >
-          <Plus size={20} />
-          Novo Cliente
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <a
+            href="/modelo_importacao_clientes.xlsx"
+            download
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium border border-slate-300"
+            title="Baixar planilha modelo vazia"
+          >
+            <FileDown size={20} />
+            Baixar Modelo
+          </a>
+          <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .csv" className="hidden" />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-md disabled:opacity-50"
+          >
+            <FileText size={20} />
+            {isImporting ? 'Importando...' : 'Importar Excel'}
+          </button>
+          <button
+            onClick={() => { setSelectedCustomer(null); setShowModal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+          >
+            <Plus size={20} />
+            Novo Cliente
+          </button>
+        </div>
       </div>
 
       <div className="relative group max-w-md">

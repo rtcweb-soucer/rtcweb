@@ -1,0 +1,3 @@
+type,document,name,tradeName,email,phone,phone2,cep,street,number,complement,neighborhood,city,state,contactName,contactPhone,contactEmail,legacyId,legacyHistory
+CPF,12345678909,João da Silva,,joao@email.com,11999999999,,01000000,Rua Exemplo,123,Apto 10,Centro,São Paulo,SP,,,,1010,Pedido de 2024
+CNPJ,12345678000199,Empresa XYZ Ltda,Loja XYZ,contato@empresa.com,1133333333,,02000000,Avenida Brasil,1000,,Jardins,São Paulo,SP,Maria,11988888888,maria@empresa.com,2020,Vários pedidos em 2023
