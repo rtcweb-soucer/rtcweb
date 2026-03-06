@@ -324,7 +324,6 @@ const MeasurementForm = ({
 
     setItems([]);
     setSelectedItemIds(new Set());
-    setSelectedCustomerId('');
     setHistorySelectedItems({});
     setAiInsights(null);
     setShowSuccess(true);
