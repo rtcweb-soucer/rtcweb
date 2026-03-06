@@ -26,7 +26,8 @@ import {
   Clock,
   ArrowRightCircle,
   SearchCode,
-  Ruler
+  Ruler,
+  RefreshCw
 } from 'lucide-react';
 
 // Helpers para tratamento de data local
@@ -75,6 +76,7 @@ const Customers = ({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'history' | 'schedule'>('info');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showOnlyToday, setShowOnlyToday] = useState(true);
 
   const [scheduleData, setScheduleData] = useState<Partial<Appointment>>({
     date: getLocalISODate(new Date()),
@@ -232,10 +234,18 @@ const Customers = ({
     reader.readAsBinaryString(file);
   };
 
-  const filteredCustomers = customers.filter((c: Customer) =>
-    fuzzyMatch(c.name || '', searchTerm) ||
-    (c.document || '').includes(searchTerm)
-  );
+  const todayStr = getLocalISODate(new Date());
+
+  const filteredCustomers = customers.filter((c: Customer) => {
+    const searchMatch = fuzzyMatch(c.name || '', searchTerm) || (c.document || '').includes(searchTerm);
+
+    if (showOnlyToday && !searchTerm) {
+      const createdDateStr = c.createdAt ? (typeof c.createdAt === 'string' ? c.createdAt.split('T')[0] : new Date(c.createdAt).toISOString().split('T')[0]) : '';
+      return searchMatch && createdDateStr === todayStr;
+    }
+
+    return searchMatch;
+  });
 
   const customerAppointments = appointments.filter((a: Appointment) => a.customerId === selectedCustomer?.id);
   const customerOrders = orders.filter((o: Order) => o.customerId === selectedCustomer?.id);
@@ -279,15 +289,34 @@ const Customers = ({
         </div>
       </div>
 
-      <div className="relative group max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
-        <input
-          type="text"
-          placeholder="Buscar cliente por nome ou documento..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-        />
+      <div className="flex flex-col sm:flex-row gap-4 mb-2">
+        <div className="relative group flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+          <input
+            type="text"
+            placeholder="Buscar cliente por nome ou documento..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowOnlyToday(!showOnlyToday)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${showOnlyToday ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 shadow-sm'}`}
+            title="Alternar entre cadastrados hoje ou todos os clientes"
+          >
+            {showOnlyToday ? 'Mostrando: Hoje' : 'Mostrando: Todos'}
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            title="Sincronizar e recarregar a tela"
+          >
+            <RefreshCw size={16} />
+            Atualizar
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">

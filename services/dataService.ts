@@ -92,6 +92,7 @@ export const dataService = {
                 contactEmail: c.contact_email,
                 legacyId: c.legacy_id,
                 legacyHistory: c.legacy_history,
+                createdAt: c.created_at,
             })) as Customer[];
 
             localStorage.setItem('rtc_cache_customers', JSON.stringify(normalized));
@@ -143,6 +144,7 @@ export const dataService = {
                 contactEmail: data.contact_email,
                 legacyId: data.legacy_id,
                 legacyHistory: data.legacy_history,
+                createdAt: data.created_at,
             } as Customer;
         } catch (err: any) {
             console.error("DataService Exception:", err);

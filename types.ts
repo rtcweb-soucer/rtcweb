@@ -96,6 +96,7 @@ export interface Customer {
   contactEmail?: string;
   legacyId?: number;
   legacyHistory?: string;
+  createdAt?: string | Date;
 }
 
 // Interfaces para campos específicos por tipo de produto

@@ -509,7 +509,16 @@ const App = () => {
     viewTechnicalSheets.forEach(t => customerIds.add(t.customerId));
     viewAppointments.forEach(a => customerIds.add(a.customerId));
 
-    const viewCustomers = customers.filter(c => customerIds.has(c.id));
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const viewCustomers = customers.filter(c => {
+      if (customerIds.has(c.id)) return true;
+      if (c.createdAt) {
+        const createdDateStr = typeof c.createdAt === 'string' ? c.createdAt.split('T')[0] : (c.createdAt as Date).toISOString().split('T')[0];
+        if (createdDateStr === todayStr) return true;
+      }
+      return false;
+    });
 
     return { viewOrders, viewTechnicalSheets, viewAppointments, viewCustomers };
   };
