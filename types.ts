@@ -305,6 +305,7 @@ export interface FinancialTransaction {
   seller_id?: string;
   notes?: string;
   payment_method?: string;
+  purchase_order_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -316,6 +317,7 @@ export interface PurchaseRequest {
   items_requested: any[]; // e.g: { name: string, quantity: number, unit: string }[]
   status: 'PENDING' | 'ORDERED' | 'RECEIVED' | 'CANCELED';
   notes?: string;
+  purchase_order_id?: string;
   created_at?: string;
   updated_at?: string;
 }

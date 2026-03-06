@@ -93,7 +93,7 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
             const updatedRequest: PurchaseRequest = {
                 ...activeRequest,
                 status: 'ORDERED',
-                purchase_order_id: newPO.id as any
+                purchase_order_id: newPO.id
             };
 
             await dataService.savePurchaseRequest(updatedRequest);
@@ -139,7 +139,7 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                 due_date: new Date().toISOString().split('T')[0],
                 category_id: '2.0.0' as any,
                 order_id: request.order_id,
-                purchase_order_id: poId as any,
+                purchase_order_id: poId,
                 notes: `Origem: Módulo de Compras. Item: ${request.items_requested[0]?.name || 'Diversos'}`,
                 created_at: new Date().toISOString()
             };
