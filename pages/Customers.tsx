@@ -240,7 +240,11 @@ const Customers = ({
     const searchMatch = fuzzyMatch(c.name || '', searchTerm) || (c.document || '').includes(searchTerm);
 
     if (showOnlyToday && !searchTerm) {
-      const createdDateStr = c.createdAt ? (typeof c.createdAt === 'string' ? c.createdAt.split('T')[0] : new Date(c.createdAt).toISOString().split('T')[0]) : '';
+      const dateRaw = c.createdAt || (c as any).created_at;
+      let createdDateStr = '';
+      if (dateRaw) {
+        createdDateStr = typeof dateRaw === 'string' ? dateRaw.split('T')[0] : new Date(dateRaw).toISOString().split('T')[0];
+      }
       return searchMatch && createdDateStr === todayStr;
     }
 

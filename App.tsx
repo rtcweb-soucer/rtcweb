@@ -513,8 +513,9 @@ const App = () => {
 
     const viewCustomers = customers.filter(c => {
       if (customerIds.has(c.id)) return true;
-      if (c.createdAt) {
-        const createdDateStr = typeof c.createdAt === 'string' ? c.createdAt.split('T')[0] : (c.createdAt as Date).toISOString().split('T')[0];
+      const dateRaw = c.createdAt || (c as any).created_at;
+      if (dateRaw) {
+        const createdDateStr = typeof dateRaw === 'string' ? dateRaw.split('T')[0] : (dateRaw as Date).toISOString().split('T')[0];
         if (createdDateStr === todayStr) return true;
       }
       return false;
