@@ -243,7 +243,7 @@ const Customers = ({
       const dateRaw = c.createdAt || (c as any).created_at;
       let createdDateStr = '';
       if (dateRaw) {
-        createdDateStr = typeof dateRaw === 'string' ? dateRaw.split('T')[0] : new Date(dateRaw).toISOString().split('T')[0];
+        createdDateStr = typeof dateRaw === 'string' ? dateRaw.substring(0, 10) : getLocalISODate(dateRaw as Date);
       }
       return searchMatch && createdDateStr === todayStr;
     }

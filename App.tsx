@@ -27,6 +27,13 @@ import Buyer from './pages/Buyer';
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
 
+const getLocalISODate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Singleton lock para evitar loops globais em dev e prod
 let isGlobalSyncing = false;
 let lastGlobalSyncTime = 0;
@@ -515,7 +522,7 @@ const App = () => {
       if (customerIds.has(c.id)) return true;
       const dateRaw = c.createdAt || (c as any).created_at;
       if (dateRaw) {
-        const createdDateStr = typeof dateRaw === 'string' ? dateRaw.split('T')[0] : (dateRaw as Date).toISOString().split('T')[0];
+        const createdDateStr = typeof dateRaw === 'string' ? dateRaw.substring(0, 10) : getLocalISODate(dateRaw as Date);
         if (createdDateStr === todayStr) return true;
       }
       return false;
