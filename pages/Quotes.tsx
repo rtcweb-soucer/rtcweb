@@ -1883,7 +1883,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                       onChange={(e) => setNumInstallments(parseInt(e.target.value))}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-md font-bold text-slate-700 outline-none"
                     >
-                      {[1, 2, 3, 4, 5, 6, 10, 12].map(n => <option key={n} value={n}>{n}x</option>)}
+                      {Array.from({ length: 20 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
                     </select>
                   </div>
                 </div>
