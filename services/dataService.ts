@@ -1103,6 +1103,10 @@ export const dataService = {
         if (error) throw error;
         return data as FinancialTransaction;
     },
+    async deleteFinancialTransaction(id: string) {
+        const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
+        if (error) throw error;
+    },
     async getPurchaseRequests() {
         const { data, error } = await supabase.from('purchase_requests').select('*');
         if (error) throw error;

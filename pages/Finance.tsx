@@ -1,37 +1,46 @@
 
 import * as React from 'react';
-import { useState, useMemo, useRef } from 'react';
-import { Order, Customer, Installment } from '../types';
+import { useState, useMemo } from 'react';
+import { Order, Customer, FinancialTransaction, AccountCategory } from '../types';
 import {
    Wallet,
    Search,
    Calendar,
    CheckCircle2,
-   AlertCircle,
    Clock,
    Printer,
-   Filter,
-   DollarSign,
-   User,
-   FileText,
    ArrowUpRight,
    TrendingUp,
    X,
-   Receipt
+   Receipt,
+   ArrowDownRight,
+   History,
+   LayoutDashboard,
+   Plus,
+   Trash2
 } from 'lucide-react';
-import { dataService } from '../services/dataService';
 
 interface FinanceProps {
    orders: Order[];
    customers: Customer[];
+   transactions: FinancialTransaction[];
+   categories: AccountCategory[];
    onUpdateOrder: (order: Order) => void;
+   onSaveTransaction: (transaction: FinancialTransaction) => void;
+   onDeleteTransaction: (id: string) => void;
 }
 
-const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
+const Finance = ({ orders, customers, transactions, categories, onUpdateOrder, onSaveTransaction, onDeleteTransaction }: FinanceProps) => {
+   const [activeSection, setActiveSection] = useState<'receivable' | 'payable' | 'transactions' | 'dashboard'>('dashboard');
    const [searchTerm, setSearchTerm] = useState('');
    const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PAID'>('ALL');
    const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
-   const [showReport, setShowReport] = useState(false);
+   const [showTransactionModal, setShowTransactionModal] = useState(false);
+   const [newTransaction, setNewTransaction] = useState<Partial<FinancialTransaction>>({
+      type: 'EXPENSE',
+      status: 'PENDING',
+      due_date: new Date().toISOString().split('T')[0]
+   });
    const [settleModal, setSettleModal] = useState<{
       show: boolean;
       orderId: string;
@@ -42,92 +51,64 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
       netValue: number;
    } | null>(null);
 
-   const reportPrintRef = useRef<HTMLDivElement>(null);
-
-   const flattenedInstallments = useMemo(() => {
-      const list: { installment: Installment; order: Order; customer: Customer | undefined }[] = [];
+   const filteredInstallments = useMemo(() => {
+      const all: any[] = [];
       orders.forEach(order => {
-         if (order.installments) {
-            order.installments.forEach(inst => {
-               list.push({
-                  installment: inst,
-                  order: order,
-                  customer: customers.find(c => c.id === order.customerId)
+         if (order.installments && order.installments.length > 0) {
+            order.installments.forEach((inst, idx) => {
+               const customer = customers.find(c => c.id === order.customerId);
+               all.push({
+                  ...inst,
+                  orderId: order.id,
+                  customerName: customer?.name || 'Cliente não encontrado',
+                  installmentNumber: idx + 1,
+                  totalInstallments: order.installments?.length
                });
             });
          }
       });
 
-      // Sort by due date
-      return list.sort((a, b) => new Date(a.installment.dueDate).getTime() - new Date(b.installment.dueDate).getTime());
-   }, [orders, customers]);
-
-   const filteredInstallments = useMemo(() => {
-      return flattenedInstallments.filter(item => {
-         const matchesSearch =
-            item.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.order.id.includes(searchTerm) ||
-            item.order.contractNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.order.quoteNumber?.toLowerCase().includes(searchTerm.toLowerCase());
-         const matchesStatus = statusFilter === 'ALL' || item.installment.status === statusFilter;
-
-         let matchesDate = true;
-         if (dateFilter.start) matchesDate = matchesDate && new Date(item.installment.dueDate) >= new Date(dateFilter.start);
-         if (dateFilter.end) matchesDate = matchesDate && new Date(item.installment.dueDate) <= new Date(dateFilter.end);
-
+      return all.filter(inst => {
+         const matchesSearch = inst.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inst.orderId.toLowerCase().includes(searchTerm.toLowerCase());
+         const matchesStatus = statusFilter === 'ALL' || inst.status === statusFilter;
+         const matchesDate = (!dateFilter.start || inst.dueDate >= dateFilter.start) &&
+            (!dateFilter.end || inst.dueDate <= dateFilter.end);
          return matchesSearch && matchesStatus && matchesDate;
-      });
-   }, [flattenedInstallments, searchTerm, statusFilter, dateFilter]);
+      }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+   }, [orders, customers, searchTerm, statusFilter, dateFilter]);
 
-   const stats = useMemo(() => {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
+   const financialStats = useMemo(() => {
+      const confirmedReceivables = filteredInstallments.filter(i => i.status === 'PAID').reduce((acc, current) => acc + current.value, 0);
+      const pendingReceivables = filteredInstallments.filter(i => i.status === 'PENDING').reduce((acc, current) => acc + current.value, 0);
 
-      const pending = filteredInstallments.filter(i => i.installment.status === 'PENDING');
-      const paid = filteredInstallments.filter(i => i.installment.status === 'PAID');
-      const overdue = pending.filter(i => new Date(i.installment.dueDate) < now);
+      const paidTransactions = transactions.filter(t => t.status === 'PAID' && t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
+      const pendingTransactions = transactions.filter(t => t.status === 'PENDING' && t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
+
+      const incomeTransactions = transactions.filter(t => t.status === 'PAID' && t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
 
       return {
-         totalPendente: pending.reduce((acc, i) => acc + i.installment.value, 0),
-         totalPago: paid.reduce((acc, i) => acc + i.installment.value, 0),
-         totalAtrasado: overdue.reduce((acc, i) => acc + i.installment.value, 0),
-         countPendente: pending.length,
-         countPago: paid.length,
-         countAtrasado: overdue.length
+         totalRevenue: confirmedReceivables + incomeTransactions,
+         pendingRevenue: pendingReceivables,
+         totalExpenses: paidTransactions,
+         pendingExpenses: pendingTransactions,
+         balance: (confirmedReceivables + incomeTransactions) - paidTransactions
       };
-   }, [filteredInstallments]);
+   }, [filteredInstallments, transactions]);
 
-   const handleTogglePayment = (orderId: string, installmentId: string) => {
-      const order = orders.find(o => o.id === orderId);
-      if (!order || !order.installments) return;
-
-      const inst = order.installments.find(i => i.id === installmentId);
-      if (!inst) return;
-
-      if (inst.status === 'PAID') {
-         // Estorno simples
-         const updatedInstallments = order.installments.map(i => {
-            if (i.id === installmentId) {
-               return { ...i, status: 'PENDING', paymentDate: undefined, nfe: undefined, netValue: undefined } as Installment;
-            }
-            return i;
-         });
-         onUpdateOrder({ ...order, installments: updatedInstallments });
-      } else {
-         // Abrir modal de baixa
-         setSettleModal({
-            show: true,
-            orderId,
-            installmentId,
-            grossValue: inst.value,
-            paymentDate: new Date().toISOString().split('T')[0],
-            nfe: '',
-            netValue: inst.value
-         });
-      }
+   const handleSettleInstallment = (inst: any) => {
+      setSettleModal({
+         show: true,
+         orderId: inst.orderId,
+         installmentId: inst.id,
+         grossValue: inst.value,
+         paymentDate: new Date().toISOString().split('T')[0],
+         nfe: '',
+         netValue: inst.value
+      });
    };
 
-   const handleConfirmSettlement = async () => {
+   const confirmSettle = async () => {
       if (!settleModal) return;
 
       const order = orders.find(o => o.id === settleModal.orderId);
@@ -137,391 +118,523 @@ const Finance = ({ orders, customers, onUpdateOrder }: FinanceProps) => {
          if (inst.id === settleModal.installmentId) {
             return {
                ...inst,
-               status: 'PAID',
-               paymentDate: settleModal.paymentDate,
-               nfe: settleModal.nfe,
-               netValue: settleModal.netValue
-            } as Installment;
+               status: 'PAID' as const,
+               paidDate: settleModal.paymentDate,
+               netValue: settleModal.netValue,
+               nfe: settleModal.nfe
+            };
          }
          return inst;
       });
 
-      // Se houver diferença (despesa)
-      const difference = settleModal.grossValue - settleModal.netValue;
-      if (difference > 0) {
-         try {
-            await dataService.saveExpense({
-               id: crypto.randomUUID(),
-               orderId: settleModal.orderId,
-               installmentId: settleModal.installmentId,
-               description: `Quebra de recebimento - Pedido ${settleModal.orderId} (Parc. ${order.installments.find(i => i.id === settleModal.installmentId)?.number})`,
-               value: parseFloat(difference.toFixed(2)),
-               date: settleModal.paymentDate,
-               category: 'FEE'
-            });
-         } catch (err) {
-            console.error("Erro ao salvar despesa automática:", err);
-            alert("Pagamento processado, mas houve um erro ao registrar a despesa.");
-         }
+      // Gerar transação financeira automática de entrada
+      const inst = order.installments.find(i => i.id === settleModal.installmentId);
+      const customer = customers.find(c => c.id === order.customerId);
+      const transaction: FinancialTransaction = {
+         id: crypto.randomUUID(),
+         description: `Recebimento Parcela ${order.id} - ${customer?.name}`,
+         amount: settleModal.netValue,
+         type: 'INCOME',
+         status: 'PAID',
+         due_date: inst?.dueDate || settleModal.paymentDate,
+         paid_date: settleModal.paymentDate,
+         order_id: order.id,
+         installment_id: settleModal.installmentId,
+         payment_method: order.paymentMethod || 'A Definir',
+         notes: `NFe: ${settleModal.nfe}`
+      };
+
+      try {
+         onUpdateOrder({ ...order, installments: updatedInstallments });
+         onSaveTransaction(transaction);
+         setSettleModal(null);
+      } catch (err) {
+         alert("Erro ao processar baixa");
+      }
+   };
+
+   const handleManualTransaction = async () => {
+      if (!newTransaction.description || !newTransaction.amount || !newTransaction.due_date) {
+         alert("Preencha os campos obrigatórios");
+         return;
       }
 
-      onUpdateOrder({ ...order, installments: updatedInstallments });
-      setSettleModal(null);
+      const transaction: FinancialTransaction = {
+         id: crypto.randomUUID(),
+         description: newTransaction.description,
+         amount: Number(newTransaction.amount),
+         type: newTransaction.type as 'INCOME' | 'EXPENSE',
+         status: newTransaction.status as 'PENDING' | 'PAID' | 'CANCELED',
+         due_date: newTransaction.due_date,
+         category_id: newTransaction.category_id,
+         notes: newTransaction.notes,
+         payment_method: newTransaction.payment_method,
+         created_at: new Date().toISOString()
+      };
+
+      onSaveTransaction(transaction);
+      setShowTransactionModal(false);
+      setNewTransaction({
+         type: 'EXPENSE',
+         status: 'PENDING',
+         due_date: new Date().toISOString().split('T')[0]
+      });
    };
 
-   const handlePrintReport = () => {
-      if (!reportPrintRef.current) return;
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
-      printWindow.document.write(`
-      <html>
-        <head>
-          <title>Relatório Contas a Receber - RTC Decor</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-        </head>
-        <body class="p-10">
-          ${reportPrintRef.current.innerHTML}
-          <script>window.onload = () => window.print();</script>
-        </body>
-      </html>
-    `);
-      printWindow.document.close();
-   };
-
-   return (
+   const renderDashboard = () => (
       <div className="space-y-6">
-         <div className="flex justify-between items-center">
-            <div>
-               <h2 className="text-2xl font-bold text-slate-900">Contas a Receber</h2>
-               <p className="text-slate-500">Gestão financeira de parcelas e fluxos de caixa.</p>
-            </div>
-            <button
-               onClick={() => setShowReport(true)}
-               className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 shadow-sm transition-all font-bold"
-            >
-               <FileText size={20} className="text-blue-500" />
-               Gerar Relatório
-            </button>
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+               { label: 'Saldo em Caixa', value: financialStats.balance, icon: <Wallet className="text-blue-600" />, sub: 'Realizado' },
+               { label: 'Receitas (Mês)', value: financialStats.totalRevenue, icon: <ArrowUpRight className="text-emerald-600" />, sub: 'Confirmado' },
+               { label: 'Despesas (Mês)', value: financialStats.totalExpenses, icon: <ArrowDownRight className="text-rose-600" />, sub: 'Pago' },
+               { label: 'Pendente (Receber)', value: financialStats.pendingRevenue, icon: <Clock className="text-amber-600" />, sub: 'Próximos dias' }
+            ].map((stat, i) => (
+               <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="flex justify-between items-start mb-4">
+                     <div className="p-3 bg-slate-50 rounded-xl">{stat.icon}</div>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.sub}</span>
+                  </div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">{stat.label}</p>
+                  <p className={`text-2xl font-black mt-2 ${i === 0 ? 'text-blue-600' : 'text-slate-900'}`}>
+                     R$ {stat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+               </div>
+            ))}
          </div>
 
-         {/* Estatísticas Rápidas */}
-         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-               <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><DollarSign size={20} /></div>
-                  <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-full uppercase tracking-widest">A Receber</span>
+         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2">
+               <TrendingUp size={20} className="text-blue-600" />
+               Fluxo de Caixa Simplificado
+            </h3>
+            <div className="space-y-4">
+               <div className="flex justify-between text-sm items-center pb-2 border-b border-slate-100">
+                  <span className="text-slate-500">Entradas Totais (Bruto)</span>
+                  <span className="font-bold text-emerald-600">R$ {(financialStats.totalRevenue + financialStats.pendingRevenue).toLocaleString('pt-BR')}</span>
                </div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Pendente</p>
-               <p className="text-2xl font-black text-slate-900 mt-2">R$ {(stats.totalPendente || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-               <p className="text-xs text-slate-500 mt-1 font-medium">{stats.countPendente} parcelas aguardando</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-               <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><TrendingUp size={20} /></div>
-                  <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-widest">Recebido</span>
+               <div className="flex justify-between text-sm items-center pb-2 border-b border-slate-100">
+                  <span className="text-slate-500">Saídas Totais (Previsto)</span>
+                  <span className="font-bold text-rose-600">R$ {(financialStats.totalExpenses + financialStats.pendingExpenses).toLocaleString('pt-BR')}</span>
                </div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Pago</p>
-               <p className="text-2xl font-black text-slate-900 mt-2 text-emerald-600">R$ {(stats.totalPago || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-               <p className="text-xs text-slate-500 mt-1 font-medium">{stats.countPago} parcelas quitadas</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-               <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-rose-50 text-rose-600 rounded-xl"><AlertCircle size={20} /></div>
-                  <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-full uppercase tracking-widest">Atrasado</span>
-               </div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Vencidos</p>
-               <p className="text-2xl font-black text-rose-600 mt-2">R$ {(stats.totalAtrasado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-               <p className="text-xs text-slate-500 mt-1 font-medium">{stats.countAtrasado} parcelas fora do prazo</p>
-            </div>
-         </div>
-
-         {/* Filtros */}
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
-            <div className="flex-1 space-y-1 w-full">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pesquisa</label>
-               <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input
-                     type="text"
-                     placeholder="Cliente ou Contrato..."
-                     value={searchTerm}
-                     onChange={(e) => setSearchTerm(e.target.value)}
-                     className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-               </div>
-            </div>
-            <div className="w-full md:w-48 space-y-1">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</label>
-               <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700"
-               >
-                  <option value="ALL">Todos Status</option>
-                  <option value="PENDING">Pendentes</option>
-                  <option value="PAID">Pagos</option>
-               </select>
-            </div>
-            <div className="w-full md:w-80 grid grid-cols-2 gap-2 space-y-0 items-end">
-               <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Início</label>
-                  <input
-                     type="date"
-                     value={dateFilter.start}
-                     onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
-                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                  />
-               </div>
-               <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fim</label>
-                  <input
-                     type="date"
-                     value={dateFilter.end}
-                     onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
-                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                  />
+               <div className="flex justify-between text-lg items-center pt-2">
+                  <span className="font-black text-slate-900">Resultado Previsto</span>
+                  <span className={`font-black ${(financialStats.balance + financialStats.pendingRevenue - financialStats.pendingExpenses) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                     R$ {(financialStats.balance + financialStats.pendingRevenue - financialStats.pendingExpenses).toLocaleString('pt-BR')}
+                  </span>
                </div>
             </div>
          </div>
+      </div>
+   );
 
-         {/* Tabela de Parcelas */}
+   const renderTransactionsTable = (typeFilter?: 'INCOME' | 'EXPENSE') => {
+      const list = transactions.filter(t => {
+         if (typeFilter && t.type !== typeFilter) return false;
+         const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase());
+         const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
+         return matchesSearch && matchesStatus;
+      }).sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime());
+
+      return (
          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                <table className="w-full text-left border-collapse">
                   <thead>
-                     <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Vencimento</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Cliente / Contrato</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase text-center">Parcela</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase text-right">Valor</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase text-center">Status</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase text-right">Ações</th>
+                     <tr className="bg-slate-50/50 border-b border-slate-200">
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Ações</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                     {filteredInstallments.length === 0 ? (
-                        <tr><td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic font-medium">Nenhum registro encontrado para os filtros selecionados.</td></tr>
+                     {list.length === 0 ? (
+                        <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400">Nenhum lançamento encontrado</td></tr>
                      ) : (
-                        filteredInstallments.map((item, idx) => {
-                           const isOverdue = item.installment.status === 'PENDING' && new Date(item.installment.dueDate) < new Date(new Date().setHours(0, 0, 0, 0));
-                           return (
-                              <tr key={idx} className={`hover:bg-slate-50 transition-colors ${isOverdue ? 'bg-rose-50/20' : ''}`}>
-                                 <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                       <Calendar size={14} className={isOverdue ? 'text-rose-500' : 'text-slate-400'} />
-                                       <span className={`text-sm font-bold ${isOverdue ? 'text-rose-600' : 'text-slate-700'}`}>
-                                          {new Date(item.installment.dueDate).toLocaleDateString()}
-                                       </span>
-                                    </div>
-                                 </td>
-                                 <td className="px-6 py-4">
-                                    <p className="text-sm font-bold text-slate-900 truncate max-w-[200px]">{item.customer?.name}</p>
-                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">
-                                       {item.order.contractNumber || item.order.quoteNumber || item.order.id}
-                                    </p>
-                                 </td>
-                                 <td className="px-6 py-4 text-center">
-                                    <span className="text-xs font-black text-slate-400">
-                                       {String(item.installment.number).padStart(2, '0')}/{String(item.order.installments?.length || 1).padStart(2, '0')}
-                                    </span>
-                                 </td>
-                                 <td className="px-6 py-4 text-right">
-                                    <span className="text-sm font-black text-slate-900">
-                                       R$ {item.installment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                    </span>
-                                    {item.installment.status === 'PAID' && item.installment.netValue !== undefined && (
-                                       <div className="flex flex-col items-end mt-1">
-                                          <span className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter">Líquido: R$ {item.installment.netValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                          {item.installment.nfe && <span className="text-[9px] font-bold text-slate-400">NFE: {item.installment.nfe}</span>}
-                                       </div>
+                        list.map((t) => (
+                           <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
+                              <td className="px-6 py-4">
+                                 <p className="text-sm font-bold text-slate-900">{t.description}</p>
+                                 {t.order_id && <p className="text-[10px] text-blue-600 font-bold uppercase mt-0.5">Pedido: {t.order_id}</p>}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-slate-600">
+                                 {new Date(t.due_date).toLocaleDateString('pt-BR')}
+                              </td>
+                              <td className="px-6 py-4">
+                                 <span className="text-[10px] font-black px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase">
+                                    {categories.find(c => c.id === t.category_id)?.name || 'Geral'}
+                                 </span>
+                              </td>
+                              <td className={`px-6 py-4 text-sm font-black text-right ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                 {t.type === 'EXPENSE' && '- '}R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-6 py-4">
+                                 <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter ${t.status === 'PAID' ? 'bg-emerald-50 text-emerald-600' :
+                                       t.status === 'PENDING' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+                                    }`}>
+                                    {t.status === 'PAID' ? 'Efetivado' : t.status === 'PENDING' ? 'Pendente' : 'Cancelado'}
+                                 </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                 <div className="flex justify-center gap-2">
+                                    {t.status === 'PENDING' && (
+                                       <button
+                                          onClick={() => onSaveTransaction({ ...t, status: 'PAID', paid_date: new Date().toISOString().split('T')[0] })}
+                                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                          title="Confirmar Pagamento"
+                                       >
+                                          <CheckCircle2 size={16} />
+                                       </button>
                                     )}
-                                 </td>
-                                 <td className="px-6 py-4 text-center">
-                                    <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest ${item.installment.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : isOverdue ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
-                                       }`}>
-                                       {item.installment.status === 'PAID' ? 'Pago' : isOverdue ? 'Em Atraso' : 'Pendente'}
-                                    </span>
-                                 </td>
-                                 <td className="px-6 py-4 text-right">
                                     <button
-                                       onClick={() => handleTogglePayment(item.order.id, item.installment.id)}
-                                       className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${item.installment.status === 'PAID' ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700'
-                                          }`}
+                                       onClick={() => onDeleteTransaction(t.id)}
+                                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                       title="Excluir"
                                     >
-                                       {item.installment.status === 'PAID' ? 'Estornar' : 'Baixar'}
+                                       <Trash2 size={16} />
                                     </button>
-                                 </td>
-                              </tr>
-                           );
-                        })
+                                 </div>
+                              </td>
+                           </tr>
+                        ))
                      )}
                   </tbody>
                </table>
             </div>
          </div>
+      );
+   };
 
-         {/* Relatório para Impressão */}
-         {showReport && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-               <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 h-[85vh] flex flex-col">
-                  <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center shrink-0">
-                     <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><FileText size={20} className="text-blue-600" /> Pré-visualização do Relatório</h3>
-                     <div className="flex gap-2">
-                        <button onClick={handlePrintReport} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all">
-                           <Printer size={18} /> Imprimir Relatório
-                        </button>
-                        <button onClick={() => setShowReport(false)} className="p-2 text-slate-400 hover:text-rose-500">
-                           <X size={24} />
-                        </button>
-                     </div>
+   return (
+      <div className="space-y-6">
+         {/* Top Header */}
+         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                  <div className="p-2 bg-blue-600 rounded-xl text-white">
+                     <Wallet size={24} />
                   </div>
-                  <div className="flex-1 overflow-y-auto p-10 bg-slate-50/50">
-                     <div ref={reportPrintRef} className="bg-white p-12 border border-slate-100 shadow-sm rounded-lg min-h-full">
-                        {/* Header do Relatório */}
-                        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-8">
-                           <div>
-                              <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="h-12 mb-4" />
-                              <h1 className="text-2xl font-black uppercase tracking-tighter">Relatório Financeiro</h1>
-                              <p className="text-sm font-bold text-slate-500">Contas a Receber • RTC TOLDOS E COBERTURAS LTDA</p>
-                           </div>
-                           <div className="text-right">
-                              <p className="text-[10px] font-black uppercase text-slate-400">Gerado em</p>
-                              <p className="text-sm font-black">{new Date().toLocaleDateString()} às {new Date().toLocaleTimeString()}</p>
-                           </div>
-                        </div>
+                  Gestão Financeira
+               </h2>
+               <p className="text-slate-500 mt-1">Controle de entradas, saídas e fluxo de caixa.</p>
+            </div>
+            <div className="flex gap-2">
+               <button
+                  onClick={() => setShowTransactionModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+               >
+                  <Plus size={18} />
+                  Novo Lançamento
+               </button>
+               <button
+                  onClick={() => { }}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+               >
+                  <Printer size={18} />
+                  Relatório
+               </button>
+            </div>
+         </div>
 
-                        {/* Resumo */}
-                        <div className="grid grid-cols-3 gap-8 mb-10">
-                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pendente</p>
-                              <p className="text-xl font-black text-slate-900">R$ {stats.totalPendente.toLocaleString('pt-BR')}</p>
-                           </div>
-                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pago</p>
-                              <p className="text-xl font-black text-emerald-600">R$ {stats.totalPago.toLocaleString('pt-BR')}</p>
-                           </div>
-                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Vencido</p>
-                              <p className="text-xl font-black text-rose-600">R$ {stats.totalAtrasado.toLocaleString('pt-BR')}</p>
-                           </div>
-                        </div>
+         {/* Navigation Tabs */}
+         <div className="flex p-1 bg-slate-100 rounded-2xl w-fit">
+            {[
+               { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+               { id: 'receivable', label: 'Contas a Receber', icon: <ArrowUpRight size={16} /> },
+               { id: 'payable', label: 'Contas a Pagar', icon: <ArrowDownRight size={16} /> },
+               { id: 'transactions', label: 'Lançamentos', icon: <History size={16} /> }
+            ].map(tab => (
+               <button
+                  key={tab.id}
+                  onClick={() => setActiveSection(tab.id as any)}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeSection === tab.id
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                     }`}
+               >
+                  {tab.icon}
+                  {tab.label}
+               </button>
+            ))}
+         </div>
 
-                        {/* Tabela de Itens */}
-                        <table className="w-full text-left border-collapse text-xs">
-                           <thead>
-                              <tr className="border-b-2 border-slate-200">
-                                 <th className="py-2 font-black uppercase">Vencimento</th>
-                                 <th className="py-2 font-black uppercase">Cliente</th>
-                                 <th className="py-2 font-black uppercase text-center">Parc.</th>
-                                 <th className="py-2 font-black uppercase">Contrato</th>
-                                 <th className="py-2 font-black uppercase text-right">Valor (R$)</th>
-                                 <th className="py-2 font-black uppercase text-center">Status</th>
-                              </tr>
-                           </thead>
-                           <tbody className="divide-y divide-slate-100">
-                              {filteredInstallments.map((item, idx) => (
-                                 <tr key={idx}>
-                                    <td className="py-3 font-bold">{new Date(item.installment.dueDate).toLocaleDateString()}</td>
-                                    <td className="py-3 font-medium">{item.customer?.name}</td>
-                                    <td className="py-3 text-center font-bold">
-                                       {String(item.installment.number).padStart(2, '0')}/{String(item.order.installments?.length || 1).padStart(2, '0')}
+         {/* Filters */}
+         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="relative">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+               <input
+                  type="text"
+                  placeholder="Pesquisar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+               />
+            </div>
+            <select
+               value={statusFilter}
+               onChange={(e: any) => setStatusFilter(e.target.value)}
+               className="px-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium appearance-none"
+            >
+               <option value="ALL">Todos os status</option>
+               <option value="PENDING">Pendentes</option>
+               <option value="PAID">Liquidados</option>
+            </select>
+            <input
+               type="date"
+               value={dateFilter.start}
+               onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
+               className="px-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+               placeholder="Início"
+            />
+            <input
+               type="date"
+               value={dateFilter.end}
+               onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
+               className="px-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+               placeholder="Fim"
+            />
+         </div>
+
+         {/* Main Content Sections */}
+         <div className="min-h-[400px]">
+            {activeSection === 'dashboard' && renderDashboard()}
+
+            {activeSection === 'receivable' && (
+               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="bg-slate-50/50 border-b border-slate-200">
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pedido / Cliente</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Parcela</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Ações</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                           {filteredInstallments.length === 0 ? (
+                              <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
+                           ) : (
+                              filteredInstallments.map((inst, idx) => (
+                                 <tr key={`${inst.orderId}-${idx}`} className="hover:bg-slate-50/50 transition-colors group">
+                                    <td className="px-6 py-4">
+                                       <p className="text-sm font-bold text-slate-900 leading-tight">#{inst.orderId}</p>
+                                       <p className="text-[11px] text-slate-500 mt-0.5">{inst.customerName}</p>
                                     </td>
-                                    <td className="py-3 font-mono text-[10px]">
-                                       {item.order.contractNumber || item.order.quoteNumber || item.order.id}
-                                    </td>
-                                    <td className="py-3 text-right font-black">R$ {item.installment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                                    <td className="py-3 text-center">
-                                       <span className={`text-[8px] font-black uppercase ${item.installment.status === 'PAID' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                          {item.installment.status === 'PAID' ? 'Liquidado' : 'Aberto'}
+                                    <td className="px-6 py-4">
+                                       <span className="text-[10px] font-black px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                                          {inst.installmentNumber} / {inst.totalInstallments}
                                        </span>
                                     </td>
+                                    <td className="px-6 py-4 text-sm text-slate-600">
+                                       {new Date(inst.dueDate).toLocaleDateString('pt-BR')}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm font-black text-slate-900 text-right">
+                                       R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                       <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter ${inst.status === 'PAID' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                                          }`}>
+                                          {inst.status === 'PAID' ? 'Liquidado' : 'Pendente'}
+                                       </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                       {inst.status === 'PENDING' ? (
+                                          <button
+                                             onClick={() => handleSettleInstallment(inst)}
+                                             className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"
+                                          >
+                                             Baixar
+                                          </button>
+                                       ) : (
+                                          <CheckCircle2 size={18} className="text-emerald-500 mx-auto" />
+                                       )}
+                                    </td>
                                  </tr>
-                              ))}
-                           </tbody>
-                        </table>
+                              ))
+                           )}
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            )}
 
-                        <div className="mt-20 pt-8 border-t border-slate-200 text-center">
-                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">RTC TOLDOS E COBERTURAS LTDA • QUALIDADE E EXCELÊNCIA</p>
+            {activeSection === 'payable' && renderTransactionsTable('EXPENSE')}
+
+            {activeSection === 'transactions' && renderTransactionsTable()}
+         </div>
+
+         {/* New Transaction Modal */}
+         {showTransactionModal && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                  <div className="px-8 py-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                     <div>
+                        <h3 className="text-xl font-black text-slate-900">Novo Lançamento Manual</h3>
+                        <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mt-1">Avulso ou fixo</p>
+                     </div>
+                     <button onClick={() => setShowTransactionModal(false)} className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600 border border-transparent hover:border-slate-200">
+                        <X size={20} />
+                     </button>
+                  </div>
+
+                  <div className="p-8 space-y-6">
+                     <div className="grid grid-cols-2 gap-4">
+                        <button
+                           onClick={() => setNewTransaction({ ...newTransaction, type: 'EXPENSE' })}
+                           className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${newTransaction.type === 'EXPENSE'
+                                 ? 'border-rose-500 bg-rose-50 text-rose-700'
+                                 : 'border-slate-200 hover:border-slate-300 text-slate-500'
+                              }`}
+                        >
+                           <ArrowDownRight size={24} />
+                           <span className="text-xs font-black uppercase">Despesa (Saída)</span>
+                        </button>
+                        <button
+                           onClick={() => setNewTransaction({ ...newTransaction, type: 'INCOME' })}
+                           className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${newTransaction.type === 'INCOME'
+                                 ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                 : 'border-slate-200 hover:border-slate-300 text-slate-500'
+                              }`}
+                        >
+                           <ArrowUpRight size={24} />
+                           <span className="text-xs font-black uppercase">Receita (Entrada)</span>
+                        </button>
+                     </div>
+
+                     <div className="space-y-4">
+                        <div>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descrição</label>
+                           <input
+                              type="text"
+                              required
+                              placeholder="Ex: Aluguel, Compra de Alumínio..."
+                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
+                              value={newTransaction.description || ''}
+                              onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
+                           />
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Valor (R$)</label>
+                              <input
+                                 type="number"
+                                 required
+                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-black text-blue-600"
+                                 value={newTransaction.amount || ''}
+                                 onChange={(e) => setNewTransaction({ ...newTransaction, amount: Number(e.target.value) })}
+                              />
+                           </div>
+                           <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimento</label>
+                              <input
+                                 type="date"
+                                 required
+                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
+                                 value={newTransaction.due_date || ''}
+                                 onChange={(e) => setNewTransaction({ ...newTransaction, due_date: e.target.value })}
+                              />
+                           </div>
+                        </div>
+                        <div>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria (Plano de Contas)</label>
+                           <select
+                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold appearance-none"
+                              value={newTransaction.category_id || ''}
+                              onChange={(e) => setNewTransaction({ ...newTransaction, category_id: e.target.value })}
+                           >
+                              <option value="">Selecione uma categoria...</option>
+                              {categories
+                                 .filter(c => c.type === newTransaction.type)
+                                 .map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                 ))
+                              }
+                           </select>
+                        </div>
+                     </div>
+
+                     <div className="pt-4">
+                        <button
+                           onClick={handleManualTransaction}
+                           className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-black hover:bg-blue-700 transition-all shadow-lg active:scale-[0.98] uppercase tracking-widest"
+                        >
+                           Salvar Lançamento
+                        </button>
                      </div>
                   </div>
                </div>
             </div>
          )}
 
-         {/* Modal de Baixa de Pagamento */}
-         {settleModal && settleModal.show && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
-               <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                  <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                     <div className="flex items-center gap-3">
-                        <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
-                           <CheckCircle2 size={20} />
-                        </div>
-                        <div>
-                           <h3 className="font-bold text-lg text-slate-900">Baixa de Pagamento</h3>
-                           <p className="text-xs text-slate-500">Confirmar recebimento da parcela</p>
-                        </div>
+         {/* Settle Modal (Receivable) */}
+         {settleModal && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                  <div className="p-8">
+                     <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 border border-emerald-100 mx-auto">
+                        <CheckCircle2 size={32} />
                      </div>
-                     <button onClick={() => setSettleModal(null)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
-                        <X size={24} />
-                     </button>
-                  </div>
+                     <h3 className="text-2xl font-black text-center text-slate-900">Confirmar Liquidação</h3>
+                     <p className="text-center text-slate-500 mt-2">Deseja confirmar o recebimento desta parcela? Um lançamento automático será gerado em seu fluxo de caixa.</p>
 
-                  <div className="p-8 space-y-6">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Bruto</label>
-                           <p className="text-lg font-black text-slate-900">R$ {settleModal.grossValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                     <div className="mt-8 space-y-4">
+                        <div className="bg-slate-50 p-4 rounded-2xl space-y-2">
+                           <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              <span>Valor da Parcela</span>
+                              <span>R$ {settleModal.grossValue.toLocaleString('pt-BR')}</span>
+                           </div>
+                           <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-200">
+                              <span>Valor Líquido</span>
+                              <input
+                                 type="number"
+                                 className="w-24 text-right bg-transparent outline-none focus:text-blue-600"
+                                 value={settleModal.netValue}
+                                 onChange={(e) => setSettleModal({ ...settleModal, netValue: Number(e.target.value) })}
+                              />
+                           </div>
                         </div>
-                        <div className="space-y-1">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Pagamento</label>
+
+                        <div>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data do Pagamento</label>
                            <input
                               type="date"
+                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
                               value={settleModal.paymentDate}
                               onChange={(e) => setSettleModal({ ...settleModal, paymentDate: e.target.value })}
-                              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
                            />
                         </div>
-                     </div>
 
-                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Número NFE (Opcional)</label>
-                        <div className="relative">
-                           <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <div>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Número da Nota (Opcional)</label>
                            <input
                               type="text"
-                              placeholder="000.000.000"
+                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
+                              placeholder="NFe..."
                               value={settleModal.nfe}
                               onChange={(e) => setSettleModal({ ...settleModal, nfe: e.target.value })}
-                              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
                            />
                         </div>
                      </div>
 
-                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Valor Líquido Recebido</label>
-                        <div className="relative">
-                           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" size={18} />
-                           <input
-                              type="number"
-                              step="0.01"
-                              value={settleModal.netValue}
-                              onChange={(e) => setSettleModal({ ...settleModal, netValue: parseFloat(e.target.value) || 0 })}
-                              className="w-full pl-10 pr-4 py-3 bg-blue-50 border-2 border-blue-100 rounded-xl text-lg font-black text-blue-600 outline-none focus:border-blue-500 transition-all"
-                           />
-                        </div>
-                        {settleModal.grossValue - settleModal.netValue > 0 && (
-                           <p className="text-[10px] text-rose-500 font-bold mt-1 animate-pulse">
-                              ⚠️ Diferença de R$ {(settleModal.grossValue - settleModal.netValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} entrará como despesa.
-                           </p>
-                        )}
-                     </div>
-
-                     <div className="flex gap-4 pt-4 border-t border-slate-100">
-                        <button onClick={() => setSettleModal(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
-                        <button onClick={handleConfirmSettlement} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-xl shadow-blue-500/30 transition-all">Confirmar Baixa</button>
+                     <div className="grid grid-cols-2 gap-3 mt-8">
+                        <button
+                           onClick={() => setSettleModal(null)}
+                           className="py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all"
+                        >
+                           Cancelar
+                        </button>
+                        <button
+                           onClick={confirmSettle}
+                           className="py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-200"
+                        >
+                           Confirmar Baixa
+                        </button>
                      </div>
                   </div>
                </div>

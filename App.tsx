@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer } from './types';
+import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer, FinancialTransaction, AccountCategory } from './types';
 import { MENU_ITEMS } from './constants';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -49,6 +49,8 @@ const App = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<SellerBlockedSlot[]>([]);
   const [installers, setInstallers] = useState<Installer[]>([]);
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
+  const [accountCategories, setAccountCategories] = useState<AccountCategory[]>([]);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
   const [lastGeneratedQuoteId, setLastGeneratedQuoteId] = useState<string | null>(null);
@@ -70,7 +72,7 @@ const App = () => {
     if (isAuto) setIsSyncing(true);
 
     try {
-      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers] = await Promise.all([
+      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories] = await Promise.all([
         dataService.getSellers(),
         dataService.getCustomers(),
         dataService.getProducts(),
@@ -79,7 +81,9 @@ const App = () => {
         dataService.getSystemUsers(),
         dataService.getTechnicalSheets(),
         dataService.getBlockedSlots(),
-        dataService.getInstallers()
+        dataService.getInstallers(),
+        dataService.getFinancialTransactions(),
+        dataService.getAccountCategories()
       ]);
 
       setSellers(dbSellers);
@@ -91,6 +95,8 @@ const App = () => {
       setTechnicalSheets(dbTechnicalSheets);
       setBlockedSlots(dbBlockedSlots);
       setInstallers(dbInstallers);
+      setFinancialTransactions(dbFinancialTransactions);
+      setAccountCategories(dbAccountCategories);
       setLastSync(new Date());
 
       // Se ainda não houver usuários (primeiro acesso), criar o MASTER
@@ -443,6 +449,26 @@ const App = () => {
     }
   };
 
+  const handleSaveFinancialTransaction = async (t: FinancialTransaction) => {
+    try {
+      await dataService.saveFinancialTransaction(t);
+      loadData(true);
+    } catch (err) {
+      alert("Erro ao salvar transação financeira");
+    }
+  };
+
+  const handleDeleteFinancialTransaction = async (id: string) => {
+    if (window.confirm("Remover este lançamento permanentemente?")) {
+      try {
+        await dataService.deleteFinancialTransaction(id);
+        loadData(true);
+      } catch (err) {
+        alert("Erro ao remover lançamento");
+      }
+    }
+  };
+
   // --- Filtering Logic for Roles ---
   const getFilteredData = () => {
     // Admin, Attendant, Production sees everything
@@ -493,7 +519,13 @@ const App = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard orders={viewOrders} appointments={viewAppointments} products={products} technicalSheets={viewTechnicalSheets} />;
+        return <Dashboard
+          orders={viewOrders}
+          appointments={viewAppointments}
+          products={products}
+          technicalSheets={viewTechnicalSheets}
+          transactions={financialTransactions}
+        />;
       case 'quick-quote':
         return <QuickQuote products={products} />;
       case 'sellers':
@@ -592,7 +624,17 @@ const App = () => {
           onUpdateOrder={handleUpdateOrder} onAddAppointment={handleAddAppointment}
         />;
       case 'finance':
-        return <Finance orders={orders} customers={customers} onUpdateOrder={handleUpdateOrder} />;
+        return (
+          <Finance
+            orders={orders}
+            customers={customers}
+            transactions={financialTransactions}
+            categories={accountCategories}
+            onUpdateOrder={handleUpdateOrder}
+            onSaveTransaction={handleSaveFinancialTransaction}
+            onDeleteTransaction={handleDeleteFinancialTransaction}
+          />
+        );
       case 'commissions':
         return <Commissions
           orders={orders}
