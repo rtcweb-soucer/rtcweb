@@ -81,10 +81,25 @@ export const dataService = {
     // Customers
     async getCustomers() {
         try {
-            const { data, error } = await supabase.from('customers').select('*');
-            if (error) throw error;
+            let allData: any[] = [];
+            let from = 0;
+            let to = 999;
+            let hasMore = true;
 
-            const normalized = (data || []).map(c => ({
+            while (hasMore) {
+                const { data, error } = await supabase.from('customers').select('*').range(from, to);
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    hasMore = false;
+                } else {
+                    allData = [...allData, ...data];
+                    if (data.length < 1000) hasMore = false;
+                    from += 1000;
+                    to += 1000;
+                }
+            }
+
+            const normalized = allData.map(c => ({
                 ...c,
                 tradeName: c.trade_name,
                 contactName: c.contact_name,
