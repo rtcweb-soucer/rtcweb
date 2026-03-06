@@ -3,7 +3,8 @@ export enum UserRole {
   ADMIN = 'ADMIN',
   SELLER = 'SELLER',
   ATTENDANT = 'ATTENDANT',
-  PRODUCTION = 'PRODUCTION'
+  PRODUCTION = 'PRODUCTION',
+  BUYER = 'BUYER'
 }
 
 export enum OrderStatus {

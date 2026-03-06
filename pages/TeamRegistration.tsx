@@ -243,6 +243,7 @@ const TeamRegistration = ({ users, onAddUser, onUpdateUser, onDeleteUser }: Team
                               >
                                  <option value={UserRole.ATTENDANT}>Atendimento</option>
                                  <option value={UserRole.PRODUCTION}>PCP (Fábrica)</option>
+                                 <option value={UserRole.BUYER}>Comprador (Suprimentos)</option>
                                  <option value={UserRole.SELLER}>Vendedor Externo</option>
                                  <option value={UserRole.ADMIN}>Administrador</option>
                               </select>

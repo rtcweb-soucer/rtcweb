@@ -20,7 +20,8 @@ import {
    Factory,
    Headphones,
    Users2,
-   CheckCircle2
+   CheckCircle2,
+   ShoppingCart
 } from 'lucide-react';
 
 interface UsersManagementProps {
@@ -113,6 +114,7 @@ const UsersManagement = ({ users, onAddUser, onUpdateUser, onDeleteUser }: Users
          case UserRole.PRODUCTION: return { color: 'bg-indigo-600 text-white', label: 'Equipe PCP', icon: <Factory size={12} /> };
          case UserRole.SELLER: return { color: 'bg-amber-500 text-white', label: 'Vendedor Externo', icon: <Briefcase size={12} /> };
          case UserRole.ATTENDANT: return { color: 'bg-blue-600 text-white', label: 'Atendimento', icon: <Headphones size={12} /> };
+         case UserRole.BUYER: return { color: 'bg-emerald-600 text-white', label: 'Comprador', icon: <ShoppingCart size={12} /> };
          default: return { color: 'bg-slate-500 text-white', label: 'Outro', icon: <User size={12} /> };
       }
    };
@@ -276,6 +278,7 @@ const UsersManagement = ({ users, onAddUser, onUpdateUser, onDeleteUser }: Users
                                  >
                                     <option value={UserRole.ATTENDANT}>Atendimento (Comercial)</option>
                                     <option value={UserRole.PRODUCTION}>PCP (Fábrica)</option>
+                                    <option value={UserRole.BUYER}>Comprador (Suprimentos)</option>
                                     <option value={UserRole.SELLER}>Vendedor (Externo)</option>
                                     <option value={UserRole.ADMIN}>Administrador (Master)</option>
                                  </select>

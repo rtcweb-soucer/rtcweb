@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PurchaseRequest, PurchaseOrder, Order, Customer } from '../types';
+import { PurchaseRequest, PurchaseOrder, Order, Customer, FinancialTransaction } from '../types';
 import { dataService } from '../services/dataService';
 import {
     ShoppingCart,
@@ -10,7 +10,12 @@ import {
     Plus,
     Search,
     Filter,
-    FileText
+    FileText,
+    Calendar,
+    DollarSign,
+    User,
+    X,
+    RefreshCw
 } from 'lucide-react';
 
 interface BuyerProps {
@@ -22,6 +27,14 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
     const [requests, setRequests] = useState<PurchaseRequest[]>([]);
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Estados para o Modal de OC
+    const [showPOModal, setShowPOModal] = useState(false);
+    const [activeRequest, setActiveRequest] = useState<PurchaseRequest | null>(null);
+    const [supplierName, setSupplierName] = useState('');
+    const [totalAmount, setTotalAmount] = useState<number>(0);
+    const [expectedDate, setExpectedDate] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -47,6 +60,100 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
         if (!order) return null;
         const customer = customers.find(c => c.id === order.customerId);
         return { order, customer };
+    };
+
+    const handleOpenPOModal = (request: PurchaseRequest) => {
+        setActiveRequest(request);
+        setSupplierName('');
+        setTotalAmount(0);
+        setExpectedDate(new Date().toISOString().split('T')[0]);
+        setShowPOModal(true);
+    };
+
+    const handleCreatePO = async () => {
+        if (!activeRequest || !supplierName || totalAmount <= 0) {
+            alert("Por favor, preencha todos os campos obrigatórios.");
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const newPO: PurchaseOrder = {
+                id: crypto.randomUUID(),
+                supplier_name: supplierName,
+                total_amount: totalAmount,
+                status: 'PENDING',
+                expected_delivery_date: expectedDate,
+                linked_request_ids: [activeRequest.id],
+                created_at: new Date().toISOString()
+            };
+
+            await dataService.savePurchaseOrder(newPO);
+
+            const updatedRequest: PurchaseRequest = {
+                ...activeRequest,
+                status: 'ORDERED',
+                purchase_order_id: newPO.id as any
+            };
+
+            await dataService.savePurchaseRequest(updatedRequest);
+
+            await loadData();
+            setShowPOModal(false);
+            alert("Ordem de Compra gerada com sucesso!");
+        } catch (error) {
+            console.error("Error creating PO:", error);
+            alert("Erro ao gerar Ordem de Compra");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleRegisterReceipt = async (request: PurchaseRequest) => {
+        const poId = (request as any).purchase_order_id;
+        const po = purchaseOrders.find(p => p.id === poId);
+
+        if (!confirm("Confirmar o recebimento total deste material e gerar lançamento no financeiro?")) return;
+
+        setIsSaving(true);
+        try {
+            if (po) {
+                await dataService.savePurchaseOrder({
+                    ...po,
+                    status: 'RECEIVED',
+                    received_date: new Date().toISOString()
+                });
+            }
+
+            await dataService.savePurchaseRequest({
+                ...request,
+                status: 'RECEIVED'
+            });
+
+            const transaction: FinancialTransaction = {
+                id: crypto.randomUUID(),
+                description: `Compra: ${po?.supplier_name || 'Fornecedor'} - Ref Pedido ${request.order_id || 'Avulso'}`,
+                amount: po?.total_amount || 0,
+                type: 'EXPENSE',
+                status: 'PENDING',
+                due_date: new Date().toISOString().split('T')[0],
+                category_id: '2.0.0' as any,
+                order_id: request.order_id,
+                purchase_order_id: poId as any,
+                notes: `Origem: Módulo de Compras. Item: ${request.items_requested[0]?.name || 'Diversos'}`,
+                created_at: new Date().toISOString()
+            };
+
+            await dataService.saveFinancialTransaction(transaction);
+
+            await loadData();
+            alert("Entrada registrada! Uma nova conta a pagar foi gerada no financeiro.");
+        } catch (error) {
+            console.error("Error registering receipt:", error);
+            alert("Erro ao registrar recebimento");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleUpdateStatus = async (request: PurchaseRequest, newStatus: PurchaseRequest['status']) => {
@@ -75,6 +182,22 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                         <h2 className="text-2xl font-black text-slate-800 tracking-tight">Painel do Comprador</h2>
                         <p className="text-slate-500 font-medium mt-1">Gerencie requisições e ordens de compra</p>
                     </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={loadData}
+                        className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all sm:hidden"
+                        title="Atualizar dados"
+                    >
+                        <RefreshCw size={24} className={isLoading ? 'animate-spin' : ''} />
+                    </button>
+                    <button
+                        onClick={loadData}
+                        className="hidden sm:flex items-center gap-2 px-4 py-2 text-indigo-600 font-bold hover:bg-indigo-50 rounded-xl transition-all"
+                    >
+                        <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                        Atualizar
+                    </button>
                 </div>
             </div>
 
@@ -118,10 +241,17 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
 
                                     <div className="pt-3 border-t border-slate-100 flex gap-2">
                                         <button
-                                            onClick={() => handleUpdateStatus(req, 'ORDERED')}
+                                            onClick={() => handleOpenPOModal(req)}
                                             className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors"
                                         >
                                             Criar OC
+                                        </button>
+                                        <button
+                                            onClick={() => handleUpdateStatus(req, 'CANCELED')}
+                                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                                            title="Cancelar solicitação"
+                                        >
+                                            <XCircle size={18} />
                                         </button>
                                     </div>
                                 </div>
@@ -150,10 +280,30 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                                             </li>
                                         ))}
                                     </ul>
+                                    {req.notes && <p className="text-xs italic text-slate-500">"{req.notes}"</p>}
+
+                                    {/* Exibe dados da OC se houver */}
+                                    {(() => {
+                                        const po = purchaseOrders.find(p => p.id === (req as any).purchase_order_id);
+                                        if (!po) return null;
+                                        return (
+                                            <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 space-y-1">
+                                                <p className="text-[10px] font-bold text-blue-800 uppercase flex items-center gap-1">
+                                                    <Truck size={12} /> OC: {po.supplier_name}
+                                                </p>
+                                                <p className="text-xs font-bold text-blue-900">R$ {po.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                                {po.expected_delivery_date && (
+                                                    <p className="text-[10px] text-blue-700">Entrega: {new Date(po.expected_delivery_date).toLocaleDateString()}</p>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
                                     <div className="pt-3 border-t border-slate-100 flex gap-2">
                                         <button
-                                            onClick={() => handleUpdateStatus(req, 'RECEIVED')}
-                                            className="flex-1 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-bold rounded-xl transition-colors flex justify-center items-center gap-1"
+                                            onClick={() => handleRegisterReceipt(req)}
+                                            disabled={isSaving}
+                                            className="flex-1 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-bold rounded-xl transition-colors flex justify-center items-center gap-1 disabled:opacity-50"
                                         >
                                             <CheckCircle2 size={14} /> Registrar Chegada
                                         </button>
@@ -181,6 +331,92 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Criação de OC */}
+            {showPOModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-800">Gerar Ordem de Compra</h3>
+                                <p className="text-xs text-slate-500 mt-1">Defina fornecedor e custos para o financeiro</p>
+                            </div>
+                            <button onClick={() => setShowPOModal(false)} className="p-2 hover:bg-white rounded-full transition-colors">
+                                <X size={20} className="text-slate-400" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Fornecedor</label>
+                                <div className="relative">
+                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Nome da empresa / fornecedor"
+                                        value={supplierName}
+                                        onChange={(e) => setSupplierName(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Valor Total</label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input
+                                            type="number"
+                                            placeholder="0,00"
+                                            value={totalAmount || ''}
+                                            onChange={(e) => setTotalAmount(Number(e.target.value))}
+                                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Prev. Entrega</label>
+                                    <div className="relative">
+                                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input
+                                            type="date"
+                                            value={expectedDate}
+                                            onChange={(e) => setExpectedDate(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {activeRequest && (
+                                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                                    <p className="text-[10px] font-black text-indigo-400 uppercase mb-1">Itens da Requisição</p>
+                                    {activeRequest.items_requested.map((it: any, i: number) => (
+                                        <p key={i} className="text-xs font-bold text-indigo-900">• {it.quantity} {it.unit} - {it.name}</p>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="pt-4 flex gap-3">
+                                <button
+                                    onClick={() => setShowPOModal(false)}
+                                    className="flex-1 py-3 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleCreatePO}
+                                    disabled={isSaving}
+                                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {isSaving ? 'Gerando...' : 'Confirmar Ordem'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
