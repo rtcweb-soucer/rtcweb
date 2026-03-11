@@ -298,7 +298,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         color: it.color || '',
         width: it.width,
         height: it.height,
-        price: order.itemPrices?.[it.id] ?? 0
+        price: order.itemPrices?.[it.id] ?? 0,
+        parentItemId: it.parentItemId,
+        command: it.command,
+        notes: it.notes,
+        quantity: it.quantity || 1
       })),
       syncToSheet: true,
       contractObservations: order.contractObservations || '',
@@ -361,7 +365,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
               width: it.width,
               height: it.height,
               quantity: it.quantity || 1,
-              notes: it.notes || ''
+              notes: it.notes || '',
+              parentItemId: it.parentItemId,
+              command: it.command
             }))
           };
           await onAddTechnicalSheet(updatedSheet);
@@ -542,7 +548,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
             productType: it.productType,
             color: it.color,
             width: it.width,
-            height: it.height
+            height: it.height,
+            parentItemId: it.parentItemId,
+            command: it.command,
+            notes: it.notes,
+            quantity: it.quantity || 1
           })),
           createdAt: new Date()
         };
@@ -567,7 +577,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                 productType: it.productType,
                 color: it.color,
                 width: it.width,
-                height: it.height
+                height: it.height,
+                parentItemId: it.parentItemId,
+                command: it.command,
+                notes: it.notes,
+                quantity: it.quantity || 1
               }))
             };
             await dataService.saveTechnicalSheet(updatedSheet);

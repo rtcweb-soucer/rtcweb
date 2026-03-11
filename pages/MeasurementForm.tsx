@@ -338,35 +338,63 @@ const MeasurementForm = ({
       return;
     }
 
-    // Coleta itens atuais selecionados
-    const currentSelected = items.filter(i => selectedItemIds.has(i.id));
+    const quoteItemIds = new Set<string>();
 
-    // Coleta itens históricos selecionados e os clona para o novo orçamento
+    // 1. Current items selected:
+    items.forEach(i => {
+      if (selectedItemIds.has(i.id)) quoteItemIds.add(i.id);
+    });
+
+    // 2. Historical items selected:
     const historicalSelected: MeasurementItem[] = [];
     historicalSheets.forEach(sheet => {
       const selectedIds = historySelectedItems[sheet.id];
       if (selectedIds && selectedIds.size > 0) {
+        const idMap = new Map<string, string>();
         sheet.items.forEach(item => {
           if (selectedIds.has(item.id)) {
-            // Clonamos o item para que ele tenha um novo ID e não mude o histórico original
+            idMap.set(item.id, crypto.randomUUID());
+          }
+        });
+
+        sheet.items.forEach(item => {
+          if (selectedIds.has(item.id)) {
+            const newId = idMap.get(item.id)!;
+            quoteItemIds.add(newId);
             historicalSelected.push({
               ...item,
-              id: crypto.randomUUID(),
-              parentItemId: undefined // Resetamos agrupamento ao importar, para evitar refs quebradas
+              id: newId,
+              parentItemId: item.parentItemId && idMap.has(item.parentItemId) ? idMap.get(item.parentItemId) : undefined,
+              productionSheet: undefined // Evitar referências quebradas de produção
             });
           }
         });
       }
     });
 
-    const allItems = [...currentSelected, ...historicalSelected];
-    const newSheet = createSheetObject(allItems);
+    // Option: Just quote existing historical sheet directly if no current items and only one sheet
+    const activeHistoricalSheetIds = Object.keys(historySelectedItems).filter(sheetId => (historySelectedItems[sheetId]?.size || 0) > 0);
+    if (items.length === 0 && activeHistoricalSheetIds.length === 1) {
+       const sheetId = activeHistoricalSheetIds[0];
+       const sheet = historicalSheets.find(s => s.id === sheetId);
+       if (sheet) {
+          const orderedSelectedIds = sheet.items.filter(item => historySelectedItems[sheetId]?.has(item.id)).map(item => item.id);
+          onGenerateQuote(sheet, orderedSelectedIds);
+          return;
+       }
+    }
 
-    // Salvamos a "nova" ficha com todos os itens (atuais + importados)
+    const allItemsToSaveInSheet = [...items, ...historicalSelected];
+    const newSheet = createSheetObject(allItemsToSaveInSheet);
+
+    // Salvamos a "nova" ficha com todos os itens
     onSave(newSheet);
+    
+    // Essencial: manter ID para não gerar duplicadas num save subsequente
+    setCurrentSheetId(newSheet.id); 
 
-    // Geramos o orçamento com todos
-    onGenerateQuote(newSheet); // Sem passar IDs específicos, ele pega todos da sheet enviada
+    // Geramos o orçamento apenas com os itens selecionados (current + convertidos)
+    onGenerateQuote(newSheet, Array.from(quoteItemIds));
   };
 
   const handleDeleteItemFromHistory = async (itemId: string) => {
@@ -607,7 +635,7 @@ const MeasurementForm = ({
                           onClick={() => handleGenerateQuoteFromHistory(sheet)}
                           className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-[0.98] shadow-lg ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed uppercase tracking-widest'}`}
                         >
-                          <FileText size={16} /> Ver apenas este ({historySelectedItems[sheet.id]?.size || 0})
+                          <FileText size={16} /> Gerar Orçamento destes ({historySelectedItems[sheet.id]?.size || 0})
                         </button>
                       </div>
                     </div>
