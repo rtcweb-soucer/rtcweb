@@ -237,7 +237,9 @@ const Customers = ({
   const todayStr = getLocalISODate(new Date());
 
   const filteredCustomers = customers.filter((c: Customer) => {
-    const searchMatch = fuzzyMatch(c.name || '', searchTerm) || (c.document || '').includes(searchTerm);
+    const searchMatch = fuzzyMatch(c.name || '', searchTerm) || 
+                        fuzzyMatch(c.tradeName || '', searchTerm) ||
+                        (c.document || '').replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''));
 
     if (showOnlyToday && !searchTerm) {
       const dateRaw = c.createdAt || (c as any).created_at;

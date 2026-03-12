@@ -101,6 +101,7 @@ export const dataService = {
 
             const normalized = allData.map(c => ({
                 ...c,
+                document: c.cpf_cnpj || c.document || '', // Map cpf_cnpj to document
                 tradeName: c.trade_name,
                 contactName: c.contact_name,
                 contactPhone: c.contact_phone,
@@ -124,7 +125,7 @@ export const dataService = {
             const payload: any = {
                 id: customer.id,
                 type: customer.type,
-                document: customer.document,
+                cpf_cnpj: customer.document, // Correct column name for the document
                 name: customer.name,
                 email: customer.email,
                 phone: customer.phone,
@@ -148,6 +149,7 @@ export const dataService = {
 
             return {
                 ...data,
+                document: data.cpf_cnpj || data.document,
                 tradeName: data.trade_name,
                 contactName: data.contact_name,
                 contactPhone: data.contact_phone,

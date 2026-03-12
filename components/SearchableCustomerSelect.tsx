@@ -34,9 +34,10 @@ const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
 
         return customers.filter(c => {
             const nameMatch = normalizeString(c.name).includes(normalizedSearch);
+            const tradeMatch = c.tradeName && normalizeString(c.tradeName).includes(normalizedSearch);
             const docMatch = documentSearch && c.document && c.document.replace(/\D/g, '').includes(documentSearch);
-            return nameMatch || docMatch;
-        }).slice(0, 20);
+            return nameMatch || tradeMatch || docMatch;
+        }).slice(0, 50);
     }, [customers, searchTerm]);
 
     useEffect(() => {
