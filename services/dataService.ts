@@ -121,8 +121,15 @@ export const dataService = {
     },
     async saveCustomer(customer: Customer) {
         try {
-            const payload = {
-                ...customer,
+            const payload: any = {
+                id: customer.id,
+                type: customer.type,
+                document: customer.document,
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                phone2: customer.phone2,
+                address: customer.address,
                 trade_name: customer.tradeName,
                 contact_name: customer.contactName,
                 contact_phone: customer.contactPhone,
@@ -130,18 +137,6 @@ export const dataService = {
                 legacy_id: customer.legacyId,
                 legacy_history: customer.legacyHistory,
             };
-            // @ts-ignore
-            delete payload.tradeName;
-            // @ts-ignore
-            delete payload.contactName;
-            // @ts-ignore
-            delete payload.contactPhone;
-            // @ts-ignore
-            delete payload.contactEmail;
-            // @ts-ignore
-            delete payload.legacyId;
-            // @ts-ignore
-            delete payload.legacyHistory;
 
             console.log("Saving customer payload:", payload);
             const { data, error } = await supabase.from('customers').upsert(payload).select().single();
