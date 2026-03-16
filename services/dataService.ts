@@ -1009,7 +1009,7 @@ export const dataService = {
                 id: customerData.id,
                 name: customerData.name,
                 type: customerData.type,
-                cpfCnpj: customerData.cpf_cnpj,
+                document: customerData.document,
                 phone: customerData.phone,
                 address: customerData.address
             },
