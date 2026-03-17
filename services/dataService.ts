@@ -367,8 +367,11 @@ export const dataService = {
 
     // Orders
     async getOrders() {
-        // Fetch all orders
-        const { data: ordersData, error: ordersError } = await supabase.from('orders').select('*');
+        // Fetch only non-deleted orders
+        const { data: ordersData, error: ordersError } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('is_deleted', false);
         if (ordersError) throw ordersError;
 
         // Fetch all production tracking info to enrichment
@@ -488,9 +491,13 @@ export const dataService = {
         const { data: trackingData, error: trackingError } = await supabase.from('production_tracking').select('*');
         if (trackingError) throw trackingError;
 
-        // Fetch orders that are in tracking
+        // Fetch orders that are in tracking and NOT deleted
         const orderIds = trackingData.map(t => t.order_id);
-        const { data: ordersData, error: ordersError } = await supabase.from('orders').select('*').in('id', orderIds);
+        const { data: ordersData, error: ordersError } = await supabase
+            .from('orders')
+            .select('*')
+            .in('id', orderIds)
+            .eq('is_deleted', false);
         if (ordersError) throw ordersError;
 
         // Merge data
@@ -582,7 +589,14 @@ export const dataService = {
     },
 
     async deleteOrder(id: string) {
-        const { error } = await supabase.from('orders').delete().eq('id', id);
+        // Soft delete: mark as is_deleted = true
+        const { error } = await supabase.from('orders').update({ is_deleted: true }).eq('id', id);
+        if (error) throw error;
+    },
+
+    async undeleteOrder(id: string) {
+        // Restore soft-deleted order
+        const { error } = await supabase.from('orders').update({ is_deleted: false }).eq('id', id);
         if (error) throw error;
     },
 
