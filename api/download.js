@@ -24,6 +24,10 @@ export default async function handler(req, res) {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                console.warn('⚠️ NFEmail API returned 401. Stripping WWW-Authenticate header.');
+                res.setHeader('X-Proxy-Auth-Error', 'Unauthorized');
+            }
             return res.status(response.status).send(await response.text());
         }
 

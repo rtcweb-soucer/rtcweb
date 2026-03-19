@@ -7,7 +7,7 @@
         },
         {
             "source": "/api/nfemail/(.*)",
-            "destination": "https://api.nfemail.com.br/api/$1"
+            "destination": "/api/nfemail?path=$1"
         },
         {
             "source": "/((?!api/.*).*)",
