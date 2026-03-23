@@ -404,6 +404,9 @@ export const dataService = {
                 nfeStatus: o.nfe_status,
                 quoteNumber: o.quote_number,
                 contractNumber: o.contract_number,
+                isAnticipated: o.is_anticipated,
+                anticipationRate: o.anticipation_rate,
+                paymentLink: o.payment_link,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -434,6 +437,9 @@ export const dataService = {
             nfe_status: order.nfeStatus,
             quote_number: order.quoteNumber,
             contract_number: order.contractNumber,
+            is_anticipated: order.isAnticipated,
+            anticipation_rate: order.anticipationRate,
+            payment_link: order.paymentLink,
             created_at: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
         };
         console.log('💾 Saving order payload:', payload);
@@ -474,6 +480,9 @@ export const dataService = {
                 nfeStatus: data.nfe_status,
                 quoteNumber: data.quote_number,
                 contractNumber: data.contract_number,
+                isAnticipated: data.is_anticipated,
+                anticipationRate: data.anticipation_rate,
+                paymentLink: data.payment_link,
                 createdAt: new Date(data.created_at)
             } as unknown as Order;
         } catch (error) {
@@ -1154,8 +1163,32 @@ export const dataService = {
         const { data, error } = await supabase.from('purchase_orders').upsert(order).select().single();
         if (error) throw error;
         return data as PurchaseOrder;
+    },
+
+    // Tasks Module
+    async getTasks() {
+        const { data, error } = await supabase.from('tasks').select('*');
+        if (error) throw error;
+        return data as Task[];
+    },
+    async saveTask(task: Partial<Task>) {
+        const { data, error } = await supabase.from('tasks').upsert(task).select().single();
+        if (error) throw error;
+        return data as Task;
+    },
+    async deleteTask(id: string) {
+        const { error } = await supabase.from('tasks').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    // System Users
+    async getSystemUsers() {
+        const { data, error } = await supabase.from('system_users').select('*');
+        if (error) throw error;
+        return data as SystemUser[];
     }
 };
+
 
 // Registrar monitor de sincronização
 if (typeof window !== 'undefined') {

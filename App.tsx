@@ -24,6 +24,8 @@ import Agenda from './pages/Agenda';
 import Installers from './pages/Installers';
 import NFeManagement from './pages/NFeManagement';
 import Buyer from './pages/Buyer';
+import Tasks from './pages/Tasks';
+
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
 
@@ -681,7 +683,10 @@ const App = () => {
             }}
           />
         );
+      case 'tarefas':
+        return <Tasks />;
       default:
+
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;
     }
   };

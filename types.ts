@@ -259,6 +259,9 @@ export interface Order {
   nfeMessage?: string; // New: Mensagem de retorno da SEFAZ
   quoteNumber?: string; // New: Número formatado do orçamento (ORC YEAR-XXX)
   contractNumber?: string; // New: Número formatado do pedido (CONTRATO YEAR-XXX)
+  isAnticipated?: boolean; // New: Se a comissão foi antecipada
+  anticipationRate?: number; // New: Taxa de antecipação (x%)
+  paymentLink?: string; // New: Link de pagamento InfinitePay
   createdAt: Date;
 }
 
@@ -334,3 +337,32 @@ export interface PurchaseOrder {
   created_at?: string;
   updated_at?: string;
 }
+export enum TaskStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum TaskPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT'
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigned_to?: string; // UUID of system_user
+  created_by?: string;  // UUID of system_user
+  due_date?: string;
+  order_id?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+

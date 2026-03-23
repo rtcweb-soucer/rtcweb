@@ -86,29 +86,48 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
             }
 
             order.installments.forEach(inst => {
-                if (inst.status === 'PAID' && inst.paymentDate) {
-                    const pDate = new Date(inst.paymentDate);
-                    // User said: "o que for pago dentro do mes paga no mes seguinte"
-                    // So if we select MARCH, we look for payments in FEBRUARY.
+                let shouldInclude = false;
+                let commissionValue = inst.value * rate;
+                let effectiveRate = rate;
 
+                // Rule for Anticipation: if order is anticipated, all installments are "paid" in the sale month
+                if (order.isAnticipated) {
+                    const saleDate = new Date(order.createdAt);
+                    const targetMonth = selectedMonth === 0 ? 11 : selectedMonth - 1;
+                    const targetYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
+
+                    if (saleDate.getMonth() === targetMonth && saleDate.getFullYear() === targetYear) {
+                        shouldInclude = true;
+                        // Deduct anticipation rate if provided (x%)
+                        if (order.anticipationRate && order.anticipationRate > 0) {
+                            effectiveRate = rate - (order.anticipationRate / 100);
+                            commissionValue = inst.value * effectiveRate;
+                        }
+                    }
+                } else if (inst.status === 'PAID' && inst.paymentDate) {
+                    const pDate = new Date(inst.paymentDate);
                     const targetMonth = selectedMonth === 0 ? 11 : selectedMonth - 1;
                     const targetYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
 
                     if (pDate.getMonth() === targetMonth && pDate.getFullYear() === targetYear) {
-                        data.push({
-                            orderId: order.id,
-                            customerName: customer?.name || 'Cliente Desconhecido',
-                            sellerName: seller?.name || 'Vendedor RTC',
-                            sellerId: order.sellerId,
-                            paymentDate: inst.paymentDate,
-                            installmentValue: inst.value,
-                            commissionRate: rate,
-                            commissionValue: inst.value * rate,
-                            discount: discount * 100,
-                            installmentNumber: inst.number,
-                            totalInstallments: order.installments!.length
-                        });
+                        shouldInclude = true;
                     }
+                }
+
+                if (shouldInclude) {
+                    data.push({
+                        orderId: order.contractNumber || order.quoteNumber || order.id,
+                        customerName: customer?.name || 'Cliente Desconhecido',
+                        sellerName: seller?.name || 'Vendedor RTC',
+                        sellerId: order.sellerId,
+                        paymentDate: order.isAnticipated ? order.createdAt.toString() : (inst.paymentDate || ''),
+                        installmentValue: inst.value,
+                        commissionRate: effectiveRate,
+                        commissionValue: commissionValue,
+                        discount: discount * 100,
+                        installmentNumber: inst.number,
+                        totalInstallments: order.installments!.length
+                    });
                 }
             });
         });

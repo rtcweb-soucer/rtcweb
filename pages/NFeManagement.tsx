@@ -49,8 +49,10 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
     // Estados para ações avançadas
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showCCeModal, setShowCCeModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [modalInput, setModalInput] = useState('');
+    const [editData, setEditData] = useState<any>(null);
     const [isProcessingAction, setIsProcessingAction] = useState(false);
 
     useEffect(() => {
@@ -110,7 +112,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
         }
     };
 
-    const handleSyncStatus = async (order: Order) => {
+    const handleSyncStatus = async (order: Order, silent: boolean = false) => {
         let currentKey = order.nfeKey;
         let foundStatus: any = null;
 
@@ -155,7 +157,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                     onUpdateOrder(updatedOrder);
 
                     if (mappedStatus === 'AUTHORIZED') {
-                        alert(`Nota ${order.nfeNumber} Sincronizada: AUTORIZADA com sucesso!`);
+                        if (!silent) alert(`Nota ${order.nfeNumber} Sincronizada: AUTORIZADA com sucesso!`);
                         return 'AUTHORIZED';
                     }
 
@@ -171,7 +173,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
 
         // Se não resolveu pela lista ou não encontrou, tenta o detalhe direto com a chave que tivermos
         if (!currentKey) {
-            alert("Não foi possível encontrar a chave de acesso para sincronizar.");
+            if (!silent) alert("Não foi possível encontrar a chave de acesso para sincronizar.");
             return null;
         }
 
@@ -191,8 +193,8 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                 onUpdateOrder(updatedOrder);
 
                 if (result.status === 'AUTHORIZED') {
-                    alert(`Nota ${order.nfeNumber} Sincronizada: AUTORIZADA com sucesso!`);
-                } else {
+                    if (!silent) alert(`Nota ${order.nfeNumber} Sincronizada: AUTORIZADA com sucesso!`);
+                } else if (!silent) {
                     const rawData = result.raw ? JSON.stringify(result.raw, null, 2) : 'Sem dados brutos';
                     alert(`Sincronização concluída. Status Portal: ${result.status}\nMotivo: ${result.xMotivo}\n\nResposta da API:\n${rawData}`);
                 }
@@ -201,7 +203,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
             } else if (foundStatus) {
                 // Se o detalhe falhou mas a lista deu algum status, ficamos com o da lista
                 return foundStatus;
-            } else {
+            } else if (!silent) {
                 const rawData = result?.raw ? JSON.stringify(result.raw, null, 2) : 'Sem dados brutos ou erro na chave';
                 alert(`Sincronização incompleta. Status Local: PENDENTE\nMotivo: O portal não retornou status definitivo.\n\nResposta da API:\n${rawData}`);
             }
@@ -209,7 +211,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
         } catch (error: any) {
             console.error("Erro ao sincronizar status detalhado:", error);
             // Se já tínhamos status da lista, não alertamos erro de comunicação detalhada
-            if (!foundStatus) alert("Erro na comunicação detalhada com o portal: " + error.message);
+            if (!foundStatus && !silent) alert("Erro na comunicação detalhada com o portal: " + error.message);
             return foundStatus || null;
         }
     };
@@ -224,7 +226,7 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
         setIsSyncingAll(true);
         let successCount = 0;
         for (const order of toSync) {
-            const newStatus = await handleSyncStatus(order);
+            const newStatus = await handleSyncStatus(order, true);
             if (newStatus === 'AUTHORIZED') successCount++;
         }
         setIsSyncingAll(false);
@@ -350,7 +352,10 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
             }
 
             alert(`NF-e nº ${nextNum} transmitida com sucesso!`);
-            await handleSyncStatus(updatedOrder);
+            // Aguardamos 2 segundos para o portal processar antes de sincronizar silenciosamente
+            setTimeout(async () => {
+                await handleSyncStatus(updatedOrder, true);
+            }, 2000);
         } catch (error: any) {
             alert("Erro na transmissão: " + error.message);
         } finally {
@@ -501,6 +506,35 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                                         title="Transmitir Nota"
                                     >
                                         <SendHorizontal size={18} />
+                                    </button>
+                                )}
+
+                                {order.nfeStatus === 'ERROR' && (
+                                    <button
+                                        onClick={() => {
+                                            const customer = customers.find(c => c.id === order.customerId);
+                                            const sheet = technicalSheets.find(s => s.id === order.technicalSheetId);
+                                            const items = order.itemsSnapshot || sheet?.items.filter(it => order.itemIds?.includes(it.id)) || [];
+                                            
+                                            setEditData({
+                                                customer: customer ? { ...customer } : null,
+                                                items: items.map(it => {
+                                                    const product = products.find(p => p.id === it.productId);
+                                                    return {
+                                                        ...it,
+                                                        productName: product?.nome || 'Produto',
+                                                        ncm: product?.ncm || '',
+                                                        cfop: product?.cfop || ''
+                                                    };
+                                                })
+                                            });
+                                            setSelectedOrder(order);
+                                            setShowEditModal(true);
+                                        }}
+                                        className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"
+                                        title="Corrigir Dados (Editar)"
+                                    >
+                                        <FileEdit size={18} />
                                     </button>
                                 )}
                             </div>
@@ -899,6 +933,171 @@ const NFeManagement = ({ orders, customers, products, technicalSheets, currentUs
                                 className="flex-1 py-3 bg-amber-600 text-white rounded-xl text-sm font-black hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 active:scale-95 disabled:opacity-50"
                             >
                                 {isProcessingAction ? 'Enviando...' : 'Enviar Correção'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Edit Modal */}
+            {showEditModal && editData && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                                <FileEdit className="text-amber-500" /> Corrigir Dados da Nota
+                            </h3>
+                            <button onClick={() => setShowEditModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                                <X size={24} className="text-slate-400" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Customer Data */}
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Dados do Cliente</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">CPF/CNPJ</label>
+                                        <input
+                                            type="text"
+                                            value={editData.customer?.document || ''}
+                                            onChange={(e) => setEditData({
+                                                ...editData,
+                                                customer: { ...editData.customer, document: e.target.value }
+                                            })}
+                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Logradouro</label>
+                                        <input
+                                            type="text"
+                                            value={editData.customer?.address.street || ''}
+                                            onChange={(e) => setEditData({
+                                                ...editData,
+                                                customer: {
+                                                    ...editData.customer,
+                                                    address: { ...editData.customer.address, street: e.target.value }
+                                                }
+                                            })}
+                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Número</label>
+                                        <input
+                                            type="text"
+                                            value={editData.customer?.address.number || ''}
+                                            onChange={(e) => setEditData({
+                                                ...editData,
+                                                customer: {
+                                                    ...editData.customer,
+                                                    address: { ...editData.customer.address, number: e.target.value }
+                                                }
+                                            })}
+                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Bairro</label>
+                                        <input
+                                            type="text"
+                                            value={editData.customer?.address.neighborhood || ''}
+                                            onChange={(e) => setEditData({
+                                                ...editData,
+                                                customer: {
+                                                    ...editData.customer,
+                                                    address: { ...editData.customer.address, neighborhood: e.target.value }
+                                                }
+                                            })}
+                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Products Data */}
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Dados dos Itens (NCM/CFOP)</h4>
+                                <div className="space-y-3">
+                                    {editData.items.map((item: any, idx: number) => (
+                                        <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-xs font-bold text-slate-700 mb-2">{item.productName}</p>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">NCM</label>
+                                                    <input
+                                                        type="text"
+                                                        value={item.ncm}
+                                                        onChange={(e) => {
+                                                            const newItems = [...editData.items];
+                                                            newItems[idx].ncm = e.target.value;
+                                                            setEditData({ ...editData, items: newItems });
+                                                        }}
+                                                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">CFOP</label>
+                                                    <input
+                                                        type="text"
+                                                        value={item.cfop}
+                                                        onChange={(e) => {
+                                                            const newItems = [...editData.items];
+                                                            newItems[idx].cfop = e.target.value;
+                                                            setEditData({ ...editData, items: newItems });
+                                                        }}
+                                                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-slate-100 flex gap-3 bg-slate-50/50">
+                            <button
+                                onClick={() => setShowEditModal(false)}
+                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setIsProcessingAction(true);
+                                    try {
+                                        // 1. Save Customer Changes
+                                        if (editData.customer) {
+                                            await dataService.saveCustomer(editData.customer);
+                                        }
+
+                                        // 2. Save Product Changes (NCM/CFOP are in the Products table)
+                                        for (const item of editData.items) {
+                                            const product = products.find(p => p.id === item.productId);
+                                            if (product) {
+                                                await dataService.saveProduct({
+                                                    ...product,
+                                                    ncm: item.ncm,
+                                                    cfop: item.cfop
+                                                });
+                                            }
+                                        }
+
+                                        alert("Dados atualizados com sucesso! Você já pode transmitir a nota novamente.");
+                                        setShowEditModal(false);
+                                        // No need to reload everything, the next transmission will use updated data from services
+                                    } catch (err: any) {
+                                        alert("Erro ao salvar correções: " + err.message);
+                                    } finally {
+                                        setIsProcessingAction(false);
+                                    }
+                                }}
+                                disabled={isProcessingAction}
+                                className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                            >
+                                {isProcessingAction ? 'Salvando...' : 'Salvar e Fechar'}
                             </button>
                         </div>
                     </div>

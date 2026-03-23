@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { dataService } from '../services/dataService';
-import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, MeasurementItem, ProductionStage, Seller, Appointment, Installer, SystemUser } from '../types';
+import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, MeasurementItem, ProductionStage, Seller, Appointment, Installer, SystemUser, TaskStatus, TaskPriority, Task } from '../types';
 import CustomerModal from '../components/CustomerModal';
 import { normalizeString } from '../utils/searchUtils';
 import { addBusinessDays } from '../utils/dateUtils';
@@ -24,6 +24,7 @@ import {
   Info,
   CheckCircle2,
   DollarSign,
+  TrendingUp,
   CreditCard,
   Clock,
   MapPin,
@@ -83,6 +84,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
   const [isSaving, setIsSaving] = useState(false);
   const [deliveryDays, setDeliveryDays] = useState(25);
   const [contractObservations, setContractObservations] = useState('');
+  const [isAnticipated, setIsAnticipated] = useState(false);
+  const [anticipationRate, setAnticipationRate] = useState<number>(0);
 
   // Estados dos Filtros Avançados
   const [showFilters, setShowFilters] = useState(false);
@@ -635,6 +638,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         installments: installments,
         deliveryDays: deliveryDays,
         deliveryDeadline: addBusinessDays(new Date(), deliveryDays).toISOString(),
+        isAnticipated: isAnticipated,
+        anticipationRate: anticipationRate,
         createdAt: new Date()
       };
 
@@ -645,6 +650,20 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
 
       // 3. Save Order (Commercial data)
       await dataService.saveOrder(updatedOrder);
+
+      // 3b. Se for antecipado, cria uma tarefa de autorização financeira
+      if (isAnticipated) {
+        const authTask: Partial<Task> = {
+          title: `AUTORIZAÇÃO FINANCEIRA: Pedido ${updatedOrder.contractNumber || updatedOrder.id}`,
+          description: `Autorização de antecipação de comissão para o pedido ${updatedOrder.contractNumber || updatedOrder.id}. Vendedor: ${sellers.find(s => s.id === updatedOrder.sellerId)?.name || 'N/A'}. Valor Total: R$ ${updatedOrder.totalValue.toLocaleString('pt-BR')}. Taxa: ${anticipationRate}%`,
+          status: TaskStatus.PENDING,
+          priority: TaskPriority.HIGH,
+          creator_id: currentUser?.id,
+          // Por padrão atribui ao Master ou Financeiro se houver lógica de roles futuramente
+          created_at: new Date().toISOString()
+        };
+        await dataService.saveTask(authTask);
+      }
 
       // 4. Initialize Production Tracking
       await dataService.initializeProduction(
@@ -1305,6 +1324,60 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                         </select>
                       </div>
                     </div>
+
+                    {paymentMethod === 'Cartão de Crédito' && (() => {
+                      const originalTotalValue = orderItems.reduce((acc: number, it: MeasurementItem) => {
+                        const p = products.find((prod: Product) => prod.id === it.productId);
+                        if (!p) return acc;
+                        const a = (it.width * it.height) || 1;
+                        return acc + (p.unidade === 'M2' ? p.valor * a : p.valor);
+                      }, 0);
+
+                      const minMarkupPrice = originalTotalValue * 1.1;
+                      const hasLowMarkup = selectedOrder.totalValue < minMarkupPrice;
+
+                      return (
+                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-3 animate-in fade-in slide-in-from-top-2">
+                          <div className="flex items-center justify-between">
+                            <label className={`flex items-center gap-2 ${hasLowMarkup ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <input
+                                type="checkbox"
+                                checked={isAnticipated && !hasLowMarkup}
+                                onChange={(e) => setIsAnticipated(e.target.checked)}
+                                disabled={hasLowMarkup}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm font-bold text-amber-900">Antecipar Comissão (Mês Corrente)?</span>
+                            </label>
+                            <TrendingUp size={18} className="text-amber-500" />
+                          </div>
+                          {hasLowMarkup ? (
+                            <div className="p-2 bg-white/50 rounded-lg flex items-start gap-2 border border-amber-200">
+                              <Info size={14} className="text-amber-600 mt-0.5" />
+                              <p className="text-[10px] font-bold text-amber-700 leading-tight uppercase tracking-tighter">
+                                Antecipação indisponível: O valor do pedido (R$ {selectedOrder.totalValue.toLocaleString('pt-BR')}) é inferior à margem mínima de 10% sobre a tabela (R$ {minMarkupPrice.toLocaleString('pt-BR')}).
+                              </p>
+                            </div>
+                          ) : isAnticipated && (
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-medium text-amber-700 italic leading-tight uppercase tracking-tighter">Ao ativar, o vendedor receberá a comissão integral no fechamento do mês da venda, descontando a taxa abaixo. Uma tarefa de autorização financeira será criada.</p>
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-amber-800 uppercase tracking-wider">Taxa de Antecipação (%)</label>
+                                <div className="flex-1">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={anticipationRate}
+                                    onChange={(e) => setAnticipationRate(parseFloat(e.target.value) || 0)}
+                                    className="w-full px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-sm font-black text-amber-700 outline-none focus:ring-2 focus:ring-amber-500 uppercase tracking-tighter"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <div className="space-y-2">
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Observações/Condições</label>
@@ -1990,6 +2063,42 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                     ))}
                   </select>
                 </div>
+
+                {paymentMethod === 'Cartão de Crédito' && (
+                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-3 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isAnticipated}
+                          onChange={(e) => setIsAnticipated(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-bold text-amber-900">Antecipar Comissão (Mês Corrente)?</span>
+                      </label>
+                      <div className="p-1.5 bg-amber-100 text-amber-600 rounded-lg">
+                        <DollarSign size={16} />
+                      </div>
+                    </div>
+                    {isAnticipated && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-medium text-amber-700 italic leading-tight">Ao ativar, o vendedor receberá a comissão integral no fechamento do mês da venda, descontando a taxa abaixo.</p>
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-bold text-amber-800 uppercase tracking-wider whitespace-nowrap">Taxa de Antecipação (%)</label>
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={anticipationRate}
+                              onChange={(e) => setAnticipationRate(parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-sm font-black text-amber-700 outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">OBS. DO CONTRATO</label>

@@ -19,7 +19,8 @@ import {
   Receipt,
   Coins,
   HardHat,
-  ShoppingCart
+  ShoppingCart,
+  CheckSquare
 } from 'lucide-react';
 
 export const MENU_ITEMS = [
@@ -34,6 +35,7 @@ export const MENU_ITEMS = [
   { id: 'measurements', label: 'Medições/Fichas', icon: <Ruler size={20} />, roles: ['ADMIN', 'SELLER'] },
   { id: 'quotes', label: 'Orçamentos', icon: <FileText size={20} />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
   { id: 'orders', label: 'Pedidos', icon: <Briefcase size={20} />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
+  { id: 'tarefas', label: 'Tarefas', icon: <CheckSquare size={20} className="text-blue-600" />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
   { id: 'pcp', label: 'PCP (Produção)', icon: <Factory size={20} />, roles: ['ADMIN', 'PRODUCTION'] },
   { id: 'buyer', label: 'Compras', icon: <ShoppingCart size={20} className="text-emerald-500" />, roles: ['ADMIN', 'PRODUCTION', 'BUYER'] },
   { id: 'installations', label: 'Instalações', icon: <Truck size={20} />, roles: ['ADMIN', 'ATTENDANT', 'PRODUCTION'] },
@@ -44,6 +46,7 @@ export const MENU_ITEMS = [
   { id: 'nfe-management', label: 'Gerenciar NF-e', icon: <FileText size={20} className="text-blue-500" />, roles: ['ADMIN'] },
   { id: 'system-users', label: 'Cadastro de Equipe', icon: <Users2 size={20} className="text-rose-500" />, roles: ['ADMIN', 'ATTENDANT'] },
 ];
+
 
 export const STATUS_COLORS = {
   PENDING_MEASUREMENT: 'bg-yellow-100 text-yellow-800',
