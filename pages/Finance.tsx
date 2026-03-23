@@ -21,7 +21,10 @@ import {
    Eye,
    Layers,
    ChevronRight,
-   Search as SearchIcon
+   FileText,
+   CreditCard,
+   Info,
+   MessageCircle
 } from 'lucide-react';
 
 interface FinanceProps {
@@ -142,7 +145,6 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
          return inst;
       });
 
-      // Gerar transação financeira automática de entrada
       const inst = order.installments.find(i => i.id === settleModal.installmentId);
       const customer = customers.find(c => c.id === order.customerId);
       const transaction: FinancialTransaction = {
@@ -192,7 +194,6 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
          const order = orders.find(o => o.id === item.orderId);
          if (!order || !order.installments) continue;
 
-         // Distribuição proporcional do valor pago
          const proportion = item.value / totalGross;
          const adjustedValue = totalGross > 0 ? (batchSettleData.totalPaid * proportion) : 0;
 
@@ -540,7 +541,7 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                                     onChange={toggleSelectAll}
                                  />
                               </th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pedido / Cliente</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato / Cliente</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Parcela</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Produção</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Instalação</th>
@@ -571,16 +572,53 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                                     </td>
                                     <td className="px-6 py-4">
                                        <div className="flex items-center gap-2">
-                                          <p className="text-sm font-black text-slate-900 leading-tight">#{inst.orderId}</p>
+                                          <p className="text-sm font-black text-slate-900 leading-tight">
+                                             {(() => {
+                                                const order = orders.find(o => o.id === inst.orderId);
+                                                return order?.contractNumber 
+                                                   ? `${order.quoteNumber || order.id.slice(0, 8).toUpperCase()} / ${order.contractNumber}`
+                                                   : `Nº ${order?.quoteNumber || inst.orderId.slice(0, 8).toUpperCase()}`;
+                                             })()}
+                                          </p>
                                           <button 
                                              onClick={() => setViewOrder(orders.find(o => o.id === inst.orderId) || null)}
                                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                             title="Ver Pedido"
+                                             title="Ver Pedido Completo"
                                           >
                                              <Eye size={12} />
                                           </button>
                                        </div>
-                                       <p className="text-[11px] text-slate-500 mt-0.5">{inst.customerName}</p>
+                                       <div className="mt-1 space-y-1">
+                                          <p className="text-[11px] font-bold text-slate-700 truncate max-w-[200px]">{inst.customerName}</p>
+                                          {(() => {
+                                             const order = orders.find(o => o.id === inst.orderId);
+                                             const customer = customers.find(c => c.id === order?.customerId);
+                                             const seller = sellers.find(s => s.id === order?.sellerId);
+                                             return (
+                                                <div className="flex flex-col gap-0.5">
+                                                   {customer?.phone && (
+                                                      <div className="flex items-center gap-1.5">
+                                                         <MessageCircle size={10} className="text-emerald-500"/>
+                                                         <a 
+                                                            href={`https://wa.me/55${customer.phone.replace(/\D/g, '')}`} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="text-[10px] text-slate-500 hover:text-emerald-600 hover:underline transition-all"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            title="Abrir WhatsApp"
+                                                         >
+                                                            {customer.phone}
+                                                         </a>
+                                                      </div>
+                                                   )}
+                                                   <div className="flex items-center gap-1 mt-0.5">
+                                                      <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Vend:</span>
+                                                      <span className="text-[9px] font-bold text-slate-600 uppercase truncate max-w-[150px]">{seller?.name || 'Não Informado'}</span>
+                                                   </div>
+                                                </div>
+                                             );
+                                          })()}
+                                       </div>
                                     </td>
                                     <td className="px-6 py-4">
                                        <span className="text-[10px] font-black px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
@@ -748,50 +786,61 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
          {/* Settle Modal (Receivable) */}
          {settleModal && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-               <div className="bg-white rounded-3xl shadow-2xl w-full max-md overflow-hidden animate-in fade-in zoom-in duration-200">
+               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                   <div className="p-8">
                      <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 border border-emerald-100 mx-auto">
                         <CheckCircle2 size={32} />
                      </div>
                      <h3 className="text-2xl font-black text-center text-slate-900">Confirmar Liquidação</h3>
-                     <p className="text-center text-slate-500 mt-2">Deseja confirmar o recebimento desta parcela? Um lançamento automático será gerado em seu fluxo de caixa.</p>
+                     <p className="text-center text-slate-500 mt-2 text-sm leading-relaxed">Deseja confirmar o recebimento desta parcela? Um lançamento automático será gerado em seu fluxo de caixa.</p>
 
                      <div className="mt-8 space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-2xl space-y-2">
-                           <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100/50 space-y-3">
+                           <div className="flex justify-between items-center text-[10px] font-black text-blue-400 uppercase tracking-widest">
                               <span>Valor da Parcela</span>
-                              <span>R$ {settleModal.grossValue.toLocaleString('pt-BR')}</span>
+                              <span className="bg-white px-2 py-0.5 rounded border border-blue-100">R$ {settleModal.grossValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                            </div>
-                           <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-200">
-                              <span>Valor Líquido</span>
-                              <input
-                                 type="number"
-                                 className="w-24 text-right bg-transparent outline-none focus:text-blue-600"
-                                 value={settleModal.netValue}
-                                 onChange={(e) => setSettleModal({ ...settleModal, netValue: Number(e.target.value) })}
-                              />
+                           <div className="flex justify-between items-center pt-3 border-t border-blue-100/50">
+                              <span className="text-sm font-black text-slate-900">Valor Recebido</span>
+                              <div className="relative">
+                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-blue-400">R$</span>
+                                 <input
+                                    type="number"
+                                    className="w-32 pl-9 pr-4 py-2 bg-white border border-blue-200 rounded-xl text-right font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    value={settleModal.netValue}
+                                    onChange={(e) => setSettleModal({ ...settleModal, netValue: Number(e.target.value) })}
+                                 />
+                              </div>
                            </div>
                         </div>
 
-                        <div>
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data do Pagamento</label>
-                           <input
-                              type="date"
-                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
-                              value={settleModal.paymentDate}
-                              onChange={(e) => setSettleModal({ ...settleModal, paymentDate: e.target.value })}
-                           />
-                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                           <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Data de Recebimento</label>
+                              <div className="relative">
+                                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                 <input
+                                    type="date"
+                                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700"
+                                    value={settleModal.paymentDate}
+                                    onChange={(e) => setSettleModal({ ...settleModal, paymentDate: e.target.value })}
+                                 />
+                              </div>
+                           </div>
 
-                        <div>
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Número da Nota (Opcional)</label>
-                           <input
-                              type="text"
-                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
-                              placeholder="NFe..."
-                              value={settleModal.nfe}
-                              onChange={(e) => setSettleModal({ ...settleModal, nfe: e.target.value })}
-                           />
+                           <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Documento / NFe (Opcional)</label>
+                              <div className="relative">
+                                 <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                 <input
+                                    type="text"
+                                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700"
+                                    placeholder="Número do recibo ou nota..."
+                                    value={settleModal.nfe}
+                                    onChange={(e) => setSettleModal({ ...settleModal, nfe: e.target.value })}
+                                 />
+                              </div>
+                           </div>
                         </div>
                      </div>
 
@@ -891,7 +940,7 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                      </button>
                   </div>
                   
-                  <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                  <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
                      <div className="grid grid-cols-2 gap-6 mb-8">
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Cliente</p>
@@ -939,73 +988,254 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                            </div>
                         </div>
                      ) : (
-                        <div className="bg-white border border-slate-200 rounded-2xl p-6 font-serif text-[13px] leading-relaxed shadow-inner overflow-x-auto">
-                           {/* Formal Header */}
-                           <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start min-w-[500px]">
-                              <div>
-                                 <h4 className="text-xl font-black text-slate-900 uppercase">Pedido de Venda</h4>
-                                 <p className="text-slate-500 font-sans font-bold text-[10px] tracking-widest mt-1 uppercase">RTC - Toldos & Cortinas</p>
-                              </div>
-                              <div className="text-right">
-                                 <p className="font-black tracking-tighter">#{viewOrder.id.slice(0, 8).toUpperCase()}</p>
-                                 <p className="text-slate-400 font-sans text-[10px]">{new Date(viewOrder.createdAt).toLocaleDateString('pt-BR')}</p>
-                                 {viewOrder.contractNumber && <p className="text-blue-600 font-black text-[10px] mt-1">{viewOrder.contractNumber}</p>}
-                              </div>
-                           </div>
-
-                           <div className="grid grid-cols-2 gap-8 mb-8 font-sans min-w-[500px]">
-                              <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cliente</p>
-                                 <p className="font-bold text-slate-800">{customers.find(c => c.id === viewOrder.customerId)?.name || 'Consumidor Final'}</p>
-                              </div>
-                              <div className="text-right">
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendedor</p>
-                                 <p className="font-bold text-slate-800">{sellers.find(s => s.id === viewOrder.sellerId)?.name || 'Interno'}</p>
-                              </div>
-                           </div>
-
-                           <table className="w-full text-left font-sans text-[11px] border-collapse min-w-[500px]">
+                        <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-inner overflow-x-auto">
+                           {/* Premium Print Layout Template */}
+                           <table className="w-full">
                               <thead>
-                                 <tr className="border-b-2 border-slate-900">
-                                    <th className="py-2 font-black uppercase">Item / Descrição</th>
-                                    <th className="py-2 text-center font-black uppercase">Qtd</th>
-                                    <th className="py-2 text-right font-black uppercase">Unitário</th>
-                                    <th className="py-2 text-right font-black uppercase">Total</th>
+                                 <tr>
+                                    <td>
+                                       <div className="p-6 pb-4 mb-4 bg-white border-b-2 border-slate-100 flex justify-between items-start gap-8">
+                                          <div className="flex items-center gap-4">
+                                             <div className="h-16 w-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
+                                                <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="logo-img object-contain" />
+                                             </div>
+                                             <div>
+                                                <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Contrato de Venda</h1>
+                                                <div className="flex items-center gap-2 mt-1.5">
+                                                   <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">
+                                                      {viewOrder.contractNumber
+                                                         ? `${viewOrder.quoteNumber || viewOrder.id.slice(0, 8)} / ${viewOrder.contractNumber}`
+                                                         : `Nº ${viewOrder.quoteNumber || viewOrder.id.slice(0, 8).toUpperCase()}`}
+                                                   </span>
+                                                   <span className="text-slate-400 font-medium text-[9px]">Data: {new Date(viewOrder.createdAt).toLocaleDateString()}</span>
+                                                </div>
+                                                <div className="mt-2 flex items-center gap-1.5 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded-md w-fit">
+                                                   <span className="text-[8px] font-black text-yellow-700 uppercase tracking-widest">Consultor:</span>
+                                                   <span className="text-[10px] font-black text-slate-900 uppercase">{sellers.find(s => s.id === viewOrder.sellerId)?.name || 'NÃO DEFINIDO'}</span>
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <div className="text-right space-y-0 hidden sm:block">
+                                             <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
+                                             <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
+                                             <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
+                                             <p className="text-[9px] text-slate-500 font-medium">(21) 4062-7090 | (21) 2201-8118</p>
+                                             <p className="text-[9px] text-emerald-600 font-bold">WhatsApp: (21) 97078-9399 / (21) 96433-4539</p>
+                                          </div>
+                                       </div>
+                                    </td>
                                  </tr>
                               </thead>
                               <tbody>
-                                 {viewOrder.itemsSnapshot?.map((item: any, idx: number) => (
-                                    <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                       <td className="py-3">
-                                          <p className="font-bold text-slate-900">{item.productName || 'Produto'}</p>
-                                          <p className="text-[10px] text-slate-500 italic uppercase">Amb: {item.environment} | Med: {item.width.toFixed(3)}x{item.height.toFixed(3)}m</p>
-                                       </td>
-                                       <td className="py-3 text-center font-bold text-slate-700">{item.quantity}</td>
-                                       <td className="py-3 text-right text-slate-600">
-                                          R$ {(item.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                       </td>
-                                       <td className="py-3 text-right font-black text-slate-900">
-                                          R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                       </td>
-                                    </tr>
-                                 ))}
+                                 <tr>
+                                    <td>
+                                       <div className="px-6 space-y-4">
+                                          {/* Contratante Info */}
+                                          <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                                             <div className="grid grid-cols-6 gap-x-6 gap-y-2">
+                                                <div className="col-span-3">
+                                                   <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Contratante</p>
+                                                   <p className="text-xs font-bold text-slate-900">{customers.find(c => c.id === viewOrder.customerId)?.name || 'Consumidor Final'}</p>
+                                                   {customers.find(c => c.id === viewOrder.customerId)?.tradeName && (
+                                                      <p className="text-[9px] text-slate-500 font-medium font-italic">({customers.find(c => c.id === viewOrder.customerId)?.tradeName})</p>
+                                                   )}
+                                                </div>
+                                                <div className="col-span-1">
+                                                   <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Documento</p>
+                                                   <p className="text-xs font-bold text-slate-900">{customers.find(c => c.id === viewOrder.customerId)?.document || '-'}</p>
+                                                </div>
+                                                <div className="col-span-2 text-right">
+                                                   <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Telefone</p>
+                                                   <p className="text-xs font-bold text-slate-900">{customers.find(c => c.id === viewOrder.customerId)?.phone || '-'}</p>
+                                                </div>
+                                                <div className="col-span-3">
+                                                   <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Endereço de Instalação</p>
+                                                   <p className="text-xs font-bold text-slate-900">
+                                                      {(() => {
+                                                         const c = customers.find(c => c.id === viewOrder.customerId);
+                                                         return c?.address ? `${c.address.street}, ${c.address.number}` : '-';
+                                                      })()}
+                                                   </p>
+                                                </div>
+                                                <div className="col-span-1">
+                                                   <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">CEP</p>
+                                                   <p className="text-xs font-bold text-slate-900">{customers.find(c => c.id === viewOrder.customerId)?.address?.cep || '-'}</p>
+                                                </div>
+                                                <div className="col-span-2 text-right">
+                                                   <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">E-mail</p>
+                                                   <p className="text-xs font-bold text-slate-900 truncate">{customers.find(c => c.id === viewOrder.customerId)?.email || '-'}</p>
+                                                </div>
+                                             </div>
+                                          </section>
+
+                                          {/* Itens do Pedido */}
+                                          <section>
+                                             <h2 className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5 underline decoration-blue-500/30 underline-offset-4">
+                                                <Layers size={10} className="text-blue-500" /> Detalhamento dos Itens Contratados
+                                             </h2>
+                                             <div className="overflow-hidden rounded-xl border border-slate-200">
+                                                <table className="w-full text-left border-collapse">
+                                                   <thead className="bg-slate-900 text-white">
+                                                      <tr>
+                                                         <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '15%' }}>Ambiente</th>
+                                                         <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '40%' }}>Descrição do Produto</th>
+                                                         <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center" style={{ width: '10%' }}>Cor</th>
+                                                         <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center font-mono" style={{ width: '20%' }}>Medida (L x A)</th>
+                                                         <th className="px-3 py-1.5 text-[8px] font-black uppercase text-right" style={{ width: '15%' }}>Subtotal</th>
+                                                      </tr>
+                                                   </thead>
+                                                   <tbody className="divide-y divide-slate-100">
+                                                      {viewOrder.itemsSnapshot?.map((item: any, idx: number) => (
+                                                         <tr key={idx}>
+                                                            <td className="px-3 py-1.5 text-xs font-bold text-slate-900">{item.environment}</td>
+                                                            <td className="px-3 py-1.5 text-xs text-slate-700 font-medium">{item.productName || 'Produto'}</td>
+                                                            <td className="px-3 py-1.5 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
+                                                            <td className="px-3 py-1.5 text-xs text-center font-mono font-bold text-blue-600 bg-blue-50/30">
+                                                               {item.width?.toFixed(3)}m x {item.height?.toFixed(3)}m
+                                                            </td>
+                                                            <td className="px-3 py-1.5 text-xs text-right font-black text-slate-900 whitespace-nowrap">
+                                                               R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                            </td>
+                                                         </tr>
+                                                      ))}
+                                                   </tbody>
+                                                   <tfoot className="bg-slate-50">
+                                                      <tr>
+                                                         <td colSpan={4} className="px-4 py-3 text-right text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor Total do Pedido</td>
+                                                         <td className="px-4 py-3 text-right text-sm font-black text-slate-900 whitespace-nowrap">
+                                                            R$ {viewOrder.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                         </td>
+                                                      </tr>
+                                                   </tfoot>
+                                                </table>
+                                             </div>
+                                          </section>
+
+                                          {/* Financeiro e Prazos */}
+                                          <div className="w-full">
+                                             <section className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60">
+                                                   <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                      <CreditCard size={12} className="text-blue-500" /> Condições de Pagamento
+                                                   </h4>
+                                                </div>
+
+                                                {viewOrder.installments && viewOrder.installments.length > 0 && (
+                                                   <div className="space-y-1 list-none mb-4">
+                                                      <div className="px-3 flex justify-between text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">
+                                                         <div className="flex gap-4">
+                                                            <span className="w-16 text-center">Nº Parcela</span>
+                                                            <span>Forma de Pagamento</span>
+                                                         </div>
+                                                         <div className="flex gap-10">
+                                                            <span className="w-16 text-right">Vencimento</span>
+                                                            <span className="w-20 text-right">Valor</span>
+                                                         </div>
+                                                      </div>
+                                                      {viewOrder.installments.map((inst, idx, arr) => (
+                                                         <div key={inst.id} className="py-1 px-3 bg-white border border-slate-100 rounded-lg flex items-center justify-between text-[9px] uppercase group hover:border-blue-200 transition-colors">
+                                                            <div className="flex items-center gap-4">
+                                                               <span className="font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[8px] w-16 text-center">{(inst as any).installmentNumber || (idx + 1)}/{arr.length}</span>
+                                                               <span className="font-bold text-slate-600 truncate max-w-[150px]">{inst.paymentMethod || viewOrder.paymentMethod || 'Espécie'}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-10">
+                                                               <div className="flex flex-col items-end w-16">
+                                                                  <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
+                                                               </div>
+                                                               <div className="flex flex-col items-end min-w-[80px]">
+                                                                  <span className="font-black text-blue-700 leading-tight">R$ {(inst.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                               </div>
+                                                            </div>
+                                                         </div>
+                                                      ))}
+                                                   </div>
+                                                )}
+
+                                                <div className="space-y-2">
+                                                   {viewOrder.paymentConditions && (
+                                                      <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                                                         <h4 className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                                            <CreditCard size={10} /> Observações de Pagamento
+                                                         </h4>
+                                                         <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{viewOrder.paymentConditions}</p>
+                                                      </div>
+                                                   )}
+                                                   {viewOrder.contractObservations && (
+                                                      <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                                                         <h4 className="text-[8px] font-black text-amber-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                                            <Info size={10} /> Observações do Contrato
+                                                         </h4>
+                                                         <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{viewOrder.contractObservations}</p>
+                                                      </div>
+                                                   )}
+                                                </div>
+                                             </section>
+                                          </div>
+
+                                          {/* Contract Clauses */}
+                                          <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
+                                             <h3 className="text-[9px] font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2">Cláusulas Contratuais</h3>
+
+                                             <div className="grid grid-cols-1 gap-4 text-[7.5px] text-slate-500 leading-relaxed text-justify px-2 pb-6">
+                                                <div>
+                                                   <p className="font-black text-slate-700 mb-1 uppercase tracking-wider">DA ENTREGA E INSTALAÇÃO:</p>
+                                                   <p>O prazo de entrega será de <span className="font-black text-slate-900">{(viewOrder.deliveryDays || 25)} dias úteis</span> para os Produtos Contratados, definido a partir do primeiro pagamento efetuado a CONTRATADA. Prazo contado a partir do 1º dia útil após o pagamento efetuado e comprovado. Havendo ausência de pagamento o prazo será suspenso e remarcado após a comprovação dos pagamentos. Os pagamentos efetuados por depósito ou transferências deverão ser comprovados pela CONTRATANTE sob pena de não serem reconhecidos. O prazo acima definido está sujeito a alteração mediante a condições especiais como clima, chuvas intensas e etc.</p>
+                                                </div>
+
+                                                <div>
+                                                   <p className="font-black text-slate-700 mb-1 uppercase tracking-wider">DA GARANTIA:</p>
+                                                   <p>Os Produtos e seus componentes, acessórios e os complementos que deles fazem parte, descritos neste Contrato e seus anexos, têm garantia contra defeitos de fabricação de <span className="font-black text-slate-900">01 ano (já inclusa a garantia legal)</span>, estabelecida pela CONTRATADA e por seus fornecedores, de acordo com o disposto no art. 26, inciso II, da Lei 8.078 (CDC), a partir da entrega ou disponibilização dos produtos.</p>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                   <div>
+                                                      <p className="font-black text-slate-700 mb-1 uppercase italic tracking-wider">A garantia ficará automaticamente cancelada se:</p>
+                                                      <p>1ª- Houver danos por mau uso, manuseio ou remoção das embalagens inadequadamente por pessoal não autorizado; 2ª- Ajustes forem executados por terceiros inabilitados; 3ª- Houver problemas estruturais nos locais de fixação (paredes, lajes). É responsabilidade da CONTRATANTE providenciar os reforços necessários; 4ª- Intempéries naturais causarem danos. Nestes casos a CONTRATADA prestará suporte mediante nova proposta de custos.</p>
+                                                   </div>
+                                                   <div>
+                                                      <p className="font-black text-slate-700 mb-1 uppercase tracking-wider">DEMAIS CLÁUSULAS:</p>
+                                                      <div className="space-y-1">
+                                                         <p>a) A CONTRATANTE confirma as medidas, cores e modelos detalhados no item de especificações deste contrato.</p>
+                                                         <p>b) A fabricação observará o planejamento de produção conduzido pela CONTRATADA para atender ao prazo estipulado.</p>
+                                                         <p>c) No caso de desistência a CONTRATANTE se obriga a arcar com o valor de 30% do valor do contrato para custos de material sob medida e administração.</p>
+                                                         <p>d) O comprador obriga-se a pagar pela compra a importância lançada no item de valor total deste contrato.</p>
+                                                      </div>
+                                                   </div>
+                                                </div>
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </td>
+                                 </tr>
                               </tbody>
                               <tfoot>
                                  <tr>
-                                    <td colSpan={3} className="py-6 text-right font-black uppercase text-slate-400 text-[9px] tracking-widest">Valor Total do Pedido</td>
-                                    <td className="py-6 text-right text-base font-black text-slate-900 border-t-2 border-slate-900">
-                                       R$ {viewOrder.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    <td>
+                                       <div className="p-8 bg-white border-t border-slate-100 mt-2">
+                                          <div className="flex justify-between items-end gap-12">
+                                             <div className="flex-1 text-center">
+                                                <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
+                                                <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">Assinatura do Cliente</p>
+                                             </div>
+                                             <div className="flex-1 text-center flex flex-col items-center">
+                                                <img
+                                                   src="/signature.png"
+                                                   alt="Assinatura RTC"
+                                                   className="h-10 mb-[-10px] z-10"
+                                                   style={{ mixBlendMode: 'multiply' }}
+                                                />
+                                                <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
+                                                <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">RTC TOLDOS E COBERTURAS LTDA</p>
+                                             </div>
+                                          </div>
+                                          <div className="mt-8 bg-slate-900 py-3 text-center rounded-xl">
+                                             <p className="text-[7px] text-white/30 uppercase font-black tracking-[0.4em]">RTC DECOR • QUALIDADE E EXCELÊNCIA EM RIO DE JANEIRO</p>
+                                          </div>
+                                       </div>
                                     </td>
                                  </tr>
                               </tfoot>
                            </table>
-
-                           <div className="mt-8 pt-6 border-t border-dashed border-slate-200 min-w-[500px]">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Observações do Contrato</p>
-                              <p className="text-slate-600 italic leading-relaxed text-[11px]">
-                                 {viewOrder.contractObservations || 'Nenhuma observação informada.'}
-                              </p>
-                           </div>
                         </div>
                      )}
                   </div>
