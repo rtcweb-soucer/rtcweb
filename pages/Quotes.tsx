@@ -266,21 +266,27 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
   const handleEditQuote = (order: Order) => {
     let orderItems: any[] = [];
 
-    if (order.technicalSheetId) {
-      const sheet = technicalSheets.find(s => s.id === order.technicalSheetId);
-      if (sheet) {
-        // Se itemIds estiver definido, filtra. Se não, pega todos da ficha.
-        orderItems = order.itemIds && order.itemIds.length > 0
-          ? (sheet.items || []).filter(it => order.itemIds?.includes(it.id))
-          : (sheet.items || []);
-      }
-    } else if (order.itemPrices?.['__DRAFT_ITEMS__']) {
+    // 1. PRIORIDADE MÁXIMA: Snapshot (itens já salvos no pedido/orçamento)
+    if (order.itemsSnapshot && order.itemsSnapshot.length > 0) {
+      orderItems = order.itemsSnapshot;
+    } 
+    // 2. SEGUNDA OPÇÃO: Itens de rascunho temporário
+    else if (order.itemPrices?.['__DRAFT_ITEMS__']) {
       try {
         orderItems = typeof order.itemPrices['__DRAFT_ITEMS__'] === 'string'
           ? JSON.parse(order.itemPrices['__DRAFT_ITEMS__'])
           : order.itemPrices['__DRAFT_ITEMS__'];
       } catch (e) {
         console.error("Erro ao carregar itens temporários:", e);
+      }
+    }
+    // 3. TERCEIRA OPÇÃO: Live data da ficha técnica (Fallback de segurança)
+    else if (order.technicalSheetId) {
+      const sheet = technicalSheets.find(s => s.id === order.technicalSheetId);
+      if (sheet) {
+        orderItems = order.itemIds && order.itemIds.length > 0
+          ? (sheet.items || []).filter(it => order.itemIds?.includes(it.id))
+          : (sheet.items || []);
       }
     }
 
@@ -293,20 +299,26 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       id: order.id,
       customerId: order.customerId,
       sellerId: order.sellerId,
-      items: orderItems.map(it => ({
-        id: it.id,
-        environment: it.environment,
-        productId: it.productId,
-        productType: it.productType,
-        color: it.color || '',
-        width: it.width,
-        height: it.height,
-        price: order.itemPrices?.[it.id] ?? 0,
-        parentItemId: it.parentItemId,
-        command: it.command,
-        notes: it.notes,
-        quantity: it.quantity || 1
-      })),
+      items: orderItems.map(it => {
+        const product = products.find(p => p.id === it.productId);
+        // Tenta pegar o preço do itemPrices, se não houver, tenta o it.price (do snapshot), se não houver, o valor do produto
+        const savedPrice = order.itemPrices?.[it.id] ?? it.price ?? product?.valor ?? 0;
+        
+        return {
+          id: it.id,
+          environment: it.environment,
+          productId: it.productId,
+          productType: it.productType,
+          color: it.color || '',
+          width: it.width,
+          height: it.height,
+          price: savedPrice,
+          parentItemId: it.parentItemId,
+          command: it.command,
+          notes: it.notes,
+          quantity: it.quantity || 1
+        };
+      }),
       syncToSheet: true,
       contractObservations: order.contractObservations || '',
       paymentConditions: order.paymentConditions || ''
@@ -341,7 +353,19 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
 
   const handleSaveQuote = async () => {
     if (!quoteFormData.customerId) return alert("Selecione um cliente");
-    if (quoteFormData.items.length === 0) return alert("Adicione pelo menos um item");
+    
+    const existingOrder = orders.find(o => o.id === quoteFormData.id);
+    const previousItemCount = existingOrder?.itemIds?.length || existingOrder?.itemsSnapshot?.length || 0;
+
+    if (quoteFormData.items.length === 0) {
+      if (previousItemCount > 0) {
+        if (!window.confirm(`ATENÇÃO: Este orçamento possuía ${previousItemCount} item(ns) e agora está vazio. Deseja realmente remover todos os itens?`)) {
+          return;
+        }
+      } else {
+        return alert("Adicione pelo menos um item");
+      }
+    }
 
     setIsSaving(true);
     try {

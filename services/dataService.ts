@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder } from '../types';
+import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task } from '../types';
 
 const SYNC_QUEUE_KEY = 'rtc_sync_queue';
 
@@ -29,6 +29,8 @@ export const dataService = {
             try {
                 if (item.type === 'order') {
                     await this.saveOrder(item.data, true); // true = force bypass queue
+                } else if (item.type === 'production_sheet') {
+                    await this.saveProductionInstallationSheet(item.data.sheet, item.data.productType, true);
                 }
             } catch (err) {
                 console.error('Falha ao sincronizar item, mantendo na fila:', err);
@@ -742,136 +744,128 @@ export const dataService = {
         return baseSheet;
     },
 
-    async saveProductionInstallationSheet(sheet: any, productType: string) {
-        // Save main production sheet
-        const mainPayload = {
-            id: sheet.id,
-            measurement_item_id: sheet.measurementItemId,
-            video_link: sheet.videoLink,
-            observacoes_gerais: sheet.observacoesGerais,
-            updated_at: new Date().toISOString()
-        };
-
-        console.log('📝 Prepared main payload:', mainPayload);
-
-        const { data: mainData, error: mainError } = await supabase
-            .from('production_installation_sheets')
-            .upsert(mainPayload)
-            .select()
-            .single();
-
-        if (mainError) {
-            console.error('❌ Error saving main production sheet:', mainError);
-            throw mainError;
-        }
-
-        console.log('✅ Main production sheet saved:', mainData);
-
-        // Helper function to check if object has any actual data
-        const hasData = (obj: any): boolean => {
-            if (!obj) return false;
-            const metadataKeys = ['id', 'productionSheetId', 'createdAt', 'updatedAt'];
-            const actualData = Object.entries(obj).filter(([key, value]) =>
-                !metadataKeys.includes(key) &&
-                value !== undefined &&
-                value !== null &&
-                value !== ''
-            );
-            console.log(`🔍 hasData check: found ${actualData.length} data fields`, actualData);
-            return actualData.length > 0;
-        };
-
-        // Save specific data based on product type
-        if (productType === 'Cortina' && sheet.cortina && hasData(sheet.cortina)) {
-            const cortinaPayload = {
-                id: sheet.cortina.id || crypto.randomUUID(), // CRITICAL: needed for upsert
-                production_sheet_id: mainData.id,
-                comando: sheet.cortina.comando,
-                vao: sheet.cortina.vao,
-                varao_cor: sheet.cortina.varaoCor,
-                instalacao: sheet.cortina.instalacao,
-                trilho: sheet.cortina.trilho,
-                posicionamento: sheet.cortina.posicionamento,
+    async saveProductionInstallationSheet(sheet: any, productType: string, force = false) {
+        try {
+            // Save main production sheet
+            const mainPayload = {
+                id: sheet.id,
+                measurement_item_id: sheet.measurementItemId,
+                video_link: sheet.videoLink,
+                observacoes_gerais: sheet.observacoesGerais,
                 updated_at: new Date().toISOString()
             };
 
-            console.log('🗳️ Saving Cortina data:', cortinaPayload);
-            const { error: cortinaError } = await supabase
-                .from('production_sheet_cortina')
-                .upsert(cortinaPayload);
+            console.log('📝 Prepared main payload:', mainPayload);
 
-            if (cortinaError) {
-                console.error('❌ Error saving Cortina specifics:', cortinaError);
-                throw cortinaError;
+            const { data: mainData, error: mainError } = await supabase
+                .from('production_installation_sheets')
+                .upsert(mainPayload)
+                .select()
+                .single();
+
+            if (mainError) {
+                console.error('❌ Error saving main production sheet:', mainError);
+                throw new Error(`Erro na ficha principal: ${mainError.message}`);
             }
-            console.log('✅ Cortina specifics saved');
-        }
 
-        if (productType === 'Toldo' && sheet.toldo && hasData(sheet.toldo)) {
-            const toldoPayload = {
-                id: sheet.toldo.id || crypto.randomUUID(), // CRITICAL: needed for upsert
-                production_sheet_id: mainData.id,
-                modelo: sheet.toldo.modelo,
-                comando: sheet.toldo.comando,
-                bambinela: sheet.toldo.bambinela,
-                vies: sheet.toldo.vies,
-                entre_vao: sheet.toldo.entreVao,
-                cor_ferragem: sheet.toldo.corFerragem,
-                bracos: sheet.toldo.bracos,
-                medidas_braco: sheet.toldo.medidasBraco,
-                fixacao: sheet.toldo.fixacao,
-                medida_fixacao: sheet.toldo.medidaFixacao,
-                trava: sheet.toldo.trava,
-                manivela_qtd: sheet.toldo.manivelaQtd,
-                medida_manivela: sheet.toldo.medidaManivela,
-                parapeito: sheet.toldo.parapeito,
-                largura_beiral: sheet.toldo.larguraBeiral,
-                caida: sheet.toldo.caida,
-                altura_instalacao: sheet.toldo.alturaInstalacao,
-                instalacao: sheet.toldo.instalacao,
-                corredica: sheet.toldo.corredica,
-                posicionamento: sheet.toldo.posicionamento,
-                obs: sheet.toldo.obs,
-                updated_at: new Date().toISOString()
+            console.log('✅ Main production sheet saved:', mainData);
+
+            // Helper function to check if object has any actual data
+            const hasData = (obj: any): boolean => {
+                if (!obj) return false;
+                const metadataKeys = ['id', 'productionSheetId', 'createdAt', 'updatedAt'];
+                const actualData = Object.entries(obj).filter(([key, value]) =>
+                    !metadataKeys.includes(key) &&
+                    value !== undefined &&
+                    value !== null &&
+                    value !== ''
+                );
+                return actualData.length > 0;
             };
 
-            console.log('🗳️ Saving Toldo data:', toldoPayload);
-            const { error: toldoError } = await supabase
-                .from('production_sheet_toldo')
-                .upsert(toldoPayload);
+            // Save specific data based on product type
+            if (productType === 'Cortina' && sheet.cortina && hasData(sheet.cortina)) {
+                const cortinaPayload = {
+                    id: sheet.cortina.id || crypto.randomUUID(),
+                    production_sheet_id: mainData.id,
+                    comando: sheet.cortina.comando,
+                    vao: sheet.cortina.vao,
+                    varao_cor: sheet.cortina.varaoCor,
+                    instalacao: sheet.cortina.instalacao,
+                    trilho: sheet.cortina.trilho,
+                    posicionamento: sheet.cortina.posicionamento,
+                    updated_at: new Date().toISOString()
+                };
 
-            if (toldoError) {
-                console.error('❌ Error saving Toldo specifics:', toldoError);
-                throw toldoError;
+                const { error: cortinaError } = await supabase
+                    .from('production_sheet_cortina')
+                    .upsert(cortinaPayload);
+
+                if (cortinaError) throw new Error(`Erro nos detalhes de Cortina: ${cortinaError.message}`);
             }
-            console.log('✅ Toldo specifics saved');
-        }
 
-        if (productType === 'Cobertura' && sheet.cobertura && hasData(sheet.cobertura)) {
-            const coberturaPayload = {
-                id: sheet.cobertura.id || crypto.randomUUID(), // CRITICAL: needed for upsert
-                production_sheet_id: mainData.id,
-                cor_ferragem: sheet.cobertura.corFerragem,
-                altura_instalacao: sheet.cobertura.alturaInstalacao,
-                caida: sheet.cobertura.caida,
-                calha_saida: sheet.cobertura.calhaSaida,
-                updated_at: new Date().toISOString()
-            };
+            if (productType === 'Toldo' && sheet.toldo && hasData(sheet.toldo)) {
+                const toldoPayload = {
+                    id: sheet.toldo.id || crypto.randomUUID(),
+                    production_sheet_id: mainData.id,
+                    modelo: sheet.toldo.modelo,
+                    comando: sheet.toldo.comando,
+                    bambinela: sheet.toldo.bambinela,
+                    vies: sheet.toldo.vies,
+                    entre_vao: sheet.toldo.entreVao,
+                    cor_ferragem: sheet.toldo.corFerragem,
+                    bracos: sheet.toldo.bracos,
+                    medidas_braco: sheet.toldo.medidasBraco,
+                    fixacao: sheet.toldo.fixacao,
+                    medida_fixacao: sheet.toldo.medidaFixacao,
+                    trava: sheet.toldo.trava,
+                    manivela_qtd: sheet.toldo.manivelaQtd,
+                    medida_manivela: sheet.toldo.medidaManivela,
+                    parapeito: sheet.toldo.parapeito,
+                    largura_beiral: sheet.toldo.larguraBeiral,
+                    caida: sheet.toldo.caida,
+                    altura_instalacao: sheet.toldo.alturaInstalacao,
+                    instalacao: sheet.toldo.instalacao,
+                    corredica: sheet.toldo.corredica,
+                    posicionamento: sheet.toldo.posicionamento,
+                    obs: sheet.toldo.obs,
+                    updated_at: new Date().toISOString()
+                };
 
-            console.log('🗳️ Saving Cobertura data:', coberturaPayload);
-            const { error: coberturaError } = await supabase
-                .from('production_sheet_cobertura')
-                .upsert(coberturaPayload);
+                const { error: toldoError } = await supabase
+                    .from('production_sheet_toldo')
+                    .upsert(toldoPayload);
 
-            if (coberturaError) {
-                console.error('❌ Error saving Cobertura specifics:', coberturaError);
-                throw coberturaError;
+                if (toldoError) throw new Error(`Erro nos detalhes de Toldo: ${toldoError.message}`);
             }
-            console.log('✅ Cobertura specifics saved');
-        }
 
-        // Return complete data
-        return this.getProductionInstallationSheet(sheet.measurementItemId);
+            if (productType === 'Cobertura' && sheet.cobertura && hasData(sheet.cobertura)) {
+                const coberturaPayload = {
+                    id: sheet.cobertura.id || crypto.randomUUID(),
+                    production_sheet_id: mainData.id,
+                    cor_ferragem: sheet.cobertura.corFerragem,
+                    altura_instalacao: sheet.cobertura.alturaInstalacao,
+                    caida: sheet.cobertura.caida,
+                    calha_saida: sheet.cobertura.calhaSaida,
+                    updated_at: new Date().toISOString()
+                };
+
+                const { error: coberturaError } = await supabase
+                    .from('production_sheet_cobertura')
+                    .upsert(coberturaPayload);
+
+                if (coberturaError) throw new Error(`Erro nos detalhes de Cobertura: ${coberturaError.message}`);
+            }
+
+            return this.getProductionInstallationSheet(sheet.measurementItemId);
+        } catch (error: any) {
+            console.error('Error in saveProductionInstallationSheet:', error);
+            if (!force && (error.message.includes('fetch') || error.code === 'PGRST116')) {
+                this.addToSyncQueue('production_sheet', { sheet, productType });
+                return sheet; // Retorna o que foi enviado para não quebrar o UI
+            }
+            throw error;
+        }
     },
 
     async deleteProductionInstallationSheet(id: string) {
@@ -943,6 +937,17 @@ export const dataService = {
             .single();
 
         if (customerError) throw customerError;
+
+        // Get Seller Name
+        let sellerName = 'RTC - Toldos & Cortinas';
+        if (orderData.seller_id) {
+            const { data: sellerData } = await supabase
+                .from('sellers')
+                .select('name')
+                .eq('id', orderData.seller_id)
+                .single();
+            if (sellerData) sellerName = sellerData.name;
+        }
 
         // Map production sheets to items
         const itemsWithProduction = itemsData.map((item: any) => {
@@ -1025,6 +1030,9 @@ export const dataService = {
             order: {
                 id: orderData.id,
                 technicalSheetId: orderData.technical_sheet_id,
+                contractNumber: orderData.contract_number,
+                quoteNumber: orderData.quote_number,
+                sellerName: sellerName,
                 totalValue: orderData.total_value,
                 createdAt: new Date(orderData.created_at)
             },
@@ -1180,13 +1188,6 @@ export const dataService = {
         const { error } = await supabase.from('tasks').delete().eq('id', id);
         if (error) throw error;
     },
-
-    // System Users
-    async getSystemUsers() {
-        const { data, error } = await supabase.from('system_users').select('*');
-        if (error) throw error;
-        return data as SystemUser[];
-    }
 };
 
 

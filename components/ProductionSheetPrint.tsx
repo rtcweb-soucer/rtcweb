@@ -7,6 +7,9 @@ interface ProductionSheetPrintProps {
         order: {
             id: string;
             technicalSheetId: string;
+            contractNumber?: string;
+            quoteNumber?: string;
+            sellerName?: string;
             totalValue: number;
             createdAt: Date;
         };
@@ -319,7 +322,10 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                 <div className="flex justify-between items-end">
                     <div>
                         <p className="text-sm text-slate-600">
-                            <span className="font-bold">Pedido:</span> #{data.order.id}
+                            <span className="font-bold">Contrato:</span> {data.order.contractNumber || '---'} | <span className="font-bold">Orçamento:</span> {data.order.quoteNumber || data.order.id}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                            <span className="font-bold">Vendedor:</span> {data.order.sellerName || 'RTC - Toldos & Cortinas'}
                         </p>
                         <p className="text-sm text-slate-600">
                             <span className="font-bold">Data de Emissão:</span> {new Date().toLocaleDateString('pt-BR')}
@@ -400,7 +406,7 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                                         </div>
                                                         <div>
                                                             <p className="text-[10px] font-bold text-slate-500 uppercase">Medidas (LxA)</p>
-                                                            <p className="text-xs font-bold text-slate-900">{item.width} x {item.height} m</p>
+                                                            <p className="text-xs font-bold text-slate-900">{item.width.toFixed(3)} x {item.height.toFixed(3)} m</p>
                                                         </div>
                                                         <div>
                                                             <p className="text-[10px] font-bold text-slate-500 uppercase">Qtd</p>
@@ -439,7 +445,7 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                                     <div className="mt-2 ml-10 pl-4 border-l-2 border-amber-300">
                                                         {(item as any).accessories.map((acc: any) => (
                                                             <div key={acc.id} className="text-xs text-slate-600">
-                                                                <span className="font-bold text-amber-700">Acessório:</span> {getProductName(acc.productId)} ({acc.width}x{acc.height}m)
+                                                                <span className="font-bold text-amber-700">Acessório:</span> {getProductName(acc.productId)} ({acc.width.toFixed(3)}x{acc.height.toFixed(3)}m) {acc.color ? `- Cor: ${acc.color}` : ''}
                                                             </div>
                                                         ))}
                                                     </div>

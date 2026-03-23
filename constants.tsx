@@ -58,12 +58,17 @@ export const STATUS_COLORS = {
 };
 
 export const CORTINA_COMMAND_OPTIONS = [
-  'Central',
-  'Direita Esquerda',
-  'Invertido',
-  'Junção',
-  'Motorizado D',
-  'Motorizado E'
+  'DIREITA - PAD',
+  'DIREITA - INV',
+  'ESQUERDA PAD',
+  'ESQUERDA - INV',
+  'DIREITA CENTRAL',
+  'ESQUERDA CENTRAL',
+  'PAINÉIS LIVRES',
+  'CENTRAL D/E DIVID.',
+  'INTEIRA',
+  'SKYLIGHT RETA',
+  'SKYLIGHT FRANZIDA'
 ];
 
 export const TOLDO_COMMAND_OPTIONS = [
