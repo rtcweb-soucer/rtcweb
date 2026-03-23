@@ -312,25 +312,34 @@ const MeasurementForm = ({
     } as TechnicalSheet;
   };
 
-  const handleSave = () => {
-    if (!validate(true)) return;
+  const performSave = async (isSilent = false) => {
+    if (!validate(!isSilent)) return null;
     const newSheet = createSheetObject();
-    onSave(newSheet);
+    
+    try {
+      await onSave(newSheet);
+      setCurrentSheetId(newSheet.id);
 
-    // Keep the ID only if we want to continue editing, 
-    // but the original code clears the form. 
-    // To fix duplication between Save and Quote, we set the ID
-    setCurrentSheetId(newSheet.id);
-
-    setItems([]);
-    setSelectedItemIds(new Set());
-    setHistorySelectedItems({});
-    setAiInsights(null);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+      if (!isSilent) {
+        setItems([]);
+        setSelectedItemIds(new Set());
+        setHistorySelectedItems({});
+        setAiInsights(null);
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+      }
+      return newSheet;
+    } catch (err: any) {
+      console.error("Error in performSave:", err);
+      return null;
+    }
   };
 
-  const handleSaveAndQuote = () => {
+  const handleSave = () => {
+    performSave(false);
+  };
+
+  const handleSaveAndQuote = async () => {
     if (!validate(true)) return;
 
     if (totalSelectedCount === 0) {
@@ -388,7 +397,7 @@ const MeasurementForm = ({
     const newSheet = createSheetObject(allItemsToSaveInSheet);
 
     // Salvamos a "nova" ficha com todos os itens
-    onSave(newSheet);
+    await onSave(newSheet);
     
     // Essencial: manter ID para não gerar duplicadas num save subsequente
     setCurrentSheetId(newSheet.id); 
@@ -498,6 +507,12 @@ const MeasurementForm = ({
         createdAt: productionSheetData.createdAt || new Date(),
         updatedAt: new Date()
       };
+
+      console.log('💾 Persisting technical sheet first to ensure FK integrity...');
+      const savedSheet = await performSave(true);
+      if (!savedSheet) {
+          throw new Error('Falha ao salvar ficha técnica antes da produção');
+      }
 
       console.log('💾 Initiating saveProductionInstallationSheet with type:', productType);
       await dataService.saveProductionInstallationSheet(sheetToSave, productType);
