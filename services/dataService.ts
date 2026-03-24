@@ -1188,6 +1188,17 @@ export const dataService = {
         const { error } = await supabase.from('tasks').delete().eq('id', id);
         if (error) throw error;
     },
+
+    // System Settings
+    async getSystemSettings() {
+        const { data, error } = await supabase.from('system_settings').select('*');
+        if (error) throw error;
+        return data as { id: string, key: string, value: string }[];
+    },
+    async updateSystemSetting(key: string, value: string) {
+        const { error } = await supabase.from('system_settings').upsert({ key, value }, { onConflict: 'key' }).select();
+        if (error) throw error;
+    },
 };
 
 

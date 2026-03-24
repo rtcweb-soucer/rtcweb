@@ -20,7 +20,8 @@ import {
   Coins,
   HardHat,
   ShoppingCart,
-  CheckSquare
+  CheckSquare,
+  Settings as SettingsIcon
 } from 'lucide-react';
 
 export const MENU_ITEMS = [
@@ -45,6 +46,7 @@ export const MENU_ITEMS = [
   { id: 'installers', label: 'Instaladores', icon: <HardHat size={20} className="text-blue-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'nfe-management', label: 'Gerenciar NF-e', icon: <FileText size={20} className="text-blue-500" />, roles: ['ADMIN'] },
   { id: 'system-users', label: 'Cadastro de Equipe', icon: <Users2 size={20} className="text-rose-500" />, roles: ['ADMIN', 'ATTENDANT'] },
+  { id: 'settings', label: 'Configurações', icon: <SettingsIcon size={20} className="text-blue-600" />, roles: ['ADMIN'] },
 ];
 
 

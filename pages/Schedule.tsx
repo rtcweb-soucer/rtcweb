@@ -284,6 +284,9 @@ const Schedule = ({
                         </button>
                         <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
                           <MapPin size={12} />
+                          {customer?.address.street}, {customer?.address.number}
+                          {customer?.address.complement && ` (${customer.address.complement})`}
+                          <br />
                           {customer?.address.neighborhood}, {customer?.address.city}
                         </div>
                       </td>
@@ -357,10 +360,6 @@ const Schedule = ({
                     >
                       {customer?.name}
                     </button>
-                    <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
-                      <MapPin size={12} />
-                      {customer?.address.neighborhood}, {customer?.address.city}
-                    </div>
                   </div>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${app.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                     }`}>
@@ -449,7 +448,12 @@ const Schedule = ({
                           </div>
                           <div className="flex items-center gap-2 text-sm text-slate-600">
                             <MapPin size={14} className="text-slate-400 shrink-0" />
-                            <span className="text-xs">{customer?.address.street}, {customer?.address.number} - {customer?.address.neighborhood}</span>
+                            <span className="text-xs">
+                              {customer?.address.street}, {customer?.address.number}
+                              {customer?.address.complement && ` - ${customer.address.complement}`}
+                              <br />
+                              {customer?.address.neighborhood} - {customer?.address.city}
+                            </span>
                           </div>
                         </div>
                       </div>

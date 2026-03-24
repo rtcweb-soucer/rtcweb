@@ -22,8 +22,10 @@ import {
     Square,
     MapPin,
     Phone,
-    HardHat
+    HardHat,
+    Share2
 } from 'lucide-react';
+import { googleCalendarService } from '../services/googleCalendarService';
 
 interface AgendaProps {
     appointments: Appointment[];
@@ -39,6 +41,7 @@ interface AgendaProps {
     onStartMeasurement?: (customerId: string) => void;
     onEditTechnicalSheet?: (sheet: TechnicalSheet) => void;
     onGenerateQuote?: (sheet: TechnicalSheet, selectedItemIds?: string[]) => void;
+    systemSettings: { id: string, key: string, value: string }[];
 }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 to 20:00
@@ -72,7 +75,8 @@ const Agenda = ({
     onDeleteBlockedSlot,
     onStartMeasurement,
     onEditTechnicalSheet,
-    onGenerateQuote
+    onGenerateQuote,
+    systemSettings
 }: AgendaProps) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [filterSellerId, setFilterSellerId] = useState<string>(
@@ -170,6 +174,43 @@ const Agenda = ({
             }
         }
     }, [selectedApp]);
+
+    const handleSyncToGoogle = async (app: Appointment) => {
+        const scriptUrl = systemSettings.find(s => s.key === 'google_apps_script_url')?.value;
+        if (!scriptUrl) {
+            alert("URL do Google Apps Script não configurada! Peça ao administrador para configurar nas configurações do sistema.");
+            return;
+        }
+
+        const customer = customers.find(c => c.id === app.customerId);
+        const seller = sellers.find(s => s.id === app.sellerId);
+
+        if (!seller?.email) {
+            alert("O vendedor não possui e-mail cadastrado! Cadastre o e-mail na tela de Equipe de Vendas.");
+            return;
+        }
+
+        // Parse date and time to create ISO strings for Google
+        // Assuming time is in "HH:mm" format
+        const startDateTime = new Date(`${app.date}T${app.time}:00`);
+        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Default 1h duration
+
+        const event = {
+            title: `${app.type === 'MEASUREMENT' ? 'MEDIÇÃO' : 'VISITA'}: ${customer?.name || 'Cliente'}`,
+            description: `Agendamento via RTC\nCliente: ${customer?.name}\nTelefone: ${customer?.phone}\nEndereço: ${customer?.address ? `${customer.address.street}, ${customer.address.number}${customer.address.complement ? ` - ${customer.address.complement}` : ''} - ${customer.address.neighborhood}, ${customer.address.city}` : 'Não informado'}\nObservações: ${app.notes || 'Nenhuma'}`,
+            location: customer?.address ? `${customer.address.street}, ${customer.address.number}${customer.address.complement ? ` - ${customer.address.complement}` : ''} - ${customer.address.neighborhood}, ${customer.address.city}` : '',
+            startTime: startDateTime.toISOString(),
+            endTime: endDateTime.toISOString(),
+            sellerEmail: seller.email
+        };
+
+        try {
+            await googleCalendarService.syncAppointment(event, scriptUrl);
+            alert("Sincronização iniciada com sucesso! Verifique o Google Calendar do vendedor em alguns instantes.");
+        } catch (err: any) {
+            alert("Erro ao sincronizar: " + (err.message || err));
+        }
+    };
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -288,6 +329,10 @@ const Agenda = ({
                                                             </p>
                                                             <p className="text-[11px] font-bold text-slate-800 mt-1 truncate">{customer?.name || 'Cliente'}</p>
                                                             <p className="text-[9px] font-bold text-slate-500">{customer?.phone}</p>
+                                                            <p className="text-[9px] text-slate-400 truncate">
+                                                                {customer?.address.street}, {customer?.address.number}
+                                                                {customer?.address.complement && ` (${customer.address.complement})`}
+                                                            </p>
                                                             <p className="text-[9px] text-slate-400 truncate">{customer?.address.neighborhood}</p>
                                                             <p className="text-[10px] font-black text-blue-400 mt-1">{app.time}</p>
                                                         </div>
@@ -408,9 +453,16 @@ const Agenda = ({
                                     <p className="text-xs text-slate-500">Agendamento ID: {selectedApp.id}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setSelectedApp(null)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
-                                <Plus className="rotate-45" size={24} />
-                            </button>
+                                <button 
+                                    onClick={() => handleSyncToGoogle(selectedApp)}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all shadow-sm flex items-center gap-2 text-xs font-bold border border-blue-100"
+                                    title="Sincronizar com Google Agenda"
+                                >
+                                    <Share2 size={16} /> Sincronizar Google
+                                </button>
+                                <button onClick={() => setSelectedApp(null)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                                    <Plus className="rotate-45" size={24} />
+                                </button>
                         </div>
                         <div className="p-8 space-y-6 max-h-[80vh] overflow-y-auto">
                             {(() => {
@@ -432,7 +484,12 @@ const Agenda = ({
                                                     </div>
                                                     <div className="flex items-center gap-2 text-sm text-slate-600">
                                                         <MapPin size={14} className="text-slate-400 shrink-0" />
-                                                        <span className="text-xs">{customer?.address.street}, {customer?.address.number} - {customer?.address.neighborhood}</span>
+                                                        <span className="text-xs">
+                                                            {customer?.address.street}, {customer?.address.number}
+                                                            {customer?.address.complement && ` - ${customer.address.complement}`}
+                                                            <br />
+                                                            {customer?.address.neighborhood} - {customer?.address.city}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>

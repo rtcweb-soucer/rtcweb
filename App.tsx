@@ -25,6 +25,7 @@ import Installers from './pages/Installers';
 import NFeManagement from './pages/NFeManagement';
 import Buyer from './pages/Buyer';
 import Tasks from './pages/Tasks';
+import Settings from './pages/Settings';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -60,6 +61,7 @@ const App = () => {
   const [installers, setInstallers] = useState<Installer[]>([]);
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
   const [accountCategories, setAccountCategories] = useState<AccountCategory[]>([]);
+  const [systemSettings, setSystemSettings] = useState<{ id: string, key: string, value: string }[]>([]);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
   const [lastGeneratedQuoteId, setLastGeneratedQuoteId] = useState<string | null>(null);
@@ -81,7 +83,7 @@ const App = () => {
     if (isAuto) setIsSyncing(true);
 
     try {
-      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories] = await Promise.all([
+      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings] = await Promise.all([
         dataService.getSellers(),
         dataService.getCustomers(),
         dataService.getProducts(),
@@ -92,7 +94,8 @@ const App = () => {
         dataService.getBlockedSlots(),
         dataService.getInstallers(),
         dataService.getFinancialTransactions(),
-        dataService.getAccountCategories()
+        dataService.getAccountCategories(),
+        dataService.getSystemSettings()
       ]);
 
       setSellers(dbSellers);
@@ -106,6 +109,7 @@ const App = () => {
       setInstallers(dbInstallers);
       setFinancialTransactions(dbFinancialTransactions);
       setAccountCategories(dbAccountCategories);
+      setSystemSettings(dbSystemSettings);
       setLastSync(new Date());
 
       // Se ainda não houver usuários (primeiro acesso), criar o MASTER
@@ -121,6 +125,15 @@ const App = () => {
       setLoading(false);
     }
   }, []);
+
+  const handleUpdateSystemSetting = async (key: string, value: string) => {
+    try {
+      await dataService.updateSystemSetting(key, value);
+      loadData(true);
+    } catch (err) {
+      alert("Erro ao atualizar configuração");
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -618,6 +631,12 @@ const App = () => {
           onStartMeasurement={handleStartMeasurement}
           onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote}
+          systemSettings={systemSettings}
+        />;
+      case 'settings':
+        return <Settings
+          settings={systemSettings}
+          onUpdateSetting={handleUpdateSystemSetting}
         />;
       case 'orders':
         return <Orders
