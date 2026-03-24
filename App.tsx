@@ -739,6 +739,11 @@ const App = () => {
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
                 {isSyncing ? 'Sincronizando...' : `Sincronizado: ${lastSync ? lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}`}
               </p>
+              <div className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter leading-none">
+                  BUILD: 230323.2320
+                </p>
+              </div>
               <button
                 onClick={() => loadData(true)}
                 disabled={isSyncing}

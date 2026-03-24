@@ -679,10 +679,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       if (isAnticipated) {
         const authTask: Partial<Task> = {
           title: `AUTORIZAÇÃO FINANCEIRA: Pedido ${updatedOrder.contractNumber || updatedOrder.id}`,
-          description: `Autorização de antecipação de comissão para o pedido ${updatedOrder.contractNumber || updatedOrder.id}. Vendedor: ${sellers.find(s => s.id === updatedOrder.sellerId)?.name || 'N/A'}. Valor Total: R$ ${updatedOrder.totalValue.toLocaleString('pt-BR')}. Taxa: ${anticipationRate}%`,
+          description: `Autorização de antecipação de comissão para o pedido ${updatedOrder.contractNumber || updatedOrder.id}. Vendedor: ${sellers.find((s: Seller) => s.id === updatedOrder.sellerId)?.name || 'N/A'}. Valor Total: R$ ${updatedOrder.totalValue.toLocaleString('pt-BR')}. Taxa: ${anticipationRate}%`,
           status: TaskStatus.PENDING,
           priority: TaskPriority.HIGH,
-          creator_id: currentUser?.id,
+          created_by: currentUser?.id,
           // Por padrão atribui ao Master ou Financeiro se houver lógica de roles futuramente
           created_at: new Date().toISOString()
         };
