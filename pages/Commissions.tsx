@@ -98,13 +98,8 @@ const Commissions = ({ orders, customers, products, sellers, technicalSheets }: 
 
                     if (saleDate.getMonth() === targetMonth && saleDate.getFullYear() === targetYear) {
                         shouldInclude = true;
-                        // Deduct anticipation rate if provided (x%)
-                        if (order.anticipationRate && order.anticipationRate > 0) {
-                            effectiveRate = rate - (order.anticipationRate / 100);
-                            commissionValue = inst.value * effectiveRate;
-                        }
-                    }
-                } else if (inst.status === 'PAID' && inst.paymentDate) {
+                     }
+                  } else if (inst.status === 'PAID' && inst.paymentDate) {
                     const pDate = new Date(inst.paymentDate);
                     const targetMonth = selectedMonth === 0 ? 11 : selectedMonth - 1;
                     const targetYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;

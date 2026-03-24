@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useMemo } from 'react';
-import { Order, Customer, FinancialTransaction, AccountCategory, Product, Seller } from '../types';
+import { Order, Customer, FinancialTransaction, AccountCategory, Product, Seller, TechnicalSheet } from '../types';
 import {
    Wallet,
    Search,
@@ -37,9 +37,10 @@ interface FinanceProps {
    onUpdateOrder: (order: Order) => void;
    onSaveTransaction: (transaction: FinancialTransaction) => void;
    onDeleteTransaction: (id: string) => void;
+   technicalSheets: TechnicalSheet[];
 }
 
-const Finance = ({ orders, customers, products, sellers, transactions, categories, onUpdateOrder, onSaveTransaction, onDeleteTransaction }: FinanceProps) => {
+const Finance = ({ orders, customers, products, sellers, technicalSheets, transactions, categories, onUpdateOrder, onSaveTransaction, onDeleteTransaction }: FinanceProps) => {
    const [activeSection, setActiveSection] = useState<'receivable' | 'payable' | 'transactions' | 'dashboard'>('dashboard');
    const [searchTerm, setSearchTerm] = useState('');
    const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PAID'>('ALL');
@@ -137,7 +138,7 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
             return {
                ...inst,
                status: 'PAID' as const,
-               paidDate: settleModal.paymentDate,
+               paymentDate: settleModal.paymentDate,
                netValue: settleModal.netValue,
                nfe: settleModal.nfe
             };
@@ -165,7 +166,7 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
          await onUpdateOrder({ ...order, installments: updatedInstallments });
          await onSaveTransaction(transaction);
 
-         // Lógica de Diferença de Valor: Se o valor recebido for menor que o bruto, gera uma despesa
+         // 1. Lógica de Diferença de Valor: Se o valor recebido for menor que o bruto, gera uma despesa
          const difference = settleModal.grossValue - settleModal.netValue;
          if (difference > 0.01) {
             const expenseCategory = categories.find(c => c.code === '2.0.0') || categories.find(c => c.type === 'EXPENSE');
@@ -183,6 +184,59 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                notes: `Ajuste automático por recebimento divergente (Bruto: ${settleModal.grossValue} | Recebido: ${settleModal.netValue})`
             };
             await onSaveTransaction(expenseTransaction);
+         }
+
+         // 2. Lógica de Comissão Automática
+         // Só gera comissão se for uma parcela de Pedido e o status for PAID
+         if (order.sellerId) {
+            // Calcular taxa de comissão baseada no desconto
+            // Buscamos a ficha técnica para calcular o total integral (preço de tabela)
+            const technicalSheet = technicalSheets?.find((s: any) => s.id === order.technicalSheetId);
+            let rate = 0.10; // Default 10%
+            
+            if (technicalSheet) {
+               const orderItems = order.itemIds
+                  ? technicalSheet.items.filter((item: any) => order.itemIds?.includes(item.id))
+                  : technicalSheet.items;
+
+               const integralTotal = orderItems.reduce((acc: number, item: any) => {
+                  const product = products.find(p => p.id === item.productId);
+                  if (!product) return acc;
+                  // Ignorar produtos não comissionáveis (Frete, Instalação)
+                  if (product.nome?.toLowerCase().includes('frete') || product.nome?.toLowerCase().includes('instalação')) return acc;
+                  
+                  const area = (item.width * item.height) || 1;
+                  return acc + (product.unidade === 'M2' ? product.valor * area : product.valor);
+               }, 0);
+
+               const discount = integralTotal > 0 ? (integralTotal - order.totalValue) / integralTotal : 0;
+               if (discount > 0.10) {
+                  rate = 0.04;
+               } else if (discount > 0) {
+                  rate = 0.07;
+               } else {
+                  rate = 0.10;
+               }
+            }
+
+            const commissionAmount = settleModal.netValue * rate;
+            const commCategory = categories.find(c => c.code === '2.1.0') || categories.find(c => c.name?.toLowerCase().includes('comissão'));
+            
+            const commissionTransaction: FinancialTransaction = {
+               id: crypto.randomUUID(),
+               description: `Comissão: Parcela ${order.id} - Vendedor: ${sellers.find(s => s.id === order.sellerId)?.name}`,
+               amount: commissionAmount,
+               type: 'EXPENSE',
+               status: 'PAID',
+               due_date: settleModal.paymentDate,
+               paid_date: settleModal.paymentDate,
+               order_id: order.id,
+               installment_id: settleModal.installmentId,
+               seller_id: order.sellerId,
+               category_id: commCategory?.id,
+               notes: `Comissão automática (${(rate * 100).toFixed(0)}%) sobre baixa de R$ ${settleModal.netValue.toLocaleString('pt-BR')}`
+            };
+            await onSaveTransaction(commissionTransaction);
          }
 
          setSettleModal(null);
@@ -222,10 +276,10 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
          const updatedInstallments = order.installments.map(inst => {
             if (inst.id === item.id) {
                return {
-                  ...inst,
-                  status: 'PAID' as const,
-                  paidDate: batchSettleData.paymentDate,
-                  netValue: adjustedValue,
+                   ...inst,
+                   status: 'PAID' as const,
+                   paymentDate: batchSettleData.paymentDate,
+                   netValue: adjustedValue,
                   nfe: batchSettleData.nfe
                };
             }
@@ -289,12 +343,13 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                id: crypto.randomUUID(),
                description: repeatCount > 1 
                   ? `${newTransaction.description} (${i + 1}/${repeatCount})`
-                  : newTransaction.description,
+                  : newTransaction.description!,
                amount: Number(newTransaction.amount),
                type: newTransaction.type as 'INCOME' | 'EXPENSE',
                status: newTransaction.status as 'PENDING' | 'PAID' | 'CANCELED',
                due_date: dueDate.toISOString().split('T')[0],
-               category_id: newTransaction.category_id,
+               paid_date: newTransaction.status === 'PAID' ? dueDate.toISOString().split('T')[0] : undefined,
+               category_id: newTransaction.category_id || undefined,
                notes: newTransaction.notes,
                payment_method: newTransaction.payment_method,
                created_at: new Date().toISOString()

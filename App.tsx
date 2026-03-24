@@ -649,6 +649,7 @@ const App = () => {
             customers={customers}
             products={products}
             sellers={sellers}
+            technicalSheets={technicalSheets}
             transactions={financialTransactions}
             categories={accountCategories}
             onUpdateOrder={handleUpdateOrder}
