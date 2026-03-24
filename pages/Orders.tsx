@@ -113,7 +113,7 @@ const Orders = ({
   );
 
   const filteredOrders = sortedOrders.filter((order: Order) => {
-    const isOrder = order.status !== OrderStatus.QUOTE_SENT && order.status !== OrderStatus.PENDING_MEASUREMENT;
+    const isOrder = (order.status !== OrderStatus.QUOTE_SENT && order.status !== OrderStatus.PENDING_MEASUREMENT) || !!order.contractNumber;
     if (!isOrder) return false;
 
     const customer = customers.find((c: Customer) => c.id === order.customerId);

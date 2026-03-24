@@ -448,12 +448,14 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                               <td className="px-6 py-4">
                                  <p className="text-sm font-bold text-slate-900">{t.description}</p>
                                  {t.order_id && <p className="text-[10px] text-blue-600 font-bold uppercase mt-0.5">Pedido: {t.order_id}</p>}
-                              </td>
-                              <td className="px-6 py-4 text-sm text-slate-600">
-                                 {new Date(t.due_date).toLocaleDateString('pt-BR')}
+                                 {t.notes && <p className="text-[9px] text-slate-400 italic mt-0.5">{t.notes}</p>}
+                                 {t.payment_method && <p className="text-[9px] text-slate-400 mt-0.5">Método: {t.payment_method}</p>}
                               </td>
                               <td className="px-6 py-4">
-                                 <span className="text-[10px] font-black px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase">
+                                 <p className="text-sm text-slate-600 font-medium">{new Date(t.due_date).toLocaleDateString('pt-BR')}</p>
+                              </td>
+                              <td className="px-6 py-4">
+                                 <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
                                     {categories.find(c => c.id === t.category_id)?.name || 'Geral'}
                                  </span>
                               </td>
@@ -467,8 +469,23 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                     {t.status === 'PAID' ? 'Efetivado' : t.status === 'PENDING' ? 'Pendente' : 'Cancelado'}
                                  </span>
                               </td>
-                              <td className="px-6 py-4">
-                                 <div className="flex justify-center gap-2">
+                              <td className="px-6 py-4 text-center">
+                                 <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button
+                                       onClick={() => {
+                                          setNewTransaction({
+                                             ...t,
+                                             id: undefined,
+                                             status: 'PENDING',
+                                             due_date: new Date().toISOString().split('T')[0]
+                                          });
+                                          setShowTransactionModal(true);
+                                       }}
+                                       className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                       title="Clonar / Repetir"
+                                    >
+                                       <Plus size={16} />
+                                    </button>
                                     {t.status === 'PENDING' && (
                                        <button
                                           onClick={() => onSaveTransaction({ ...t, status: 'PAID', paid_date: new Date().toISOString().split('T')[0] })}
@@ -611,7 +628,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                type="date"
                value={dateFilter.end}
                onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
-               className="px-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+               className="w-full px-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
                placeholder="Fim"
             />
          </div>
@@ -860,6 +877,40 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                  ))
                               }
                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                           <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status</label>
+                              <select
+                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
+                                 value={newTransaction.status}
+                                 onChange={(e) => setNewTransaction({ ...newTransaction, status: e.target.value as any })}
+                              >
+                                 <option value="PENDING">Pendente</option>
+                                 <option value="PAID">Pago / Recebido</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Forma de Pagto</label>
+                              <input
+                                 type="text"
+                                 placeholder="Ex: Pix, Dinheiro..."
+                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
+                                 value={newTransaction.payment_method || ''}
+                                 onChange={(e) => setNewTransaction({ ...newTransaction, payment_method: e.target.value })}
+                              />
+                           </div>
+                        </div>
+
+                        <div>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observações (Opcional)</label>
+                           <textarea
+                              className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none mt-1 font-bold"
+                              rows={2}
+                              value={newTransaction.notes || ''}
+                              onChange={(e) => setNewTransaction({ ...newTransaction, notes: e.target.value })}
+                           />
                         </div>
                         
                         {/* Opção de Repetir Lançamento */}

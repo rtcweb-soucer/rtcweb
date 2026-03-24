@@ -462,8 +462,8 @@ const App = () => {
     try {
       await dataService.saveFinancialTransaction(t);
       loadData(true);
-    } catch (err) {
-      alert("Erro ao salvar transação financeira");
+    } catch (err: any) {
+      alert("Erro ao salvar transação financeira: " + (err.message || err));
     }
   };
 

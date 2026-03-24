@@ -409,7 +409,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         sellerId: quoteFormData.sellerId,
         itemIds: itemsPayload.map((it: any) => it.id),
         itemsSnapshot: itemsPayload, // Salva o snapshot dos itens!
-        status: OrderStatus.QUOTE_SENT,
+        status: existingOrder && existingOrder.status !== OrderStatus.QUOTE_SENT ? existingOrder.status : OrderStatus.QUOTE_SENT,
         totalValue: itemsPayload.reduce((acc: number, it: any) => acc + (it.price || 0), 0),
         itemPrices: {
           ...itemsPayload.reduce((acc: any, it: any) => ({ ...acc, [it.id]: it.price }), {}),
