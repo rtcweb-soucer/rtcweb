@@ -162,11 +162,33 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
       };
 
       try {
-         onUpdateOrder({ ...order, installments: updatedInstallments });
-         onSaveTransaction(transaction);
+         await onUpdateOrder({ ...order, installments: updatedInstallments });
+         await onSaveTransaction(transaction);
+
+         // Lógica de Diferença de Valor: Se o valor recebido for menor que o bruto, gera uma despesa
+         const difference = settleModal.grossValue - settleModal.netValue;
+         if (difference > 0.01) {
+            const expenseCategory = categories.find(c => c.code === '2.0.0') || categories.find(c => c.type === 'EXPENSE');
+            const expenseTransaction: FinancialTransaction = {
+               id: crypto.randomUUID(),
+               description: `Diferença/Taxa: Parcela ${order.id} - ${customer?.name}`,
+               amount: difference,
+               type: 'EXPENSE',
+               status: 'PAID',
+               due_date: settleModal.paymentDate,
+               paid_date: settleModal.paymentDate,
+               order_id: order.id,
+               installment_id: settleModal.installmentId,
+               category_id: expenseCategory?.id,
+               notes: `Ajuste automático por recebimento divergente (Bruto: ${settleModal.grossValue} | Recebido: ${settleModal.netValue})`
+            };
+            await onSaveTransaction(expenseTransaction);
+         }
+
          setSettleModal(null);
-      } catch (err) {
-         alert("Erro ao processar baixa");
+      } catch (err: any) {
+         console.error("Erro detalhado na baixa:", err);
+         alert("Erro ao processar baixa: " + (err.message || "Erro desconhecido"));
       }
    };
 
@@ -255,26 +277,42 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
          return;
       }
 
-      const transaction: FinancialTransaction = {
-         id: crypto.randomUUID(),
-         description: newTransaction.description,
-         amount: Number(newTransaction.amount),
-         type: newTransaction.type as 'INCOME' | 'EXPENSE',
-         status: newTransaction.status as 'PENDING' | 'PAID' | 'CANCELED',
-         due_date: newTransaction.due_date,
-         category_id: newTransaction.category_id,
-         notes: newTransaction.notes,
-         payment_method: newTransaction.payment_method,
-         created_at: new Date().toISOString()
-      };
+      try {
+         const repeatCount = (newTransaction as any).repeatMonths || 1;
+         const baseDate = new Date(newTransaction.due_date + 'T12:00:00');
 
-      onSaveTransaction(transaction);
-      setShowTransactionModal(false);
-      setNewTransaction({
-         type: 'EXPENSE',
-         status: 'PENDING',
-         due_date: new Date().toISOString().split('T')[0]
-      });
+         for (let i = 0; i < repeatCount; i++) {
+            const dueDate = new Date(baseDate);
+            dueDate.setMonth(baseDate.getMonth() + i);
+            
+            const transaction: FinancialTransaction = {
+               id: crypto.randomUUID(),
+               description: repeatCount > 1 
+                  ? `${newTransaction.description} (${i + 1}/${repeatCount})`
+                  : newTransaction.description,
+               amount: Number(newTransaction.amount),
+               type: newTransaction.type as 'INCOME' | 'EXPENSE',
+               status: newTransaction.status as 'PENDING' | 'PAID' | 'CANCELED',
+               due_date: dueDate.toISOString().split('T')[0],
+               category_id: newTransaction.category_id,
+               notes: newTransaction.notes,
+               payment_method: newTransaction.payment_method,
+               created_at: new Date().toISOString()
+            };
+
+            await onSaveTransaction(transaction);
+         }
+
+         setShowTransactionModal(false);
+         setNewTransaction({
+            type: 'EXPENSE',
+            status: 'PENDING',
+            due_date: new Date().toISOString().split('T')[0]
+         });
+      } catch (err: any) {
+         console.error("Erro ao salvar lançamento manual:", err);
+         alert("Erro ao salvar lançamento: " + (err.message || "Verifique os dados"));
+      }
    };
 
    const renderDashboard = () => (
@@ -767,6 +805,39 @@ const Finance = ({ orders, customers, products, sellers, transactions, categorie
                                  ))
                               }
                            </select>
+                        </div>
+                        
+                        {/* Opção de Repetir Lançamento */}
+                        <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
+                           <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                 <History size={16} className="text-blue-600" />
+                                 <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Repetir Lançamento?</span>
+                              </div>
+                              <input 
+                                 type="checkbox" 
+                                 className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                 checked={!!(newTransaction as any).repeat}
+                                 onChange={(e) => setNewTransaction({ ...newTransaction, repeat: e.target.checked } as any)}
+                              />
+                           </div>
+                           
+                           { (newTransaction as any).repeat && (
+                              <div className="mt-4 animate-in slide-in-from-top-2 duration-200">
+                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quantidade de meses</label>
+                                 <div className="flex items-center gap-3 mt-1">
+                                    <input
+                                       type="number"
+                                       min="2"
+                                       max="48"
+                                       className="w-24 px-4 py-2 bg-white border border-blue-200 rounded-xl text-sm font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none"
+                                       value={(newTransaction as any).repeatMonths || 2}
+                                       onChange={(e) => setNewTransaction({ ...newTransaction, repeatMonths: Number(e.target.value) } as any)}
+                                    />
+                                    <span className="text-xs text-slate-500 font-bold">Lançamentos mensais</span>
+                                 </div>
+                              </div>
+                           )}
                         </div>
                      </div>
 
