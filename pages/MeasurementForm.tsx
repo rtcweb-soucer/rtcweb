@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura } from '../types';
-import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3, ArrowUp, ArrowDown, Copy } from 'lucide-react';
+import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3, ArrowUp, ArrowDown, Copy, Scissors } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
 import { normalizeString, fuzzyMatch } from '../utils/searchUtils';
@@ -124,6 +124,9 @@ const MeasurementForm = ({
   const [currentSheetId, setCurrentSheetId] = useState<string | null>(editingSheet?.id || null);
   const [showUploadIframe, setShowUploadIframe] = useState(false);
   const [showGoogleForm, setShowGoogleForm] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [parentItemToSplit, setParentItemToSplit] = useState<MeasurementItem | null>(null);
+  const [splitSubItems, setSplitSubItems] = useState<Partial<MeasurementItem>[]>([]);
 
 
   useEffect(() => {
@@ -283,6 +286,78 @@ const MeasurementForm = ({
     const insights = await getProductionInsights(items);
     setAiInsights(insights);
     setLoadingAi(false);
+  };
+
+  const openSplitModal = (item: MeasurementItem) => {
+    setParentItemToSplit(item);
+    // Inicializar com 2 sub-itens vazios por padrão para facilitar
+    setSplitSubItems([
+      { id: crypto.randomUUID(), width: 0, height: 0, environment: item.environment, productId: item.productId, color: item.color, command: item.command, quantity: 1 },
+      { id: crypto.randomUUID(), width: 0, height: 0, environment: item.environment, productId: item.productId, color: item.color, command: item.command, quantity: 1 }
+    ]);
+    setShowSplitModal(true);
+  };
+
+  const closeSplitModal = () => {
+    setShowSplitModal(false);
+    setParentItemToSplit(null);
+    setSplitSubItems([]);
+  };
+
+  const addSplitRow = () => {
+    if (!parentItemToSplit) return;
+    setSplitSubItems([...splitSubItems, {
+      id: crypto.randomUUID(),
+      width: 0,
+      height: 0,
+      environment: parentItemToSplit.environment,
+      productId: parentItemToSplit.productId,
+      color: parentItemToSplit.color,
+      command: parentItemToSplit.command,
+      quantity: 1
+    }]);
+  };
+
+  const removeSplitRow = (index: number) => {
+    setSplitSubItems(splitSubItems.filter((_, i) => i !== index));
+  };
+
+  const updateSplitItem = (index: number, field: string, value: any) => {
+    const newSubItems = [...splitSubItems];
+    newSubItems[index] = { ...newSubItems[index], [field]: value };
+    setSplitSubItems(newSubItems);
+  };
+
+  const handleConfirmSplit = () => {
+    if (!parentItemToSplit) return;
+
+    // Validar se há medidas
+    if (splitSubItems.some(si => !si.width || !si.height)) {
+      alert("Por favor, preencha largura e altura para todos os sub-itens.");
+      return;
+    }
+
+    const newItems = splitSubItems.map(si => ({
+      ...si,
+      parentItemId: parentItemToSplit.id,
+      productType: items.find(i => i.id === parentItemToSplit.id)?.productType || 'Toldo'
+    } as MeasurementItem));
+
+    // Adicionar logo após o pai para manter organização
+    const parentIndex = items.findIndex(i => i.id === parentItemToSplit.id);
+    const updatedItems = [...items];
+    updatedItems.splice(parentIndex + 1, 0, ...newItems);
+
+    setItems(updatedItems);
+
+    // Selecionar novos itens para o orçamento automaticamente
+    setSelectedItemIds(prev => {
+      const next = new Set(prev);
+      newItems.forEach(ni => next.add(ni.id));
+      return next;
+    });
+
+    closeSplitModal();
   };
 
   const validate = (checkItems = true) => {
@@ -690,6 +765,13 @@ const MeasurementForm = ({
                                   <Wrench size={14} />
                                 </button>
                                 <button
+                                  onClick={() => openSplitModal(item)}
+                                  className="p-1.5 rounded-lg bg-slate-50 text-blue-600 hover:bg-blue-50 transition-colors shadow-sm border border-slate-100"
+                                  title="Dividir este item em sub-itens"
+                                >
+                                  <Scissors size={14} />
+                                </button>
+                                <button
                                   onClick={() => handleDeleteItemFromHistory(item.id)}
                                   className="p-1.5 rounded-lg bg-slate-50 text-rose-500 hover:bg-rose-50 transition-colors shadow-sm border border-slate-100"
                                   title="Remover item do histórico"
@@ -936,6 +1018,13 @@ const MeasurementForm = ({
                       >
                         <Copy size={16} />
                       </button>
+                       <button
+                        onClick={() => openSplitModal(item)}
+                        className="p-1.5 rounded-lg bg-slate-100 text-blue-600 hover:bg-blue-100 transition-colors shadow-sm"
+                        title="Dividir este item em sub-itens"
+                      >
+                        <Scissors size={14} />
+                      </button>
                       <button onClick={() => removeItem(item.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Remover Item">
                         <Trash2 size={16} />
                       </button>
@@ -1173,6 +1262,127 @@ const MeasurementForm = ({
                 className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20"
               >
                 Salvar Ficha
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+       {/* Modal de Desmembramento (Split) */}
+      {showSplitModal && parentItemToSplit && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-100/50 scale-in-center overflow-y-auto">
+            <div className="p-6 border-b border-slate-100/60 bg-white/50 backdrop-blur-md sticky top-0 z-10 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Scissors className="text-blue-600" size={24} />
+                  Dividir Item em Sub-itens
+                </h3>
+                <p className="text-sm font-medium text-slate-500 mt-1">
+                  Item Original: {products.find(p => p.id === parentItemToSplit.productId)?.nome} ({parentItemToSplit.width.toFixed(3)}x{parentItemToSplit.height.toFixed(3)}m)
+                </p>
+              </div>
+              <button onClick={closeSplitModal} className="p-2.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-full text-slate-400 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/30">
+              <div className="space-y-4">
+                <div className="grid grid-cols-12 gap-3 mb-2 px-2">
+                  <div className="col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Produto / Nome</div>
+                  <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Largura</div>
+                  <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Altura</div>
+                  <div className="col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Comando</div>
+                  <div className="col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Qtd</div>
+                  <div className="col-span-1"></div>
+                </div>
+
+                {splitSubItems.map((si, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-sm animate-in slide-in-from-left-4 duration-300" style={{ animationDelay: `${idx * 50}ms` }}>
+                    <div className="col-span-4 gap-2 flex items-center">
+                      <SearchableProductSelect
+                        products={products}
+                        value={si.productId || ''}
+                        onChange={(val) => updateSplitItem(idx, 'productId', val)}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <ThreeDecimalInput
+                        value={si.width || 0}
+                        onChange={(val) => updateSplitItem(idx, 'width', val)}
+                        className="w-full text-center"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <ThreeDecimalInput
+                        value={si.height || 0}
+                        onChange={(val) => updateSplitItem(idx, 'height', val)}
+                        className="w-full text-center"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <select
+                        value={si.command || ''}
+                        onChange={(e) => updateSplitItem(idx, 'command', e.target.value)}
+                        className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                      >
+                        <option value="">Nenhum</option>
+                        {products.find(p => p.id === si.productId)?.tipo === 'Cortina' ? (
+                          CORTINA_COMMAND_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                        ) : (
+                          TOLDO_COMMAND_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                        )}
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <input
+                        type="number"
+                        value={si.quantity || 1}
+                        onChange={(e) => updateSplitItem(idx, 'quantity', Number(e.target.value))}
+                        className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-center text-slate-700 outline-none"
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <button
+                        onClick={() => removeSplitRow(idx)}
+                        disabled={splitSubItems.length <= 1}
+                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-0"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    <div className="col-span-12 mt-2">
+                      <input
+                        placeholder="Observações específicas deste sub-item..."
+                        value={si.notes || ''}
+                        onChange={(e) => updateSplitItem(idx, 'notes', e.target.value)}
+                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-medium text-slate-600 outline-none"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  onClick={addSplitRow}
+                  className="w-full py-4 flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-2xl text-slate-500 font-bold text-sm hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-all mt-4"
+                >
+                  <Plus size={18} /> Adicionar outro Sub-item
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white sticky bottom-0 z-10 flex justify-end gap-3">
+              <button
+                onClick={closeSplitModal}
+                className="px-6 py-3 rounded-xl font-extrabold text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmSplit}
+                className="px-8 py-3 rounded-xl font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-500/30 transition-all flex items-center gap-2"
+              >
+                Confirmar e Adicionar Sub-itens
               </button>
             </div>
           </div>

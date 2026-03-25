@@ -898,13 +898,14 @@ export const dataService = {
         if (sheetError) throw sheetError;
 
         // Get measurement items
+        // We want items that are explicitly in the order OR are sub-items of items in the order
         let query = supabase
             .from('measurement_items')
             .select('*')
             .eq('technical_sheet_id', sheetData.id);
 
         if (orderData.item_ids && orderData.item_ids.length > 0) {
-            query = query.in('id', orderData.item_ids);
+            query = query.or(`id.in.(${orderData.item_ids.join(',')}),parent_item_id.in.(${orderData.item_ids.join(',')})`);
         }
 
         const { data: itemsData, error: itemsError } = await query;

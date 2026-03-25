@@ -440,14 +440,19 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                                     </div>
                                                 )}
 
-                                                {/* Accessories inside the list item for context */}
+                                                {/* Accessories/Sub-items inside the list item for context */}
                                                 {(item as any).accessories && (item as any).accessories.length > 0 && (
-                                                    <div className="mt-2 ml-10 pl-4 border-l-2 border-amber-300">
-                                                        {(item as any).accessories.map((acc: any) => (
-                                                            <div key={acc.id} className="text-xs text-slate-600">
-                                                                <span className="font-bold text-amber-700">Acessório:</span> {getProductName(acc.productId)} ({acc.width.toFixed(3)}x{acc.height.toFixed(3)}m) {acc.color ? `- Cor: ${acc.color}` : ''}
-                                                            </div>
-                                                        ))}
+                                                    <div className="mt-2 ml-10 pl-4 border-l-2 border-amber-300 space-y-1">
+                                                        {(item as any).accessories.map((acc: any) => {
+                                                            const isSubItem = acc.productId === item.productId;
+                                                            return (
+                                                                <div key={acc.id} className="text-xs text-slate-600">
+                                                                    <span className={`font-black ${isSubItem ? 'text-blue-700' : 'text-amber-700'}`}>
+                                                                        {isSubItem ? 'Sub-item:' : 'Acessório:'}
+                                                                    </span> {getProductName(acc.productId)} ({acc.width.toFixed(3)}x{acc.height.toFixed(3)}m) {acc.color ? `- Cor: ${acc.color}` : ''} {acc.command ? `- Cmd: ${acc.command}` : ''}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>
@@ -473,81 +478,86 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                 return (
                                     <div key={`specs-${type}`} className="space-y-6">
                                         {items.map((item, index) => {
-                                            if (!item.productionSheet) return null;
+                                            const itemsToRender = [item, ...((item as any).accessories || [])].filter(i => i.productionSheet);
 
-                                            return (
-                                                <div key={`spec-${item.id}`} className={`border-2 ${typeStyle.borderColor} rounded-lg p-5 avoid-break bg-white/50 mb-4`}>
-                                                    {/* Spec Header to link back to list */}
-                                                    <div className="flex items-center justify-between mb-4 pb-2 border-b border-dashed border-slate-300">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`bg-${typeStyle.color}-100 text-${typeStyle.color}-800 border border-${typeStyle.color}-200 text-xs font-black px-2 py-1 rounded`}>
-                                                                ITEM #{index + 1}
-                                                            </span>
-                                                            <span className="text-sm font-bold text-slate-700">
-                                                                {getProductName(item.productId)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-xs text-slate-400 font-mono">
-                                                            {type.toUpperCase()}
-                                                        </div>
-                                                    </div>
+                                            return itemsToRender.map((it, itIdx) => {
+                                                const isNested = it.id !== item.id;
+                                                const nestedLabel = it.productId === item.productId ? 'SUB-ITEM' : 'ACESSÓRIO';
 
-                                                    <h5 className={`text-sm font-black text-${typeStyle.color}-900 mb-3 uppercase flex items-center gap-2`}>
-                                                        {typeStyle.icon} Especificações de Produção
-                                                    </h5>
-
-                                                    {/* Render specific fields based on type */}
-                                                    {item.productionSheet.cortina && renderCortinaFields(item.productionSheet.cortina, item.command)}
-                                                    {item.productionSheet.toldo && renderToldoFields(item.productionSheet.toldo, item.command)}
-                                                    {item.productionSheet.cobertura && renderCoberturaFields(item.productionSheet.cobertura)}
-
-                                                    {/* Display Item Notes in Detailed View if not already covered */}
-                                                    {item.notes && (
-                                                        <div className="mt-3">
-                                                            <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase`}>Observações (Medição)</p>
-                                                            <p className={`text-sm font-bold text-${typeStyle.color}-900`}>{item.notes}</p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* General Observations */}
-                                                    {item.productionSheet.observacoesGerais && (
-                                                        <div className="mt-4">
-                                                            <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase mb-1`}>Observações Gerais</p>
-                                                            <p className={`text-sm text-${typeStyle.color}-900 bg-white p-3 rounded border border-${typeStyle.color}-200`}>
-                                                                {item.productionSheet.observacoesGerais}
-                                                            </p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Video Link with QR Code */}
-                                                    {item.productionSheet.videoLink && (
-                                                        <div className={`flex gap-5 items-center bg-white p-4 rounded-xl border-2 border-${typeStyle.color}-100 mt-4`}>
-                                                            <div className="flex-shrink-0">
-                                                                <div className={`bg-white p-2 border border-${typeStyle.color}-200 rounded-lg shadow-sm`}>
-                                                                    <QRCodeSVG value={item.productionSheet.videoLink} size={90} />
-                                                                </div>
+                                                return (
+                                                    <div key={`spec-${it.id}`} className={`border-2 ${typeStyle.borderColor} rounded-lg p-5 avoid-break bg-white/50 mb-4 ${isNested ? 'ml-8 border-l-8' : ''}`}>
+                                                        {/* Spec Header to link back to list */}
+                                                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-dashed border-slate-300">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`bg-${typeStyle.color}-100 text-${typeStyle.color}-800 border border-${typeStyle.color}-200 text-xs font-black px-2 py-1 rounded`}>
+                                                                    {isNested ? nestedLabel : `ITEM #${index + 1}`}
+                                                                </span>
+                                                                <span className="text-sm font-bold text-slate-700">
+                                                                    {getProductName(it.productId)}
+                                                                </span>
                                                             </div>
-                                                            <div className="flex-1 space-y-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className={`w-2 h-2 rounded-full bg-${typeStyle.color}-500 animate-pulse`}></div>
-                                                                    <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase`}>Vídeo de Instalação/Referência</p>
-                                                                </div>
-                                                                <p className="text-xs text-slate-500 leading-relaxed">
-                                                                    Escaneie o QR Code ao lado para acessar o vídeo técnico deste item.
+                                                            <div className="text-xs text-slate-400 font-mono">
+                                                                {isNested ? `PAI: #${index + 1}` : type.toUpperCase()}
+                                                            </div>
+                                                        </div>
+
+                                                        <h5 className={`text-sm font-black text-${typeStyle.color}-900 mb-3 uppercase flex items-center gap-2`}>
+                                                            {typeStyle.icon} Especificações de Produção
+                                                        </h5>
+
+                                                        {/* Render specific fields based on type */}
+                                                        {it.productionSheet.cortina && renderCortinaFields(it.productionSheet.cortina, it.command)}
+                                                        {it.productionSheet.toldo && renderToldoFields(it.productionSheet.toldo, it.command)}
+                                                        {it.productionSheet.cobertura && renderCoberturaFields(it.productionSheet.cobertura)}
+
+                                                        {/* Display Item Notes in Detailed View if not already covered */}
+                                                        {it.notes && (
+                                                            <div className="mt-3">
+                                                                <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase`}>Observações (Medição)</p>
+                                                                <p className={`text-sm font-bold text-${typeStyle.color}-900`}>{it.notes}</p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* General Observations */}
+                                                        {it.productionSheet.observacoesGerais && (
+                                                            <div className="mt-4">
+                                                                <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase mb-1`}>Observações Gerais</p>
+                                                                <p className={`text-sm text-${typeStyle.color}-900 bg-white p-3 rounded border border-${typeStyle.color}-200`}>
+                                                                    {it.productionSheet.observacoesGerais}
                                                                 </p>
-                                                                <a
-                                                                    href={item.productionSheet.videoLink}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className={`block mt-1 text-xs text-${typeStyle.color}-600 underline break-all hover:text-${typeStyle.color}-800 font-mono`}
-                                                                >
-                                                                    {item.productionSheet.videoLink}
-                                                                </a>
                                                             </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
+                                                        )}
+
+                                                        {/* Video Link with QR Code */}
+                                                        {it.productionSheet.videoLink && (
+                                                            <div className={`flex gap-5 items-center bg-white p-4 rounded-xl border-2 border-${typeStyle.color}-100 mt-4`}>
+                                                                <div className="flex-shrink-0">
+                                                                    <div className={`bg-white p-2 border border-${typeStyle.color}-200 rounded-lg shadow-sm`}>
+                                                                        <QRCodeSVG value={it.productionSheet.videoLink} size={90} />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 space-y-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={`w-2 h-2 rounded-full bg-${typeStyle.color}-500 animate-pulse`}></div>
+                                                                        <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase`}>Vídeo de Instalação/Referência</p>
+                                                                    </div>
+                                                                    <p className="text-xs text-slate-500 leading-relaxed">
+                                                                        Escaneie o QR Code ao lado para acessar o vídeo técnico deste item.
+                                                                    </p>
+                                                                    <a
+                                                                        href={it.productionSheet.videoLink}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className={`block mt-1 text-xs text-${typeStyle.color}-600 underline break-all hover:text-${typeStyle.color}-800 font-mono`}
+                                                                    >
+                                                                        {it.productionSheet.videoLink}
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            });
                                         })}
                                     </div>
                                 );
