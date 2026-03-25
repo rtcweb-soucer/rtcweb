@@ -29,6 +29,7 @@ import Settings from './pages/Settings';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
+import { googleCalendarService, GoogleCalendarEvent } from './services/googleCalendarService';
 
 const getLocalISODate = (date: Date) => {
   const year = date.getFullYear();
@@ -391,6 +392,31 @@ const App = () => {
       const saved = await dataService.saveAppointment(a);
       setAppointments([...appointments, saved]);
       loadData(true);
+
+      // --- Auto Google Calendar Sync ---
+      const scriptUrl = systemSettings.find(s => s.key === 'google_apps_script_url')?.value;
+      if (scriptUrl && saved.type !== 'INSTALLATION') {
+        const customer = customers.find(c => c.id === saved.customerId);
+        const seller = sellers.find(s => s.id === saved.sellerId);
+
+        if (seller?.email) {
+          const startDateTime = new Date(`${saved.date}T${saved.time}:00`);
+          const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1h default
+
+          const event: GoogleCalendarEvent = {
+            title: `${saved.type === 'MEASUREMENT' ? 'MEDIÇÃO' : 'VISITA'}: ${customer?.name || 'Cliente'}`,
+            description: `Agendamento via RTC\nCliente: ${customer?.name}\nTelefone: ${customer?.phone}\nEndereço: ${customer?.address ? `${customer.address.street}, ${customer.address.number}${customer.address.complement ? ` - ${customer.address.complement}` : ''} - ${customer.address.neighborhood}, ${customer.address.city}` : 'Não informado'}\nObservações: ${saved.notes || 'Nenhuma'}`,
+            location: customer?.address ? `${customer.address.street}, ${customer.address.number}${customer.address.complement ? ` - ${customer.address.complement}` : ''} - ${customer.address.neighborhood}, ${customer.address.city}` : '',
+            startTime: startDateTime.toISOString(),
+            endTime: endDateTime.toISOString(),
+            sellerEmail: seller.email
+          };
+
+          googleCalendarService.syncAppointment(event, scriptUrl).catch(err => {
+            console.error("Erro na auto-sincronização Google:", err);
+          });
+        }
+      }
     } catch (err) {
       alert("Erro ao salvar agendamento");
     }

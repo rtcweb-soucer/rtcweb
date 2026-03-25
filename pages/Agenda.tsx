@@ -140,7 +140,12 @@ const Agenda = ({
     const isSeller = currentUser?.role === UserRole.SELLER;
     const activeSellerId = isSeller ? (currentUser.sellerId || currentUser.id) : filterSellerId;
 
-    const sellerAppointments = appointments.filter(a => a.sellerId === activeSellerId && activeSellerId && a.status !== 'CANCELLED');
+    const sellerAppointments = appointments.filter(a =>
+        a.sellerId === activeSellerId &&
+        activeSellerId &&
+        a.status !== 'CANCELLED' &&
+        a.type !== 'INSTALLATION'
+    );
     const sellerBlockedSlots = blockedSlots.filter(s => s.sellerId === activeSellerId && activeSellerId);
 
     const getDayItems = (date: Date) => {
