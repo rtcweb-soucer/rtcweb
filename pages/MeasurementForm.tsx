@@ -947,19 +947,18 @@ const MeasurementForm = ({
                           className="w-full px-1 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none font-medium"
                         >
                           <option value="">...</option>
-                          {productType === 'Cortina' ? (
-                            <>
-                              {CORTINA_COMMAND_OPTIONS.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </>
-                          ) : (
-                            <>
-                              {TOLDO_COMMAND_OPTIONS.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </>
-                          )}
+                          {(() => {
+                            const options = productType === 'Cortina' ? CORTINA_COMMAND_OPTIONS : TOLDO_COMMAND_OPTIONS;
+                            const isLegacy = item.command && !options.includes(item.command);
+                            return (
+                              <>
+                                {isLegacy && <option value={item.command}>{item.command} (Legado)</option>}
+                                {options.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </>
+                            );
+                          })()}
                         </select>
                       </div>
                     )}
@@ -1324,14 +1323,22 @@ const MeasurementForm = ({
                       <select
                         value={si.command || ''}
                         onChange={(e) => updateSplitItem(idx, 'command', e.target.value)}
-                        className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                        className="w-full px-1.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none font-medium"
                       >
-                        <option value="">Nenhum</option>
-                        {products.find(p => p.id === si.productId)?.tipo === 'Cortina' ? (
-                          CORTINA_COMMAND_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)
-                        ) : (
-                          TOLDO_COMMAND_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)
-                        )}
+                        <option value="">...</option>
+                        {(() => {
+                          const currentProductType = products.find(p => p.id === si.productId)?.tipo;
+                          const options = currentProductType === 'Cortina' ? CORTINA_COMMAND_OPTIONS : TOLDO_COMMAND_OPTIONS;
+                          const isLegacy = si.command && !options.includes(si.command);
+                          return (
+                            <>
+                              {isLegacy && <option value={si.command}>{si.command} (Legado)</option>}
+                              {options.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </>
+                          );
+                        })()}
                       </select>
                     </div>
                     <div className="col-span-1">

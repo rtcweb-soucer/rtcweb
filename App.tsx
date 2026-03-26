@@ -26,6 +26,7 @@ import NFeManagement from './pages/NFeManagement';
 import Buyer from './pages/Buyer';
 import Tasks from './pages/Tasks';
 import Settings from './pages/Settings';
+import SalesReport from './pages/SalesReport';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -729,6 +730,16 @@ const App = () => {
               setSelectedOrderIdForTab(orderId);
               setActiveTab('orders');
             }}
+          />
+        );
+      case 'sales-report':
+        return (
+          <SalesReport
+            orders={orders}
+            sellers={sellers}
+            products={products}
+            customers={customers}
+            technicalSheets={technicalSheets}
           />
         );
       case 'tarefas':

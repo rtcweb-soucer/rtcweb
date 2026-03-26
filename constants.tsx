@@ -21,6 +21,7 @@ import {
   HardHat,
   ShoppingCart,
   CheckSquare,
+  BarChart3,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -43,6 +44,7 @@ export const MENU_ITEMS = [
   { id: 'finance', label: 'Contas a Receber', icon: <Wallet size={20} />, roles: ['ADMIN'] },
   { id: 'expenses', label: 'Despesas', icon: <Receipt size={20} className="text-rose-500" />, roles: ['ADMIN'] },
   { id: 'commissions', label: 'Comissões', icon: <Coins size={20} className="text-amber-500" />, roles: ['ADMIN'] },
+  { id: 'sales-report', label: 'Relatório de Vendas', icon: <BarChart3 size={20} className="text-indigo-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'installers', label: 'Instaladores', icon: <HardHat size={20} className="text-blue-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'nfe-management', label: 'Gerenciar NF-e', icon: <FileText size={20} className="text-blue-500" />, roles: ['ADMIN'] },
   { id: 'system-users', label: 'Cadastro de Equipe', icon: <Users2 size={20} className="text-rose-500" />, roles: ['ADMIN', 'ATTENDANT'] },
