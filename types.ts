@@ -218,6 +218,7 @@ export interface Installment {
   paymentMethod?: string; // New: Forma de pagamento da parcela
   paymentLink?: string; // Novo: URL de pagamento InfinitePay
   pixCopyPaste?: string; // Novo: Código PIX Copia e Cola
+  paymentId?: string; // Novo: ID da transação na InfinitePay para reconciliação
 }
 
 export interface Expense {
@@ -270,6 +271,7 @@ export interface Order {
   isAnticipated?: boolean; // New: Se a comissão foi antecipada
   anticipationRate?: number; // New: Taxa de antecipação (x%)
   paymentLink?: string; // New: Link de pagamento InfinitePay
+  cardInstallments?: number; // Novo: Qtd de parcelas no cartão para este pedido
   createdAt: Date;
 }
 

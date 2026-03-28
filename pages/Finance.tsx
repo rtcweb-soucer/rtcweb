@@ -1,4 +1,3 @@
-
 import * as React from 'react';
 import { useState, useMemo } from 'react';
 import { Order, Customer, FinancialTransaction, AccountCategory, Product, Seller, TechnicalSheet } from '../types';
@@ -24,7 +23,8 @@ import {
    FileText,
    CreditCard,
    Info,
-   MessageCircle
+   MessageCircle,
+   RefreshCw
 } from 'lucide-react';
 
 interface FinanceProps {
@@ -69,6 +69,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       nfe: '',
       totalPaid: 0
    });
+   const [isSincronizing, setIsSincronizing] = useState<string | null>(null);
 
    const filteredInstallments = useMemo(() => {
       const all: any[] = [];
@@ -127,6 +128,61 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       });
    };
 
+   const handleSyncPaymentStatus = async (installment: any) => {
+      if (!installment.paymentId) return;
+      
+      setIsSincronizing(installment.id);
+      try {
+         const type = installment.pixCopyPaste ? 'PIX' : 'LINK';
+         const status = await infinitePayService.checkStatus(installment.paymentId, type);
+         
+         if (status === 'PAID') {
+            // Dar baixa em todas as parcelas com esse paymentId
+            const relatedInstallments = filteredInstallments.filter(i => 
+               i.paymentId === installment.paymentId && i.status === 'PENDING'
+            );
+            
+            for (const inst of relatedInstallments) {
+               const order = orders.find(o => o.id === inst.orderId);
+               if (!order) continue;
+
+               const updatedInstallments = order.installments?.map(i => 
+                  i.id === inst.id || (i.paymentId === installment.paymentId && i.paymentId !== undefined)
+                     ? { ...i, status: 'PAID', paymentDate: new Date().toISOString() } 
+                     : i
+               );
+
+               const updatedOrder = { ...order, installments: updatedInstallments };
+               await onUpdateOrder(updatedOrder);
+               
+               // Gerar transação no caixa
+               const category = categories.find(c => c.type === 'INCOME' && c.name.toUpperCase().includes('VENDA'));
+               const transaction: Partial<Transaction> = {
+                  description: `REC: Pedido ${order.contractNumber || order.id.slice(0,8)} (Parc ${inst.number} - AUTO)`,
+                  amount: inst.value,
+                  type: 'INCOME',
+                  due_date: new Date().toISOString(),
+                  payment_date: new Date().toISOString(),
+                  status: 'PAID',
+                  category_id: category?.id,
+                  payment_method: inst.paymentMethod || (inst.pixCopyPaste ? 'PIX' : 'Cartão (Link)'),
+                  order_id: order.id
+               };
+               await onSaveTransaction(transaction);
+            }
+            
+            alert(`✅ Recibo confirmado! ${relatedInstallments.length} parcela(s) baixada(s).`);
+         } else {
+            alert("ℹ️ Pagamento ainda não consta como aprovado na InfinitePay.");
+         }
+      } catch (err) {
+         console.error("Erro ao sincronizar status:", err);
+         alert("❌ Erro ao consultar a InfinitePay.");
+      } finally {
+         setIsSincronizing(null);
+      }
+   };
+
    const confirmSettle = async () => {
       if (!settleModal) return;
 
@@ -166,7 +222,6 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
          await onUpdateOrder({ ...order, installments: updatedInstallments });
          await onSaveTransaction(transaction);
 
-         // 1. Lógica de Diferença de Valor: Se o valor recebido for menor que o bruto, gera uma despesa
          const difference = settleModal.grossValue - settleModal.netValue;
          if (difference > 0.01) {
             const expenseCategory = categories.find(c => c.code === '2.0.0') || categories.find(c => c.type === 'EXPENSE');
@@ -186,13 +241,9 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             await onSaveTransaction(expenseTransaction);
          }
 
-         // 2. Lógica de Comissão Automática
-         // Só gera comissão se for uma parcela de Pedido e o status for PAID
          if (order.sellerId) {
-            // Calcular taxa de comissão baseada no desconto
-            // Buscamos a ficha técnica para calcular o total integral (preço de tabela)
             const technicalSheet = technicalSheets?.find((s: any) => s.id === order.technicalSheetId);
-            let rate = 0.10; // Default 10%
+            let rate = 0.10; 
             
             if (technicalSheet) {
                const orderItems = order.itemIds
@@ -202,7 +253,6 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                const integralTotal = orderItems.reduce((acc: number, item: any) => {
                   const product = products.find(p => p.id === item.productId);
                   if (!product) return acc;
-                  // Ignorar produtos não comissionáveis (Frete, Instalação)
                   if (product.nome?.toLowerCase().includes('frete') || product.nome?.toLowerCase().includes('instalação')) return acc;
                   
                   const area = (item.width * item.height) || 1;
@@ -537,7 +587,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                </button>
                <button
                   onClick={() => { }}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-white transition-all shadow-sm active:scale-95"
                >
                   <Printer size={18} />
                   Relatório
@@ -663,7 +713,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                            {filteredInstallments.length === 0 ? (
-                              <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
+                              <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
                            ) : (
                               filteredInstallments.map((inst, idx) => (
                                  <tr 
@@ -700,34 +750,6 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                        </div>
                                        <div className="mt-1 space-y-1">
                                           <p className="text-[11px] font-bold text-slate-700 truncate max-w-[200px]">{inst.customerName}</p>
-                                          {(() => {
-                                             const order = orders.find(o => o.id === inst.orderId);
-                                             const customer = customers.find(c => c.id === order?.customerId);
-                                             const seller = sellers.find(s => s.id === order?.sellerId);
-                                             return (
-                                                <div className="flex flex-col gap-0.5">
-                                                   {customer?.phone && (
-                                                      <div className="flex items-center gap-1.5">
-                                                         <MessageCircle size={10} className="text-emerald-500"/>
-                                                         <a 
-                                                            href={`https://wa.me/55${customer.phone.replace(/\D/g, '')}`} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="text-[10px] text-slate-500 hover:text-emerald-600 hover:underline transition-all"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            title="Abrir WhatsApp"
-                                                         >
-                                                            {customer.phone}
-                                                         </a>
-                                                      </div>
-                                                   )}
-                                                   <div className="flex items-center gap-1 mt-0.5">
-                                                      <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Vend:</span>
-                                                      <span className="text-[9px] font-bold text-slate-600 uppercase truncate max-w-[150px]">{seller?.name || 'Não Informado'}</span>
-                                                   </div>
-                                                </div>
-                                             );
-                                          })()}
                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -765,16 +787,30 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                        </span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                       {inst.status === 'PENDING' ? (
-                                          <button
-                                             onClick={() => handleSettleInstallment(inst)}
-                                             className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"
-                                          >
-                                             Baixar
-                                          </button>
-                                       ) : (
-                                          <CheckCircle2 size={18} className="text-emerald-500 mx-auto" />
-                                       )}
+                                       <div className="flex items-center justify-center gap-2">
+                                          {inst.status === 'PENDING' ? (
+                                             <>
+                                                <button
+                                                   onClick={() => handleSettleInstallment(inst)}
+                                                   className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"
+                                                >
+                                                   Baixar
+                                                </button>
+                                                {inst.paymentId && (
+                                                   <button
+                                                      onClick={() => handleSyncPaymentStatus(inst)}
+                                                      disabled={isSincronizing === inst.id}
+                                                      className={`p-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all ${isSincronizing === inst.id ? 'animate-spin' : ''}`}
+                                                      title="Consultar na InfinitePay"
+                                                   >
+                                                      <RefreshCw size={14} />
+                                                   </button>
+                                                )}
+                                             </>
+                                          ) : (
+                                             <CheckCircle2 size={18} className="text-emerald-500 mx-auto" />
+                                          )}
+                                       </div>
                                     </td>
                                  </tr>
                               ))

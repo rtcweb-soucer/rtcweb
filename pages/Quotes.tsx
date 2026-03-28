@@ -87,6 +87,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
   const [contractObservations, setContractObservations] = useState('');
   const [isAnticipated, setIsAnticipated] = useState(false);
   const [anticipationRate, setAnticipationRate] = useState<number>(0);
+  const [cardInstallments, setCardInstallments] = useState(1);
 
   // Estados dos Filtros Avançados
   const [showFilters, setShowFilters] = useState(false);
@@ -471,7 +472,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     if (selectedOrder && !showOrderModal) {
       setFinalValue(selectedOrder.totalValue);
       setPaymentMethod(selectedOrder.paymentMethod || '');
-      setPaymentConditions(selectedOrder.paymentConditions || '');
+      setIsAnticipated(false);
+      setAnticipationRate(0);
+      setCardInstallments(1);
       setContractObservations(selectedOrder.contractObservations || '');
       setDeliveryDays(selectedOrder.deliveryDays || 25);
     }
@@ -668,6 +671,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         deliveryDeadline: addBusinessDays(new Date(), deliveryDays).toISOString(),
         isAnticipated: isAnticipated,
         anticipationRate: anticipationRate,
+        cardInstallments,
         createdAt: new Date()
       };
 
@@ -703,8 +707,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       // 5. Update UI and Navigate
       onUpdateOrder(updatedOrder);
       
-      // Trigger automated payment notification for the first installment (1/X)
-      notificationService.sendAutomatedPaymentNotification(updatedOrder, 1);
+      // Trigger automated payment notification for initial charges (PIX Entrance + Card Grouped)
+      notificationService.sendContractInitialCharges(updatedOrder);
 
       setShowOrderModal(false);
       setSelectedQuoteId(null);
@@ -1356,6 +1360,22 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                         </select>
                       </div>
                     </div>
+
+                    {paymentMethod === 'Cartão de Crédito' && (
+                      <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Parcelamento no Cartão (Cliente)</label>
+                        <select
+                          value={cardInstallments}
+                          onChange={(e) => setCardInstallments(parseInt(e.target.value))}
+                          className="w-full px-4 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                            <option key={n} value={n}>{n}x s/ juros (ou conforme InfinitePay)</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 italic">O link de pagamento será gerado com este limite de parcelas.</p>
+                      </div>
+                    )}
 
                     {paymentMethod === 'Cartão de Crédito' && (() => {
                       const originalTotalValue = orderItems.reduce((acc: number, it: MeasurementItem) => {

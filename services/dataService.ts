@@ -456,6 +456,7 @@ export const dataService = {
             is_anticipated: order.isAnticipated,
             anticipation_rate: order.anticipationRate,
             payment_link: order.paymentLink,
+            card_installments: order.cardInstallments,
             created_at: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
         };
         console.log('💾 Saving order payload:', payload);
