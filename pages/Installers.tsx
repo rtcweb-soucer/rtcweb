@@ -15,13 +15,16 @@ import {
     Filter,
     FileText,
     TrendingUp,
-    Download
+    Download,
+    Clock,
+    Clipboard
 } from 'lucide-react';
-import { Installer, Appointment } from '../types';
+import { Installer, Appointment, TimeEntry } from '../types';
 
 interface InstallersProps {
     installers: Installer[];
     appointments: Appointment[];
+    timeEntries: TimeEntry[];
     onAdd: (i: Installer) => void;
     onUpdate: (i: Installer) => void;
     onDelete: (id: string) => void;
@@ -30,11 +33,13 @@ interface InstallersProps {
 const Installers = ({
     installers,
     appointments,
+    timeEntries,
     onAdd,
     onUpdate,
     onDelete
 }: InstallersProps) => {
     const [activeTab, setActiveTab] = useState<'manage' | 'report'>('manage');
+    const [reportType, setReportType] = useState<'diarias' | 'ponto' | 'fechamento'>('fechamento');
     const [showModal, setShowModal] = useState(false);
     const [editingInstaller, setEditingInstaller] = useState<Installer | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -52,12 +57,15 @@ const Installers = ({
         name: '',
         phone: '',
         dailyRate: 0,
-        active: true
+        hourlyRate: 0,
+        active: true,
+        login: '',
+        password: ''
     });
 
     const handleOpenAdd = () => {
         setEditingInstaller(null);
-        setFormData({ name: '', phone: '', dailyRate: 0, active: true });
+        setFormData({ name: '', phone: '', dailyRate: 0, hourlyRate: 0, active: true, login: '', password: '' });
         setShowModal(true);
     };
 
@@ -129,7 +137,111 @@ const Installers = ({
         return results.sort((a, b) => b.date.localeCompare(a.date));
     }, [appointments, installers, reportStartDate, reportEndDate, reportFilterInstallerId]);
 
+    const pontoReportData = useMemo(() => {
+        const filtered = timeEntries.filter(te => {
+            const date = te.timestamp.split('T')[0];
+            const inInstaller = !reportFilterInstallerId || te.installerId === reportFilterInstallerId;
+            return inInstaller && date >= reportStartDate && date <= reportEndDate;
+        });
+
+        // Agrupar por data e instalador para mostrar turnos/dia
+        const grouped: Record<string, TimeEntry[]> = {};
+        filtered.forEach(te => {
+            const date = te.timestamp.split('T')[0];
+            const key = `${te.installerId}|${date}`;
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(te);
+        });
+
+        return Object.entries(grouped).map(([key, entries]) => {
+            const [installerId, date] = key.split('|');
+            const installer = installers.find(i => i.id === installerId);
+            
+            // Ordenar por horário
+            const sorted = [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+            
+            const entrance = sorted.find(e => e.type === 'IN');
+            const exit = sorted.find(e => e.type === 'OUT');
+            
+            let duration = '---';
+            if (entrance && exit) {
+                const start = new Date(entrance.timestamp);
+                const end = new Date(exit.timestamp);
+                const diffMs = end.getTime() - start.getTime();
+                const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+                const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                duration = `${diffHrs}h ${diffMins}m`;
+            }
+
+            return {
+                installerName: installer?.name || 'Desconhecido',
+                date,
+                entrance: entrance ? new Date(entrance.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '---',
+                exit: exit ? new Date(exit.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '---',
+                duration,
+                location: entrance?.locationName || exit?.locationName || 'Externo',
+                isExtra: entrance?.isExtra || exit?.isExtra
+            };
+        }).sort((a, b) => b.date.localeCompare(a.date));
+    }, [timeEntries, installers, reportStartDate, reportEndDate, reportFilterInstallerId]);
+
+    const fechamentoReportData = useMemo(() => {
+        // Obter todas as combinações únicas de (Instalador, Data) presentes em ambos os conjuntos
+        const allKeys = new Set<string>();
+        
+        // Da agenda
+        reportData.forEach(r => {
+            const installer = installers.find(i => i.name === r.installerName);
+            if (installer) allKeys.add(`${installer.id}|${r.date}`);
+        });
+        
+        // Do ponto
+        pontoReportData.forEach(p => {
+            const installer = installers.find(i => i.name === p.installerName);
+            if (installer) allKeys.add(`${installer.id}|${p.date}`);
+        });
+
+        return Array.from(allKeys).map(key => {
+            const [installerId, date] = key.split('|');
+            const installer = installers.find(i => i.id === installerId);
+            
+            const agenda = reportData.find(r => r.date === date && r.installerName === installer?.name);
+            const ponto = pontoReportData.find(p => p.date === date && p.installerName === installer?.name);
+            
+            const dailyRate = agenda?.dailyRate || installer?.dailyRate || 0;
+            const hourlyRate = installer?.hourlyRate || 0;
+            
+            // Cálculo de horas extras
+            // Consideramos extras se houver marcação manual de isExtra ou se exceder 9h
+            let extraHoursDecimal = 0;
+            if (ponto?.duration && ponto.duration !== '---') {
+                const [h, m] = ponto.duration.replace('h', '').replace('m', '').split(' ').map(Number);
+                const totalMins = (h * 60) + m;
+                if (totalMins > 540) { // 9 horas
+                    extraHoursDecimal = (totalMins - 540) / 60;
+                }
+            }
+            
+            const extraValue = extraHoursDecimal * hourlyRate;
+            const totalToPay = dailyRate + extraValue;
+
+            return {
+                date,
+                installerName: installer?.name || '---',
+                statusAgenda: agenda?.status || 'Não Agendado',
+                entrance: ponto?.entrance || '---',
+                exit: ponto?.exit || '---',
+                duration: ponto?.duration || '---',
+                extraHours: extraHoursDecimal > 0 ? `${Math.floor(extraHoursDecimal)}h ${Math.round((extraHoursDecimal % 1) * 60)}m` : '---',
+                extraValue,
+                dailyRate,
+                totalToPay
+            };
+        }).sort((a, b) => b.date.localeCompare(a.date));
+    }, [reportData, pontoReportData, installers]);
+
     const reportTotal = reportData.reduce((acc, curr) => acc + curr.dailyRate, 0);
+    const fechamentoTotal = fechamentoReportData.reduce((acc, curr) => acc + curr.totalToPay, 0);
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
@@ -256,7 +368,30 @@ const Installers = ({
                             <Filter size={16} className="text-blue-600" />
                             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Filtros do Relatório</h3>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                            <div className="space-y-1.5 md:col-span-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo de Relatório</label>
+                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                    <button
+                                        onClick={() => setReportType('fechamento')}
+                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${reportType === 'fechamento' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 opacity-60'}`}
+                                    >
+                                        Fechamento Geral
+                                    </button>
+                                    <button
+                                        onClick={() => setReportType('diarias')}
+                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${reportType === 'diarias' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 opacity-60'}`}
+                                    >
+                                        Agenda
+                                    </button>
+                                    <button
+                                        onClick={() => setReportType('ponto')}
+                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all ${reportType === 'ponto' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 opacity-60'}`}
+                                    >
+                                        Ponto
+                                    </button>
+                                </div>
+                            </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Data Início</label>
                                 <input
@@ -287,64 +422,178 @@ const Installers = ({
                                 </select>
                             </div>
                             <div className="flex items-end">
-                                <div className="bg-blue-600/5 p-4 rounded-2xl border border-blue-100 w-full flex items-center justify-between">
+                                <div className="bg-emerald-600/5 p-4 rounded-2xl border border-emerald-100 w-full flex items-center justify-between">
                                     <div>
-                                        <p className="text-[9px] font-black text-blue-600 uppercase leading-none mb-1">Total a Pagar</p>
-                                        <p className="text-xl font-black text-slate-900">R$ {reportTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                        <p className="text-[9px] font-black text-emerald-600 uppercase leading-none mb-1">Total a Pagar</p>
+                                        <p className="text-xl font-black text-slate-900">R$ {(reportType === 'fechamento' ? fechamentoTotal : reportTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                     </div>
-                                    <TrendingUp className="text-blue-500" size={24} />
+                                    <DollarSign className="text-emerald-500" size={24} />
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Tabela do Relatório */}
-                    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-slate-50 border-b border-slate-200">
-                                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
-                                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
-                                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                                    <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor da Diária</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {reportData.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={4} className="px-8 py-12 text-center text-slate-400 italic">Nenhum registro encontrado no período selecionado.</td>
+                    {reportType === 'fechamento' ? (
+                        /* Tabela de Fechamento Unificado */
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Agenda</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ponto (Ent/Saí)</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">H. Extras</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">A Pagar</th>
                                     </tr>
-                                ) : (
-                                    reportData.map((row, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-8 py-4 text-sm font-bold text-slate-700 flex items-center gap-2">
-                                                <Calendar size={14} className="text-blue-400" />
-                                                {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                            </td>
-                                            <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
-                                            <td className="px-8 py-4">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${row.status === 'COMPLETED'
-                                                    ? 'bg-emerald-100 text-emerald-600'
-                                                    : 'bg-blue-100 text-blue-600'
-                                                    }`}>
-                                                    {row.status === 'COMPLETED' ? 'Realizado' : 'Agendado'}
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-4 text-sm font-bold text-slate-900 text-right">R$ {row.dailyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {fechamentoReportData.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-8 py-12 text-center text-slate-400 italic">Nenhum dado integrado encontrado no período.</td>
                                         </tr>
-                                    ))
+                                    ) : (
+                                        fechamentoReportData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-8 py-4 text-sm font-bold text-slate-700">
+                                                    {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                </td>
+                                                <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
+                                                <td className="px-8 py-4">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${row.statusAgenda === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : row.statusAgenda === 'SCHEDULED' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                        {row.statusAgenda}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-4 text-xs font-medium text-slate-500">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-emerald-600">{row.entrance}</span>
+                                                        <span>/</span>
+                                                        <span className="text-rose-600">{row.exit}</span>
+                                                    </div>
+                                                    <div className="text-[10px] font-black text-slate-400 mt-1">{row.duration}</div>
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    {row.extraHours !== '---' ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs font-black text-amber-600">{row.extraHours}</span>
+                                                            <span className="text-[9px] font-bold text-amber-500/70">R$ {row.extraValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-300">---</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-8 py-4 text-right">
+                                                    <div className="text-sm font-black text-slate-900">R$ {row.totalToPay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                                                    <div className="text-[9px] font-bold text-slate-400 uppercase">Diária: R$ {row.dailyRate}</div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                                {fechamentoReportData.length > 0 && (
+                                    <tfoot className="bg-slate-50">
+                                        <tr>
+                                            <td colSpan={5} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Relatório de Fechamento Total:</td>
+                                            <td className="px-8 py-4 text-xl font-black text-emerald-600 text-right whitespace-nowrap">R$ {fechamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    </tfoot>
                                 )}
-                            </tbody>
-                            {reportData.length > 0 && (
-                                <tfoot className="bg-slate-50">
-                                    <tr>
-                                        <td colSpan={3} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Total Acumulado:</td>
-                                        <td className="px-8 py-4 text-lg font-black text-slate-900 text-right">R$ {reportTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            </table>
+                        </div>
+                    ) : reportType === 'diarias' ? (
+                        /* Tabela do Relatório de Diárias */
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor da Diária</th>
                                     </tr>
-                                </tfoot>
-                            )}
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {reportData.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={4} className="px-8 py-12 text-center text-slate-400 italic">Nenhum registro de agenda encontrado no período.</td>
+                                        </tr>
+                                    ) : (
+                                        reportData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-8 py-4 text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                    <Calendar size={14} className="text-blue-400" />
+                                                    {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                </td>
+                                                <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
+                                                <td className="px-8 py-4">
+                                                    <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${row.status === 'COMPLETED'
+                                                        ? 'bg-emerald-100 text-emerald-600'
+                                                        : 'bg-blue-100 text-blue-600'
+                                                        }`}>
+                                                        {row.status === 'COMPLETED' ? 'Realizado' : 'Agendado'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-4 text-sm font-bold text-slate-900 text-right">R$ {row.dailyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                                {reportData.length > 0 && (
+                                    <tfoot className="bg-slate-50">
+                                        <tr>
+                                            <td colSpan={3} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Total Acumulado:</td>
+                                            <td className="px-8 py-4 text-lg font-black text-slate-900 text-right">R$ {reportTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </div>
+                    ) : (
+                        /* Tabela do Relatório de Ponto Eletrônico */
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Saída</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Permanência</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Localização</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {pontoReportData.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-8 py-12 text-center text-slate-400 italic">Nenhuma marcação de ponto encontrada no período.</td>
+                                        </tr>
+                                    ) : (
+                                        pontoReportData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-8 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">
+                                                    {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                </td>
+                                                <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase truncate max-w-[150px]">{row.installerName}</td>
+                                                <td className="px-8 py-4 text-sm font-bold text-emerald-600">{row.entrance}</td>
+                                                <td className="px-8 py-4 text-sm font-bold text-rose-600">{row.exit}</td>
+                                                <td className="px-8 py-4 text-center">
+                                                    <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-[10px] font-black">
+                                                        {row.duration}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2 text-[10px] font-bold text-slate-500">
+                                                        <Clock size={12} className={row.location === 'RTC - Sede' ? 'text-blue-500' : 'text-slate-300'} />
+                                                        {row.location}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -379,7 +628,7 @@ const Installers = ({
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Valor da Diária</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Valor da Diária (R$)</label>
                                         <div className="relative">
                                             <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                                             <input
@@ -391,6 +640,22 @@ const Installers = ({
                                             />
                                         </div>
                                     </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Valor da Hora Extra (R$)</label>
+                                        <div className="relative">
+                                            <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                                            <input
+                                                type="number" step="0.01"
+                                                value={formData.hourlyRate}
+                                                onChange={(e) => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) })}
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold pl-12 focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="0,00"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Telefone</label>
                                         <div className="relative">
@@ -404,17 +669,41 @@ const Installers = ({
                                             />
                                         </div>
                                     </div>
+                                    <div className="space-y-1.5 flex items-end">
+                                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200 w-full">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.active}
+                                                onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                                                id="installer-active"
+                                                className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <label htmlFor="installer-active" className="text-[10px] font-black text-slate-400 uppercase">Ativo</label>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.active}
-                                        onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                                        id="installer-active"
-                                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <label htmlFor="installer-active" className="text-sm font-bold text-slate-700">Instalador Ativo (Disponível para agendamentos)</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Usuário (Login)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.login}
+                                            onChange={(e) => setFormData({ ...formData, login: e.target.value })}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="ex: joao.instalador"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Senha de Acesso</label>
+                                        <input
+                                            type="password"
+                                            value={formData.password}
+                                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 

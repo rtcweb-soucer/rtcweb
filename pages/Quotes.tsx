@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { dataService } from '../services/dataService';
+import { notificationService } from '../services/notificationService';
 import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, MeasurementItem, ProductionStage, Seller, Appointment, Installer, SystemUser, TaskStatus, TaskPriority, Task } from '../types';
 import CustomerModal from '../components/CustomerModal';
 import { normalizeString } from '../utils/searchUtils';
@@ -538,7 +539,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
   };
 
   const handleTransformToOrder = async () => {
-    if (!selectedOrder || isSaving) return;
+    if (!selectedOrder || !selectedCustomer || isSaving) return;
     setIsSaving(true);
 
     try {
@@ -656,6 +657,9 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         itemIds: finalItems.map((it: MeasurementItem) => it.id),
         totalValue: finalValue,
         itemPrices: redistributedItemPrices, // Limpa o __DRAFT_ITEMS__ e salva os preços reais
+        customerId: selectedOrder.customerId,
+        customerName: selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
         paymentMethod: paymentMethod,
         paymentConditions: paymentConditions,
         contractObservations: contractObservations,
@@ -698,6 +702,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
 
       // 5. Update UI and Navigate
       onUpdateOrder(updatedOrder);
+      
+      // Trigger automated payment notification for the first installment (1/X)
+      notificationService.sendAutomatedPaymentNotification(updatedOrder, 1);
+
       setShowOrderModal(false);
       setSelectedQuoteId(null);
       onNavigateToOrders?.();

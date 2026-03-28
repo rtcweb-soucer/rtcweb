@@ -4,7 +4,8 @@ export enum UserRole {
   SELLER = 'SELLER',
   ATTENDANT = 'ATTENDANT',
   PRODUCTION = 'PRODUCTION',
-  BUYER = 'BUYER'
+  BUYER = 'BUYER',
+  INSTALLER = 'INSTALLER'
 }
 
 export enum OrderStatus {
@@ -50,9 +51,12 @@ export interface Seller {
 export interface Installer {
   id: string;
   name: string;
-  dailyRate: number;
   phone?: string;
+  dailyRate: number;
+  hourlyRate?: number; // Valor da hora extra
   active: boolean;
+  login?: string;
+  password?: string;
 }
 
 export interface Product {
@@ -212,6 +216,8 @@ export interface Installment {
   nfe?: string; // New: Nota Fiscal
   netValue?: number; // New: Valor líquido recebido
   paymentMethod?: string; // New: Forma de pagamento da parcela
+  paymentLink?: string; // Novo: URL de pagamento InfinitePay
+  pixCopyPaste?: string; // Novo: Código PIX Copia e Cola
 }
 
 export interface Expense {
@@ -232,6 +238,8 @@ export interface ProductionHistoryEntry {
 export interface Order {
   id: string;
   customerId: string;
+  customerName?: string;
+  customerPhone?: string;
   technicalSheetId?: string;
   sellerId: string;
   itemIds?: string[];
@@ -366,3 +374,30 @@ export interface Task {
   completed_at?: string;
 }
 
+export interface TimeEntry {
+  id: string;
+  installerId: string;
+  type: 'IN' | 'OUT';
+  timestamp: string;
+  lat?: number;
+  lng?: number;
+  isExtra?: boolean;
+  locationName?: string;
+}
+
+export interface Rework {
+  id: string;
+  orderId: string;
+  reason: 'novo produto' | 'ajuste' | 'falta de peças';
+  description?: string;
+  status: 'PENDING' | 'RESOLVED' | 'CANCELLED';
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface ApiSettings {
+  id: string;
+  service: 'infinitepay' | 'evolution';
+  settings: any;
+  updated_at: string;
+}

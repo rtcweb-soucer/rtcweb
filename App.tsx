@@ -1,7 +1,6 @@
-
 import * as React from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer, FinancialTransaction, AccountCategory } from './types';
+import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer, FinancialTransaction, AccountCategory, TimeEntry } from './types';
 import { MENU_ITEMS } from './constants';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -27,6 +26,8 @@ import Buyer from './pages/Buyer';
 import Tasks from './pages/Tasks';
 import Settings from './pages/Settings';
 import SalesReport from './pages/SalesReport';
+import ApiConfig from './pages/ApiConfig';
+import InstallerPortal from './pages/InstallerPortal';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -61,6 +62,7 @@ const App = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<SellerBlockedSlot[]>([]);
   const [installers, setInstallers] = useState<Installer[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
   const [accountCategories, setAccountCategories] = useState<AccountCategory[]>([]);
   const [systemSettings, setSystemSettings] = useState<{ id: string, key: string, value: string }[]>([]);
@@ -85,7 +87,7 @@ const App = () => {
     if (isAuto) setIsSyncing(true);
 
     try {
-      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings] = await Promise.all([
+      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings, dbTimeEntries] = await Promise.all([
         dataService.getSellers(),
         dataService.getCustomers(),
         dataService.getProducts(),
@@ -97,7 +99,8 @@ const App = () => {
         dataService.getInstallers(),
         dataService.getFinancialTransactions(),
         dataService.getAccountCategories(),
-        dataService.getSystemSettings()
+        dataService.getSystemSettings(),
+        dataService.getTimeEntries()
       ]);
 
       setSellers(dbSellers);
@@ -109,6 +112,7 @@ const App = () => {
       setTechnicalSheets(dbTechnicalSheets);
       setBlockedSlots(dbBlockedSlots);
       setInstallers(dbInstallers);
+      setTimeEntries(dbTimeEntries);
       setFinancialTransactions(dbFinancialTransactions);
       setAccountCategories(dbAccountCategories);
       setSystemSettings(dbSystemSettings);
@@ -186,11 +190,6 @@ const App = () => {
       setActiveTab(filteredMenu[0]?.id || 'dashboard');
     }
   }, [currentUser, activeTab, filteredMenu]);
-
-
-  if (!currentUser) {
-    return <Login onLogin={setCurrentUser} systemUsers={systemUsers} />;
-  }
 
   const handleAddUser = async (user: SystemUser) => {
     try {
@@ -593,14 +592,14 @@ const App = () => {
           orders={viewOrders}
           onAdd={handleAddSeller} onUpdate={handleUpdateSeller} onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote} onStartMeasurement={handleStartMeasurement}
-          currentUser={currentUser}
+          currentUser={currentUser!}
         />;
       case 'customers':
         return <Customers
           customers={viewCustomers} onAdd={handleAddCustomer} onUpdate={handleUpdateCustomer}
           appointments={viewAppointments} orders={viewOrders} sellers={sellers} technicalSheets={viewTechnicalSheets} onAddAppointment={handleAddAppointment}
           preselectedCustomerId={preselectedCustomerId}
-          currentUser={currentUser}
+          currentUser={currentUser!}
         />;
       case 'products':
         return <Products products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />;
@@ -619,13 +618,13 @@ const App = () => {
           onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote}
           role={currentUser?.role || UserRole.SELLER}
-          currentUser={currentUser}
+          currentUser={currentUser!}
         />;
       case 'measurements':
         return <MeasurementForm
           customers={viewCustomers} products={products} technicalSheets={viewTechnicalSheets}
           initialCustomerId={preselectedCustomerId || undefined} editingSheet={editingSheet || undefined}
-          currentUser={currentUser}
+          currentUser={currentUser!}
           onSave={handleSaveTechnicalSheet}
           onGenerateQuote={handleGenerateQuote}
           onEditSheet={handleEditSheet}
@@ -637,7 +636,7 @@ const App = () => {
           installers={installers}
           onUpdateOrder={handleUpdateOrder} initialSelectedId={lastGeneratedQuoteId || undefined}
           onClearSelection={() => setLastGeneratedQuoteId(null)} onNavigateToOrders={() => setActiveTab('orders')}
-          currentUser={currentUser}
+          currentUser={currentUser!}
           onAddCustomer={handleAddCustomer}
           onAddAppointment={handleAddAppointment}
           onAddTechnicalSheet={handleSaveTechnicalSheet}
@@ -652,7 +651,7 @@ const App = () => {
           technicalSheets={viewTechnicalSheets}
           products={products}
           installers={installers}
-          currentUser={currentUser}
+          currentUser={currentUser!}
           onAddBlockedSlot={handleAddBlockedSlot}
           onDeleteBlockedSlot={handleDeleteBlockedSlot}
           onStartMeasurement={handleStartMeasurement}
@@ -674,7 +673,7 @@ const App = () => {
           sellers={sellers}
           onUpdateOrder={handleUpdateOrder}
           onDeleteOrder={handleDeleteOrder}
-          currentUser={currentUser}
+          currentUser={currentUser!}
           initialOrderId={selectedOrderIdForTab || undefined}
           onClearInitialOrder={() => setSelectedOrderIdForTab(null)}
         />;
@@ -716,7 +715,7 @@ const App = () => {
       case 'system-users':
         return <TeamRegistration users={systemUsers} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />;
       case 'installers':
-        return <Installers installers={installers} appointments={appointments} onAdd={handleAddInstaller} onUpdate={handleUpdateInstaller} onDelete={handleDeleteInstaller} />;
+        return <Installers installers={installers} appointments={appointments} timeEntries={timeEntries} onAdd={handleAddInstaller} onUpdate={handleUpdateInstaller} onDelete={handleDeleteInstaller} />;
       case 'nfe-management':
         return (
           <NFeManagement
@@ -724,7 +723,7 @@ const App = () => {
             customers={customers}
             products={products}
             technicalSheets={technicalSheets}
-            currentUser={currentUser}
+            currentUser={currentUser!}
             onUpdateOrder={handleUpdateOrder}
             onNavigateToOrder={(orderId) => {
               setSelectedOrderIdForTab(orderId);
@@ -742,6 +741,8 @@ const App = () => {
             technicalSheets={technicalSheets}
           />
         );
+      case 'api-config':
+        return <ApiConfig />;
       case 'tarefas':
         return <Tasks />;
       default:
@@ -749,6 +750,39 @@ const App = () => {
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;
     }
   };
+
+  // Render logic triggered only AFTER functions are declared
+  if (!currentUser) {
+    return <Login onLogin={setCurrentUser} systemUsers={systemUsers} installers={installers} />;
+  }
+
+  if (currentUser.role === UserRole.INSTALLER) {
+    const installer = installers.find(i => i.id === currentUser.id);
+    if (!installer) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white p-8 text-center">
+          <div>
+            <h2 className="text-xl font-bold mb-2">Erro de Acesso</h2>
+            <p className="text-slate-400 mb-4">Perfil de instalador não encontrado no banco de dados.</p>
+            <button onClick={() => setCurrentUser(null)} className="px-6 py-2 bg-blue-600 rounded-xl">Voltar ao Login</button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <InstallerPortal
+        installer={installer}
+        orders={orders}
+        customers={customers}
+        technicalSheets={technicalSheets}
+        products={products}
+        appointments={appointments}
+        onLogout={() => setCurrentUser(null)}
+        onUpdateOrder={handleUpdateOrder}
+      />
+    );
+  }
 
   return (
     <div className="flex h-[100dvh] bg-slate-50 overflow-hidden relative">

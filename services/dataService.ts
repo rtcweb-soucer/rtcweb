@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task } from '../types';
+import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task, TimeEntry, Rework, ApiSettings } from '../types';
 
 const SYNC_QUEUE_KEY = 'rtc_sync_queue';
 
@@ -192,18 +192,32 @@ export const dataService = {
         return (data || []).map(i => ({
             ...i,
             dailyRate: Number(i.daily_rate),
+            hourlyRate: Number(i.hourly_rate || 0),
+            login: i.login,
+            password: i.password,
         })) as Installer[];
     },
     async saveInstaller(installer: Installer) {
         const payload = {
             ...installer,
             daily_rate: installer.dailyRate,
+            hourly_rate: installer.hourlyRate,
+            login: installer.login,
+            password: installer.password,
         };
         // @ts-ignore
         delete payload.dailyRate;
+        // @ts-ignore
+        delete payload.hourlyRate;
         const { data, error } = await supabase.from('installers').upsert(payload).select().single();
         if (error) throw error;
-        return { ...data, dailyRate: Number(data.daily_rate) } as Installer;
+        return {
+            ...data,
+            dailyRate: Number(data.daily_rate),
+            hourlyRate: Number(data.hourly_rate || 0),
+            login: data.login,
+            password: data.password
+        } as Installer;
     },
     async deleteInstaller(id: string) {
         const { error } = await supabase.from('installers').delete().eq('id', id);
@@ -603,6 +617,57 @@ export const dataService = {
         // Soft delete: mark as is_deleted = true
         const { error } = await supabase.from('orders').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
+    },
+
+    // Time Tracking
+    async saveTimeEntry(entry: Partial<TimeEntry>) {
+        const payload = {
+            installer_id: entry.installerId,
+            type: entry.type,
+            timestamp: entry.timestamp || new Date().toISOString(),
+            lat: entry.lat,
+            lng: entry.lng,
+            is_extra: entry.isExtra,
+            location_name: entry.locationName
+        };
+        const { data, error } = await supabase.from('time_entries').insert(payload).select().single();
+        if (error) throw error;
+        return data as TimeEntry;
+    },
+
+    async getTimeEntries(installerId?: string) {
+        let query = supabase.from('time_entries').select('*');
+        if (installerId) query = query.eq('installer_id', installerId);
+        const { data, error } = await query.order('timestamp', { ascending: false });
+        if (error) throw error;
+        return data.map(d => ({
+            ...d,
+            installerId: d.installer_id,
+            isExtra: d.is_extra,
+            locationName: d.location_name
+        })) as TimeEntry[];
+    },
+
+    // Reworks
+    async saveRework(rework: Partial<Rework>) {
+        const payload = {
+            order_id: rework.orderId,
+            reason: rework.reason,
+            description: rework.description,
+            status: rework.status || 'PENDING',
+            created_by: rework.createdBy
+        };
+        const { data, error } = await supabase.from('reworks').insert(payload).select().single();
+        if (error) throw error;
+        return data as Rework;
+    },
+
+    async getReworks(orderId?: string) {
+        let query = supabase.from('reworks').select('*');
+        if (orderId) query = query.eq('order_id', orderId);
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error) throw error;
+        return data as Rework[];
     },
 
     async undeleteOrder(id: string) {
@@ -1200,6 +1265,18 @@ export const dataService = {
         const { error } = await supabase.from('system_settings').upsert({ key, value }, { onConflict: 'key' }).select();
         if (error) throw error;
     },
+
+    // API Settings
+    async getApiSettings() {
+        const { data, error } = await supabase.from('api_settings').select('*');
+        if (error) throw error;
+        return data as ApiSettings[];
+    },
+    async saveApiSettings(settings: Partial<ApiSettings>) {
+        const { data, error } = await supabase.from('api_settings').upsert(settings).select().single();
+        if (error) throw error;
+        return data as ApiSettings;
+    }
 };
 
 

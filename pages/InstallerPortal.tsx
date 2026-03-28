@@ -1,0 +1,497 @@
+import * as React from 'react';
+import { useState, useEffect } from 'react';
+import { 
+  Truck, MapPin, Phone, MessageCircle, FileText, 
+  CheckCircle2, AlertCircle, Clock, Map, 
+  ChevronRight, X, User, HardHat, LogOut,
+  Navigation, RotateCcw, Package
+} from 'lucide-react';
+import { Order, Customer, TechnicalSheet, Product, Appointment, Installer, TimeEntry, ProductionStage } from '../types';
+import { dataService } from '../services/dataService';
+import { notificationService } from '../services/notificationService';
+import ProductionSheetPrint from '../components/ProductionSheetPrint';
+
+interface InstallerPortalProps {
+  installer: Installer;
+  orders: Order[];
+  customers: Customer[];
+  technicalSheets: TechnicalSheet[];
+  products: Product[];
+  appointments: Appointment[];
+  onLogout: () => void;
+  onUpdateOrder: (order: Order) => void;
+}
+
+const OFFICE_LAT = -22.88363;
+const OFFICE_LNG = -43.26623;
+const ALLOWED_RADIUS_METERS = 300;
+
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // in metres
+};
+
+const InstallerPortal = ({ 
+  installer, 
+  orders, 
+  customers, 
+  technicalSheets, 
+  products, 
+  appointments,
+  onLogout,
+  onUpdateOrder
+}: InstallerPortalProps) => {
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [distanceToOffice, setDistanceToOffice] = useState<number | null>(null);
+  const [lastPoint, setLastPoint] = useState<TimeEntry | null>(null);
+  const [showReworkModal, setShowReworkModal] = useState<string | null>(null); // OrderID
+  const [showSheetModal, setShowSheetModal] = useState<string | null>(null); // Agora armazena o OrderId
+  const [fullSheetData, setFullSheetData] = useState<any>(null);
+  const [reworkReason, setReworkReason] = useState<'novo produto' | 'ajuste' | 'falta de peças'>('ajuste');
+  const [reworkNotes, setReworkNotes] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSheetLoading, setIsSheetLoading] = useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Instalações de hoje para este instalador
+  const todaysInstallations = appointments
+    .filter(app => app.date === today && app.installerIds?.includes(installer.id) && app.type === 'INSTALLATION')
+    .map(app => {
+      const order = orders.find(o => o.id === app.orderId);
+      const customer = customers.find(c => c.id === app.customerId);
+      return { app, order, customer };
+    });
+
+  const hasInstallationsToday = todaysInstallations.length > 0;
+
+  useEffect(() => {
+    // Get last point
+    dataService.getTimeEntries(installer.id).then(entries => {
+      if (entries && entries.length > 0) {
+        setLastPoint(entries[0]);
+      }
+    });
+
+    // Watch location
+    if ("geolocation" in navigator) {
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setCurrentLocation({ lat: latitude, lng: longitude });
+          const dist = calculateDistance(latitude, longitude, OFFICE_LAT, OFFICE_LNG);
+          setDistanceToOffice(dist);
+        },
+        (err) => console.error(err),
+        { enableHighAccuracy: true }
+      );
+      return () => navigator.geolocation.clearWatch(watchId);
+    }
+  }, [installer.id]);
+
+  const handleBaterPonto = async (type: 'IN' | 'OUT') => {
+    if (!currentLocation || !distanceToOffice) {
+      alert("Localização não encontrada. Ative o GPS.");
+      return;
+    }
+
+    if (distanceToOffice > ALLOWED_RADIUS_METERS) {
+      alert(`Você está fora do raio permitido (${Math.round(distanceToOffice)}m). Dirija-se à empresa na Travessa Manoel Lobo.`);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const entry = await dataService.saveTimeEntry({
+        installerId: installer.id,
+        type,
+        lat: currentLocation.lat,
+        lng: currentLocation.lng,
+        timestamp: new Date().toISOString(),
+        locationName: 'Sede Maria da Graça'
+      });
+      setLastPoint(entry);
+      alert(`Ponto de ${type === 'IN' ? 'Entrada' : 'Saída'} registrado com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao registrar ponto.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFinalize = async (order: Order) => {
+    if (!confirm("Confirmar conclusão da instalação?")) return;
+
+    setIsLoading(true);
+    try {
+      const updatedOrder = {
+        ...order,
+        productionStage: ProductionStage.READY, // Finalizado
+        status: 'DELIVERED' as any
+      };
+      
+      await dataService.saveOrder(updatedOrder);
+      onUpdateOrder(updatedOrder);
+
+      // Notificar Financeiro
+      await notificationService.notifyFinanceAboutInstallation(updatedOrder);
+
+      // Trigger automated payment notification for the second installment (2/X)
+      notificationService.sendAutomatedPaymentNotification(updatedOrder, 2);
+
+      alert("Instalação finalizada e financeiro notificado!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao finalizar instalação.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleViewSheet = async (orderId: string) => {
+    setIsSheetLoading(true);
+    setShowSheetModal(orderId);
+    try {
+      const data = await dataService.getOrderProductionData(orderId);
+      setFullSheetData(data);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao carregar ficha técnica.");
+      setShowSheetModal(null);
+    } finally {
+      setIsSheetLoading(false);
+    }
+  };
+
+  const handleSendRework = async () => {
+    if (!showReworkModal) return;
+
+    setIsLoading(true);
+    try {
+      await dataService.saveRework({
+        orderId: showReworkModal,
+        reason: reworkReason,
+        description: reworkNotes,
+        createdBy: installer.id
+      });
+
+      // Opcional: Voltar o estágio do pedido se necessário
+      const order = orders.find(o => o.id === showReworkModal);
+      if (order) {
+        const updatedOrder = {
+          ...order,
+          productionStage: ProductionStage.ASSEMBLY, // Volta para montagem ou revisão
+          contractObservations: `${order.contractObservations || ''}\n[RETRABALHO]: ${reworkReason} - ${reworkNotes}`
+        };
+        await dataService.saveOrder(updatedOrder);
+        onUpdateOrder(updatedOrder);
+      }
+
+      alert("Retrabalho registrado com sucesso!");
+      setShowReworkModal(null);
+      setReworkNotes('');
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao registrar retrabalho.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openWhatsApp = (phone: string) => {
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length <= 11) {
+      cleanPhone = `55${cleanPhone}`;
+    }
+    window.open(`https://wa.me/${cleanPhone}`, '_blank');
+  };
+
+  const openNavigation = (address: any) => {
+    const query = encodeURIComponent(`${address.street}, ${address.number}, ${address.neighborhood}, ${address.city} - RJ`);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20">
+      {/* Header Mobile */}
+      <div className="bg-slate-900 text-white p-6 rounded-b-[40px] shadow-xl">
+        <div className="flex justify-between items-start mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
+              <HardHat className="text-blue-400" size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Portal do Instalador</p>
+              <h1 className="font-bold text-lg">{installer.name}</h1>
+            </div>
+          </div>
+          <button onClick={onLogout} className="p-3 bg-white/5 rounded-2xl text-slate-400 hover:text-white transition-all">
+            <LogOut size={20} />
+          </button>
+        </div>
+
+        {/* Card de Ponto */}
+        <div className="bg-white/5 border border-white/10 p-5 rounded-3xl space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+              <Clock size={16} className="text-blue-400" /> 
+              {lastPoint ? `Último ponto: ${lastPoint.type === 'IN' ? 'Entrada' : 'Saída'} às ${new Date(lastPoint.timestamp).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}` : 'Nenhum ponto hoje'}
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full text-[10px] font-black uppercase">
+              <div className={`w-2 h-2 rounded-full ${distanceToOffice !== null && distanceToOffice <= ALLOWED_RADIUS_METERS ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+              {distanceToOffice !== null && distanceToOffice <= ALLOWED_RADIUS_METERS ? 'Na Empresa' : 'Fora do Raio'}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              disabled={isLoading || !hasInstallationsToday || (lastPoint?.type === 'IN')}
+              onClick={() => handleBaterPonto('IN')}
+              className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                !hasInstallationsToday ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white shadow-emerald-500/20'
+              } disabled:opacity-50`}
+            >
+              <CheckCircle2 size={16} /> Entrada
+            </button>
+            <button
+              disabled={isLoading || !hasInstallationsToday || (lastPoint?.type === 'OUT' || !lastPoint)}
+              onClick={() => handleBaterPonto('OUT')}
+              className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                !hasInstallationsToday ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-500 text-white shadow-rose-500/20'
+              } disabled:opacity-50`}
+            >
+              <LogOut size={16} /> Saída
+            </button>
+          </div>
+          
+          {!hasInstallationsToday && (
+            <p className="text-[9px] text-center text-slate-500 italic">Ponto desabilitado: Nenhuma instalação agendada hoje.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 space-y-6">
+        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[3px] ml-2">Agenda de Hoje</h2>
+        
+        {todaysInstallations.length === 0 ? (
+          <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+             <Truck className="mx-auto text-slate-200 mb-4" size={48} />
+             <p className="text-slate-400 font-bold">Nenhum serviço para hoje.</p>
+          </div>
+        ) : (
+          todaysInstallations.map(({ app, order, customer }) => (
+            <div key={app.id} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:border-blue-300 transition-all">
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1.5">{order?.contractNumber || 'Sem Contrato'}</p>
+                    <h3 className="font-bold text-slate-900 text-lg leading-tight">{customer?.name}</h3>
+                  </div>
+                  <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    {app.time}
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  <div className="flex items-start gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <MapPin size={18} className="text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 leading-tight">
+                        {customer?.address.street}, {customer?.address.number}
+                        {customer?.address.complement ? ` - ${customer.address.complement}` : ''}
+                      </p>
+                      <p className="text-xs text-slate-500 font-medium">{customer?.address.neighborhood}, {customer?.address.city}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <Package size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Produtos</p>
+                      <p className="text-xs font-bold text-slate-700">
+                        {order?.itemIds?.length || 0} Itens (Veja Ficha Técnica)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                  <div className="grid grid-cols-3 gap-3 pt-2">
+                    <button 
+                      onClick={() => customer?.phone && window.open(`tel:${customer.phone}`)}
+                      className="flex flex-col items-center justify-center gap-1 py-3 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-bold hover:bg-slate-200 transition-all border border-slate-200"
+                    >
+                      <Phone size={14} /> Ligar
+                    </button>
+                    <button 
+                      onClick={() => customer?.phone && openWhatsApp(customer.phone)}
+                      className="flex flex-col items-center justify-center gap-1 py-3 bg-emerald-500 text-white rounded-2xl text-[10px] font-bold hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
+                    >
+                      <MessageCircle size={14} /> WhatsApp
+                    </button>
+                    <button 
+                      onClick={() => customer?.address && openNavigation(customer.address)}
+                      className="flex flex-col items-center justify-center gap-1 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                    >
+                      <Navigation size={14} /> Rota
+                    </button>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-3 divide-x divide-slate-100 border-t border-slate-100">
+                <button 
+                  onClick={() => order && handleViewSheet(order.id)}
+                  className="flex flex-col items-center justify-center py-4 hover:bg-slate-50 transition-all group"
+                >
+                  <FileText className="text-slate-400 group-hover:text-blue-500 mb-1" size={18} />
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900">Ficha</span>
+                </button>
+                <button 
+                  onClick={() => setShowReworkModal(order?.id || null)}
+                  className="flex flex-col items-center justify-center py-4 hover:bg-slate-50 transition-all group"
+                >
+                  <RotateCcw className="text-slate-400 group-hover:text-amber-500 mb-1" size={18} />
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900">Retrabalho</span>
+                </button>
+                <button 
+                  onClick={() => order && handleFinalize(order)}
+                  className="flex flex-col items-center justify-center py-4 bg-emerald-50 hover:bg-emerald-100 transition-all group"
+                >
+                  <CheckCircle2 className="text-emerald-500 mb-1" size={18} />
+                  <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Finalizar</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Rework Modal */}
+      {showReworkModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-[40px] sm:rounded-[40px] w-full max-w-lg shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="font-black text-xl text-slate-900 uppercase tracking-tighter">Registrar Retrabalho</h3>
+              <button onClick={() => setShowReworkModal(null)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Selecione o Motivo</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {['ajuste', 'novo produto', 'falta de peças'].map((reason) => (
+                    <button
+                      key={reason}
+                      onClick={() => setReworkReason(reason as any)}
+                      className={`px-4 py-3 rounded-2xl text-sm font-bold border transition-all flex items-center justify-between ${
+                        reworkReason === reason ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {reason.charAt(0).toUpperCase() + reason.slice(1)}
+                      {reworkReason === reason && <CheckCircle2 size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Observações Adicionais</label>
+                <textarea
+                  value={reworkNotes}
+                  onChange={(e) => setReworkNotes(e.target.value)}
+                  rows={4}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Detalhe o problema encontrado..."
+                />
+              </div>
+
+              <button
+                disabled={isLoading}
+                onClick={handleSendRework}
+                className="w-full py-5 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-xl shadow-slate-900/20 active:scale-95 transition-all"
+              >
+                Confirmar Registro de Retrabalho
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Technical Sheet Modal */}
+      {showSheetModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-[40px] sm:rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[95vh] sm:h-[90vh] animate-in slide-in-from-bottom duration-300">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+              <div>
+                <h3 className="font-black text-xl text-slate-900 uppercase tracking-tighter">Ficha Técnica de Produção</h3>
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mt-1">Layout Oficial PCP</p>
+              </div>
+              <button onClick={() => { setShowSheetModal(null); setFullSheetData(null); }} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto bg-slate-100/50 p-2 sm:p-6">
+              {isSheetLoading ? (
+                <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
+                  <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="font-bold text-sm">Carregando dados técnicos...</p>
+                </div>
+              ) : fullSheetData ? (
+                <div className="w-full overflow-x-auto rounded-3xl bg-white shadow-inner p-1 sm:p-0">
+                   <div className="min-w-[800px] pointer-events-none origin-top scale-[0.9] sm:scale-100">
+                      <ProductionSheetPrint data={fullSheetData} products={products} />
+                   </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <FileText size={48} className="mb-4 opacity-20" />
+                  <p className="font-bold">Ficha técnica não disponível.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
+               <button
+                onClick={() => { setShowSheetModal(null); setFullSheetData(null); }}
+                className="w-full py-4 bg-slate-900 text-white rounded-[20px] text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+              >
+                Fechar Visualização
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Bar Mobile (Optional fallback links) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 flex justify-around items-center sm:hidden">
+        <div className="flex flex-col items-center">
+          <Clock className="text-blue-600" size={24} />
+          <span className="text-[10px] font-bold text-slate-400">Ponto</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <Truck className="text-slate-400" size={24} />
+          <span className="text-[10px] font-bold text-slate-400">Agenda</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <User className="text-slate-400" size={24} />
+          <span className="text-[10px] font-bold text-slate-400">Perfil</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default InstallerPortal;

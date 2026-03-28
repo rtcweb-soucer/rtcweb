@@ -1,15 +1,21 @@
-
 import * as React from 'react';
 import { useState } from 'react';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight } from 'lucide-react';
-import { SystemUser } from '../types';
+import { 
+  Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight,
+  Truck, MapPin, Phone, MessageCircle, FileText, 
+  CheckCircle2, AlertCircle, Clock, Map, 
+  ChevronRight, X, HardHat, LogOut,
+  Navigation, RotateCcw, Package
+} from 'lucide-react';
+import { SystemUser, Installer } from '../types';
 
 interface LoginProps {
   onLogin: (user: SystemUser) => void;
   systemUsers: SystemUser[];
+  installers: Installer[];
 }
 
-const Login = ({ onLogin, systemUsers }: LoginProps) => {
+const Login = ({ onLogin, systemUsers, installers }: LoginProps) => {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,11 +42,27 @@ const Login = ({ onLogin, systemUsers }: LoginProps) => {
         return;
       }
 
-      // Regra 2: Usuários Cadastrados
+      // Regra 2: Usuários Cadastrados no Sistema
       const user = systemUsers.find(u => u.login === login && u.password === password && u.active);
 
       if (user) {
         onLogin(user);
+        setLoading(false);
+        return;
+      }
+
+      // Regra 3: Instaladores Cadastrados
+      const installer = installers.find(i => i.login === login && i.password === password && i.active);
+
+      if (installer) {
+        // Mapeia o instalador para uma estrutura de SystemUser temporária/virtual para o estado da App
+        onLogin({
+          id: installer.id,
+          name: installer.name,
+          login: installer.login!,
+          role: 'INSTALLER' as any,
+          active: true
+        });
       } else {
         setError('Credenciais inválidas ou acesso desativado.');
       }
