@@ -16,8 +16,7 @@ const ApiConfig = () => {
 
   // Form states
   const [infinitePayForm, setInfinitePayForm] = useState({
-    clientId: '',
-    clientSecret: '',
+    handle: '',
     apiKey: '',
     environment: 'production' as 'production' | 'sandbox'
   });
@@ -143,46 +142,33 @@ const ApiConfig = () => {
                   <Globe size={24} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 uppercase tracking-tighter text-lg leading-none">InfinitePay API V2</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Link de Pagamento e PIX Automatizado</p>
+                  <h3 className="font-black text-slate-900 uppercase tracking-tighter text-lg leading-none">InfinitePay Checkout</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Link de Pagamento e PIX via InfiniteTag</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client ID</label>
+                <div className="space-y-2 lg:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">InfiniteTag (Handle)</label>
                   <div className="relative">
                     <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input
                       type="text"
                       className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:italic"
-                      placeholder="Identificador do app..."
-                      value={infinitePayForm.clientId}
-                      onChange={e => setInfinitePayForm({...infinitePayForm, clientId: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Secret</label>
-                  <div className="relative">
-                    <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input
-                      type="password"
-                      className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:italic"
-                      placeholder="Secret da API..."
-                      value={infinitePayForm.clientSecret}
-                      onChange={e => setInfinitePayForm({...infinitePayForm, clientSecret: e.target.value})}
+                      placeholder="Ex: rtc-persianas (sem o $)"
+                      value={infinitePayForm.handle}
+                      onChange={e => setInfinitePayForm({...infinitePayForm, handle: e.target.value.replace('$', '')})}
                     />
                   </div>
                 </div>
                 <div className="space-y-2 lg:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key (X-API-Key)</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">API Key (X-API-Key - Opcional)</label>
                   <div className="relative">
                     <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input
                       type="text"
                       className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:italic"
-                      placeholder="Chave de API Secundária..."
+                      placeholder="Chave de API se houver..."
                       value={infinitePayForm.apiKey}
                       onChange={e => setInfinitePayForm({...infinitePayForm, apiKey: e.target.value})}
                     />
@@ -215,7 +201,7 @@ const ApiConfig = () => {
                 <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-blue-100 text-blue-500">
                    <AlertCircle size={20} />
                 </div>
-                <p className="font-medium">Os dados da InfinitePay são usados para gerar links de cobrança e PIX dinâmicos. Certifique-se de que o Client ID e Secret são da versão <b>Cloud API V2</b>.</p>
+                <p className="font-medium text-[10px]">Suas credenciais são usadas para gerar links do <b>Checkout Integrado</b>. Utilize a sua InfiniteTag (ex: rtc-persianas) encontrada nas configurações do seu painel InfinitePay.</p>
               </div>
             </div>
           )}

@@ -10,89 +10,40 @@ export const notificationService = {
    * 2. Todas as demais parcelas de Cartão agrupadas em um único link.
    */
   async sendContractInitialCharges(order: Order) {
-    if (!order.installments || order.installments.length === 0) return;
-
-    try {
-      console.log(`🚀 Gerando cobranças iniciais para o Pedido ${order.contractNumber || order.id}...`);
-      
-      const installments = [...order.installments];
-      const firstInstallment = installments[0];
-      const cardInstallments = installments.slice(1).filter(i => 
-        (i.paymentMethod || '').toUpperCase().includes('CART') || 
-        (i.paymentMethod || '').toUpperCase().includes('CREDIT')
-      );
-
-      // 1. Processar Parcela 1 se for PIX
-      if (firstInstallment.status === 'PENDING' && (firstInstallment.paymentMethod || '').toUpperCase().includes('PIX')) {
-        const pixCharge = await infinitePayService.createCharge(order, firstInstallment);
-        firstInstallment.pixCopyPaste = pixCharge.pixCode;
-        firstInstallment.paymentId = pixCharge.id;
-
-        const message = `Olá! Segue o código PIX para a *Entrada* do seu pedido *${order.contractNumber || order.id.slice(0, 8)}*:\n\n` +
-                        `💰 *Valor:* R$ ${firstInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n` +
-                        `\`${pixCharge.pixCode}\`\n\n` +
-                        `_Copie e cole no app do seu banco._`;
-        
-        if (order.customerPhone) await evolutionService.sendMessage(order.customerPhone, message);
-      }
-
-      // 2. Processar Saldo no Cartão (Agrupado)
-      if (cardInstallments.length > 0) {
-        const totalValue = cardInstallments.reduce((sum, i) => sum + i.value, 0);
-        const firstCardInst = cardInstallments[0];
-        
-        // Criamos uma "parcela virtual" para gerar o link do saldo total
-        const virtualInstallment: Installment = {
-          ...firstCardInst,
-          value: totalValue,
-          paymentMethod: 'Cartão de Crédito'
-        };
-
-        const linkCharge = await infinitePayService.createCharge(order, virtualInstallment, order.cardInstallments);
-        
-        // Atribuir o mesmo link e ID para todas as parcelas do cartão
-        cardInstallments.forEach(i => {
-          i.paymentLink = linkCharge.url;
-          i.paymentId = linkCharge.id;
-        });
-
-        const message = `Olá! Aqui está o link para o pagamento do *Saldo* do seu pedido em até *${order.cardInstallments || 12}x* no cartão:\n\n` +
-                        `💰 *Valor Total:* R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-                        `🔗 *Link:* ${linkCharge.url}\n\n` +
-                        `_Você pode parcelar diretamente no link acima._`;
-
-        if (order.customerPhone) await evolutionService.sendMessage(order.customerPhone, message);
-      }
-
-      // 3. Salvar alterações no pedido
-      await dataService.saveOrder({ ...order, installments });
-      console.log(`✅ Cobranças iniciais enviadas e salvas.`);
-
-    } catch (err) {
-      console.error(`❌ Erro nas cobranças iniciais:`, err);
-    }
+    // Agora o envio inicial (Entrada e Cartão) é manual no Financeiro.
+    // Esta função permanece vazia ou apenas para log, conforme pedido.
+    console.log(`ℹ️ O envio inicial para o Pedido ${order.contractNumber || order.id} agora deve ser acionado manualmente.`);
   },
 
   /**
    * Envia automaticamente a cobrança via WhatsApp para uma parcela específica.
-   * (Mantida para cobranças avulsas/posteriores)
+   * Chamado principalmente após a instalação (parcela 2).
    */
   async sendAutomatedPaymentNotification(order: Order, installmentNumber: number) {
-    if (!order.installments) return;
+    if (!order.installments || !order.customerPhone) return;
 
     const installment = order.installments.find(i => i.number === installmentNumber);
     if (!installment || installment.status === 'PAID') return;
 
     try {
-      const charge = await infinitePayService.createCharge(order, installment);
+      console.log(`🚀 Gerando cobrança automática para Parcela ${installmentNumber} do Pedido ${order.id}...`);
       
+      const customerData = {
+        name: order.customerName || 'Cliente',
+        email: '', // Email opcional se disponível
+        phone: order.customerPhone.startsWith('+') ? order.customerPhone : `+55${order.customerPhone.replace(/\D/g, '')}`
+      };
+
+      const charge = await infinitePayService.createCharge(order, installment, customerData);
+      
+      // Atualizar o pedido com o link/código gerado
       const updatedInstallments = order.installments.map(i => {
         if (i.number === installmentNumber) {
           return {
             ...i,
-            paymentLink: charge.type === 'LINK' ? charge.url : i.paymentLink,
-            pixCopyPaste: charge.type === 'PIX' ? charge.pixCode : i.pixCopyPaste,
-            paymentId: charge.id
+            paymentLink: charge.url,
+            pixCopyPaste: charge.pixCode,
+            paymentId: charge.id // Slug para consulta
           };
         }
         return i;
@@ -103,16 +54,17 @@ export const notificationService = {
       let message = `Olá! Referente ao seu pedido *${order.contractNumber || order.id.slice(0, 8)}*, segue a cobrança da parcela *${installmentNumber}/${order.installments.length}*.\n\n`;
       message += `💰 *Valor:* R$ ${installment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
       
-      if (charge.type === 'PIX') {
-        message += `\`${charge.pixCode}\``;
+      if (charge.pixCode) {
+        message += `\n*Código PIX Copia e Cola:*\n\`${charge.pixCode}\`\n\n_Copie e cole no app do seu banco._`;
       } else {
-        message += `🔗 *Link:* ${charge.url}`;
+        message += `\n🔗 *Link para Pagamento:* ${charge.url}`;
       }
 
-      if (order.customerPhone) await evolutionService.sendMessage(order.customerPhone, message);
+      await evolutionService.sendMessage(order.customerPhone, message);
+      console.log(`✅ Cobrança automática enviada via WhatsApp.`);
 
     } catch (err) {
-      console.error(`❌ Erro na cobrança avulsa:`, err);
+      console.error(`❌ Erro na cobrança automática:`, err);
     }
   },
 

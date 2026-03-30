@@ -15,6 +15,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/nfemail/, '/api'),
           secure: false
+        },
+        '/api/infinitepay-remote': {
+          target: 'https://api.infinitepay.io',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/infinitepay-remote/, ''),
+          secure: false
         }
       }
     },

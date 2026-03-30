@@ -683,18 +683,27 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
       // 3. Save Order (Commercial data)
       await dataService.saveOrder(updatedOrder);
 
+      // Função auxiliar para validar UUID
+      const isValidUUID = (id: string | undefined): boolean => {
+        if (!id) return false;
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+      };
+      
+      const validCreatorId = isValidUUID(currentUser?.id) ? currentUser.id : undefined;
+
       // 3b. Se for antecipado, cria uma tarefa de autorização financeira
       if (isAnticipated) {
         const authTask: Partial<Task> = {
+          id: crypto.randomUUID(),
           title: `AUTORIZAÇÃO FINANCEIRA: Pedido ${updatedOrder.contractNumber || updatedOrder.id}`,
           description: `Autorização de antecipação de comissão para o pedido ${updatedOrder.contractNumber || updatedOrder.id}. Vendedor: ${sellers.find((s: Seller) => s.id === updatedOrder.sellerId)?.name || 'N/A'}. Valor Total: R$ ${updatedOrder.totalValue.toLocaleString('pt-BR')}. Taxa: ${anticipationRate}%`,
           status: TaskStatus.PENDING,
           priority: TaskPriority.HIGH,
-          created_by: currentUser?.id,
+          created_by: validCreatorId,
           // Por padrão atribui ao Master ou Financeiro se houver lógica de roles futuramente
           created_at: new Date().toISOString()
         };
-        await dataService.saveTask(authTask);
+        await dataService.saveTask(authTask as Task);
       }
 
       // 4. Initialize Production Tracking
@@ -715,7 +724,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         status: TaskStatus.PENDING,
         priority: TaskPriority.HIGH,
         assigned_to: alineId,
-        created_by: currentUser.id,
+        created_by: validCreatorId,
         due_date: dueDate.toISOString(),
         order_id: updatedOrder.id,
         created_at: new Date().toISOString(),

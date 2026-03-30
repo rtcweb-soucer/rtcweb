@@ -24,7 +24,10 @@ import {
    CreditCard,
    Info,
    MessageCircle,
-   RefreshCw
+   RefreshCw,
+   Copy,
+   ExternalLink,
+   Check
 } from 'lucide-react';
 
 interface FinanceProps {
@@ -70,6 +73,70 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       totalPaid: 0
    });
    const [isSincronizing, setIsSincronizing] = useState<string | null>(null);
+   const [isGenerating, setIsGenerating] = useState<string | null>(null);
+
+   const handleCopyValue = (text: string) => {
+      navigator.clipboard.writeText(text);
+      alert("Copiado com sucesso!");
+   };
+
+   const handleGeneratePaymentForInstallment = async (inst: any) => {
+      const order = orders.find(o => o.id === inst.orderId);
+      if (!order) return;
+
+      const instId = inst.id;
+      setIsGenerating(`${inst.orderId}-${instId}`);
+      try {
+         const { infinitePayService } = await import('../services/infinitePayService');
+         const customer = customers.find(c => c.id === order.customerId);
+         const customerData = {
+            name: customer?.name || 'Cliente',
+            email: customer?.email || '',
+            phone: customer?.phone || ''
+         };
+
+         const charge = await infinitePayService.createCharge(order, inst, customerData);
+
+         const updatedInstallments = order.installments?.map(i => {
+            if (i.id === instId) {
+               return {
+                  ...i,
+                  paymentLink: charge.url,
+                  pixCopyPaste: charge.pixCode,
+                  paymentId: charge.id
+               };
+            }
+            return i;
+         });
+
+         await onUpdateOrder({ ...order, installments: updatedInstallments });
+      } catch (err: any) {
+         alert("Erro ao oferecer pagamento: " + err.message);
+      } finally {
+         setIsGenerating(null);
+      }
+   };
+
+   const handleWhatsAppManualShare = (inst: any) => {
+      const order = orders.find(o => o.id === inst.orderId);
+      if (!order || !order.customerPhone) {
+         alert("Telefone do cliente não encontrado");
+         return;
+      }
+
+      let message = `Olá! Referente ao seu pedido *${order.contractNumber || order.id.slice(0, 8).toUpperCase()}*, segue a cobrança da parcela *${inst.installmentNumber}/${inst.totalInstallments}*.\n\n`;
+      message += `💰 *Valor:* R$ ${inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+
+      if (inst.pixCopyPaste) {
+         message += `\n*Código PIX Copia e Cola:*\n\`${inst.pixCopyPaste}\`\n\n_Copie e cole no app do seu banco._`;
+      } else if (inst.paymentLink) {
+         message += `\n🔗 *Link para Pagamento:* ${inst.paymentLink}`;
+      }
+
+      const cleanPhone = order.customerPhone.replace(/\D/g, '');
+      const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+      window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`, '_blank');
+   };
 
    const filteredInstallments = useMemo(() => {
       const all: any[] = [];
@@ -133,11 +200,11 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       
       setIsSincronizing(installment.id);
       try {
+         const { infinitePayService } = await import('../services/infinitePayService');
          const type = installment.pixCopyPaste ? 'PIX' : 'LINK';
-         const status = await infinitePayService.checkStatus(installment.paymentId, type);
+         const status = await infinitePayService.checkStatus(installment.paymentId, type, installment.orderId, installment.id);
          
          if (status === 'PAID') {
-            // Dar baixa em todas as parcelas com esse paymentId
             const relatedInstallments = filteredInstallments.filter(i => 
                i.paymentId === installment.paymentId && i.status === 'PENDING'
             );
@@ -148,36 +215,35 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
 
                const updatedInstallments = order.installments?.map(i => 
                   i.id === inst.id || (i.paymentId === installment.paymentId && i.paymentId !== undefined)
-                     ? { ...i, status: 'PAID', paymentDate: new Date().toISOString() } 
+                     ? { ...i, status: 'PAID' as 'PAID', paymentDate: new Date().toISOString() } 
                      : i
                );
 
                const updatedOrder = { ...order, installments: updatedInstallments };
                await onUpdateOrder(updatedOrder);
                
-               // Gerar transação no caixa
                const category = categories.find(c => c.type === 'INCOME' && c.name.toUpperCase().includes('VENDA'));
-               const transaction: Partial<Transaction> = {
+               const transaction: Partial<FinancialTransaction> = {
                   description: `REC: Pedido ${order.contractNumber || order.id.slice(0,8)} (Parc ${inst.number} - AUTO)`,
                   amount: inst.value,
                   type: 'INCOME',
                   due_date: new Date().toISOString(),
-                  payment_date: new Date().toISOString(),
+                  paid_date: new Date().toISOString(),
                   status: 'PAID',
                   category_id: category?.id,
                   payment_method: inst.paymentMethod || (inst.pixCopyPaste ? 'PIX' : 'Cartão (Link)'),
                   order_id: order.id
                };
-               await onSaveTransaction(transaction);
+               await onSaveTransaction(transaction as FinancialTransaction);
             }
             
             alert(`✅ Recibo confirmado! ${relatedInstallments.length} parcela(s) baixada(s).`);
          } else {
             alert("ℹ️ Pagamento ainda não consta como aprovado na InfinitePay.");
          }
-      } catch (err) {
-         console.error("Erro ao sincronizar status:", err);
-         alert("❌ Erro ao consultar a InfinitePay.");
+      } catch (err: any) {
+         console.error("Erro ao sincronizar status ou verificação não suportada na V1:", err);
+         alert("🤖 A InfinitePay (na nova versão V1) desativou a consulta manual de pagamentos por motivo de segurança.\n\nA partir de agora dependemos exclusivamente da Baixa Automática (Webhook).\n\nSe o pagamento foi feito com sucesso, aguarde o aviso automático deles ou faça a baixa manual (Botão Verde)!");
       } finally {
          setIsSincronizing(null);
       }
@@ -789,24 +855,70 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                     <td className="px-6 py-4 text-center">
                                        <div className="flex items-center justify-center gap-2">
                                           {inst.status === 'PENDING' ? (
-                                             <>
-                                                <button
-                                                   onClick={() => handleSettleInstallment(inst)}
-                                                   className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"
-                                                >
-                                                   Baixar
-                                                </button>
-                                                {inst.paymentId && (
+                                             <div className="flex flex-col gap-2">
+                                                <div className="flex items-center gap-2">
                                                    <button
-                                                      onClick={() => handleSyncPaymentStatus(inst)}
-                                                      disabled={isSincronizing === inst.id}
-                                                      className={`p-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all ${isSincronizing === inst.id ? 'animate-spin' : ''}`}
-                                                      title="Consultar na InfinitePay"
+                                                      onClick={() => handleSettleInstallment(inst)}
+                                                      className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"
                                                    >
-                                                      <RefreshCw size={14} />
+                                                      Baixar
                                                    </button>
-                                                )}
-                                             </>
+                                                   {inst.paymentId && (
+                                                      <button
+                                                         onClick={() => handleSyncPaymentStatus(inst)}
+                                                         disabled={isSincronizing === inst.id}
+                                                         className={`p-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all ${isSincronizing === inst.id ? 'animate-spin' : ''}`}
+                                                         title="Consultar na InfinitePay"
+                                                      >
+                                                         <RefreshCw size={14} />
+                                                      </button>
+                                                   )}
+                                                </div>
+
+                                                {/* InfinitePay Actions */}
+                                                <div className="flex items-center gap-1">
+                                                   {!inst.paymentLink && !inst.pixCopyPaste ? (
+                                                      (inst.paymentMethod?.toUpperCase().includes('PIX') || inst.paymentMethod?.toUpperCase().includes('CART')) && (
+                                                         <button
+                                                            onClick={() => handleGeneratePaymentForInstallment(inst)}
+                                                            disabled={isGenerating === `${inst.orderId}-${inst.id}`}
+                                                            className="text-[9px] font-black uppercase tracking-widest px-2 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded-md hover:bg-blue-100 transition-all disabled:opacity-50"
+                                                         >
+                                                            {isGenerating === `${inst.orderId}-${inst.id}` ? 'Gerando...' :
+                                                               inst.paymentMethod?.toUpperCase().includes('PIX') ? 'Gerar PIX' : 'Gerar Link'}
+                                                         </button>
+                                                      )
+                                                   ) : (
+                                                      <div className="flex items-center gap-1">
+                                                         <button
+                                                            onClick={() => handleCopyValue(inst.pixCopyPaste || inst.paymentLink || '')}
+                                                            className="p-1 text-slate-400 hover:text-blue-600 bg-slate-50 border border-slate-100 rounded transition-all"
+                                                            title="Copiar Link/PIX"
+                                                         >
+                                                            <Copy size={12} />
+                                                         </button>
+                                                         <button
+                                                            onClick={() => handleWhatsAppManualShare(inst)}
+                                                            className="p-1 text-slate-400 hover:text-emerald-600 bg-slate-50 border border-slate-100 rounded transition-all"
+                                                            title="Enviar via WhatsApp"
+                                                         >
+                                                            <MessageCircle size={12} />
+                                                         </button>
+                                                         {inst.paymentLink && (
+                                                            <a
+                                                               href={inst.paymentLink}
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               className="p-1 text-slate-400 hover:text-blue-600 bg-slate-50 border border-slate-100 rounded transition-all"
+                                                               title="Abrir Link"
+                                                            >
+                                                               <ExternalLink size={12} />
+                                                            </a>
+                                                         )}
+                                                      </div>
+                                                   )}
+                                                </div>
+                                             </div>
                                           ) : (
                                              <CheckCircle2 size={18} className="text-emerald-500 mx-auto" />
                                           )}

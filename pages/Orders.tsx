@@ -41,7 +41,10 @@ import {
   RefreshCw,
   FileEdit,
   Ban,
-  SendHorizontal
+  SendHorizontal,
+  MessageCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface OrdersProps {
@@ -77,6 +80,67 @@ const Orders = ({
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
+
+  const handleCopyValue = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("Copiado com sucesso!");
+  };
+
+  const handleGeneratePaymentForInstallment = async (inst: any, order: Order) => {
+    setIsGenerating(`${order.id}-${inst.id}`);
+    try {
+      const { infinitePayService } = await import('../services/infinitePayService');
+      const customer = customers.find(c => c.id === order.customerId);
+      const customerData = {
+        name: customer?.name || 'Cliente',
+        email: customer?.email || '',
+        phone: customer?.phone || ''
+      };
+
+      const charge = await infinitePayService.createCharge(order, inst, customerData);
+
+      const updatedInstallments = order.installments?.map(i => {
+        if (i.id === inst.id) {
+          return {
+            ...i,
+            paymentLink: charge.url,
+            pixCopyPaste: charge.pixCode,
+            paymentId: charge.id
+          };
+        }
+        return i;
+      });
+
+      onUpdateOrder({ ...order, installments: updatedInstallments });
+    } catch (err: any) {
+      alert("Erro ao oferecer pagamento: " + err.message);
+    } finally {
+      setIsGenerating(null);
+    }
+  };
+
+  const handleWhatsAppManualShare = (inst: any, order: Order) => {
+    const customer = customers.find(c => c.id === order.customerId);
+    const phone = customer?.phone || order.customerPhone;
+    if (!phone) {
+      alert("Telefone do cliente não encontrado");
+      return;
+    }
+
+    let message = `Olá! Referente ao seu pedido *${order.contractNumber || order.id.slice(0, 8).toUpperCase()}*, segue a cobrança da parcela *${inst.number}/${order.installments?.length}*.\n\n`;
+    message += `💰 *Valor:* R$ ${inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+
+    if (inst.pixCopyPaste) {
+      message += `\n*Código PIX Copia e Cola:*\n\`${inst.pixCopyPaste}\`\n\n_Copie e cole no app do seu banco._`;
+    } else if (inst.paymentLink) {
+      message += `\n🔗 *Link para Pagamento:* ${inst.paymentLink}`;
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
 
   // Estados para ações avançadas de NFe
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -895,14 +959,43 @@ const Orders = ({
                             </div>
                           </div>
                           {selectedOrder.installments.map((inst, idx, arr) => (
-                            <div key={inst.id} className="py-1 px-3 bg-white border border-slate-100 rounded-lg flex items-center justify-between text-[9px] uppercase group hover:border-blue-200 transition-colors">
+                            <div key={inst.id} className="py-2 px-3 bg-white border border-slate-100 rounded-lg flex items-center justify-between text-[9px] uppercase group hover:border-blue-200 transition-colors">
                               <div className="flex items-center gap-4">
                                 <span className="font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[8px] w-16 text-center">{inst.number}/{arr.length}</span>
-                                <span className="font-bold text-slate-600 truncate max-w-[150px]">{inst.paymentMethod || 'Espécie'}</span>
+                                <div className="flex flex-col">
+                                   <span className="font-bold text-slate-600 truncate max-w-[150px]">{inst.paymentMethod || 'Espécie'}</span>
+                                   {inst.status === 'PAID' ? (
+                                      <span className="text-[7px] font-black text-emerald-600">LIQUIDADO</span>
+                                   ) : (
+                                      <span className="text-[7px] font-black text-amber-500 text-left">PENDENTE</span>
+                                   )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-10">
+                              <div className="flex items-center gap-6">
+                                <div className="no-print flex items-center gap-1">
+                                   {inst.status !== 'PAID' && (
+                                      <>
+                                         {!inst.paymentLink && !inst.pixCopyPaste ? (
+                                            (inst.paymentMethod?.toUpperCase().includes('PIX') || inst.paymentMethod?.toUpperCase().includes('CART')) && (
+                                               <button
+                                                  onClick={() => handleGeneratePaymentForInstallment(inst, selectedOrder)}
+                                                  disabled={isGenerating === `${selectedOrder.id}-${inst.id}`}
+                                                  className="text-[8px] font-black uppercase tracking-tight px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded hover:bg-blue-100 disabled:opacity-50"
+                                               >
+                                                  {isGenerating === `${selectedOrder.id}-${inst.id}` ? '...' : (inst.paymentMethod?.toUpperCase().includes('PIX') ? 'Gerar PIX' : 'Link')}
+                                               </button>
+                                            )
+                                         ) : (
+                                            <div className="flex items-center gap-1">
+                                               <button onClick={() => handleCopyValue(inst.pixCopyPaste || inst.paymentLink || '')} className="p-1 text-slate-400 hover:text-blue-600 bg-slate-50 rounded" title="Copiar"><Copy size={10} /></button>
+                                               <button onClick={() => handleWhatsAppManualShare(inst, selectedOrder)} className="p-1 text-slate-400 hover:text-emerald-600 bg-slate-50 rounded" title="Enviar WhatsApp"><MessageCircle size={10} /></button>
+                                            </div>
+                                         )}
+                                      </>
+                                   )}
+                                </div>
                                 <div className="flex flex-col items-end w-16">
-                                  <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
+                                  <span className="font-black text-slate-900 leading-tight d-block">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
                                 </div>
                                 <div className="flex flex-col items-end min-w-[80px]">
                                   <span className="font-black text-blue-700 leading-tight">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
@@ -1276,8 +1369,38 @@ const Orders = ({
                         </span>
                       </td>
                       <td className="px-4 py-4 text-center no-print" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-center gap-2">
+                        <div className="flex justify-center items-center gap-2">
                           <button onClick={(e: React.MouseEvent) => openHistory(e, order)} className="p-2 text-slate-400 hover:text-blue-600 transition-all" title="Histórico PCP"><Activity size={16} /></button>
+                          
+                          {/* Quick Payment Action */}
+                          {(() => {
+                             const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX') || i.paymentMethod?.toUpperCase().includes('CART')));
+                             if (!firstPending) return null;
+                             
+                             if (firstPending.paymentLink || firstPending.pixCopyPaste) {
+                                return (
+                                   <button 
+                                      onClick={(e) => { e.stopPropagation(); handleWhatsAppManualShare(firstPending, order); }}
+                                      className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all"
+                                      title="Enviar cobrança via WhatsApp"
+                                   >
+                                      <MessageCircle size={16} />
+                                   </button>
+                                );
+                             }
+                             
+                             return (
+                                <button 
+                                   onClick={(e) => { e.stopPropagation(); handleGeneratePaymentForInstallment(firstPending, order); }}
+                                   disabled={isGenerating === `${order.id}-${firstPending.id}`}
+                                   className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-50"
+                                   title="Gerar Link/PIX de Cobrança"
+                                >
+                                   {isGenerating === `${order.id}-${firstPending.id}` ? <RefreshCw size={14} className="animate-spin" /> : <CreditCardIcon size={16} />}
+                                </button>
+                             );
+                          })()}
+
                           <ChevronRight className="text-slate-300 group-hover:text-blue-600" size={18} />
                         </div>
                       </td>
@@ -1352,6 +1475,35 @@ const Orders = ({
                         <p className="text-lg font-black text-slate-900 tracking-tight">R$ {(order.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Quick Payment Action Mobile */}
+                        {(() => {
+                           const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX') || i.paymentMethod?.toUpperCase().includes('CART')));
+                           if (!firstPending) return null;
+                           
+                           if (firstPending.paymentLink || firstPending.pixCopyPaste) {
+                              return (
+                                 <button 
+                                    onClick={(e) => { e.stopPropagation(); handleWhatsAppManualShare(firstPending, order); }}
+                                    className="w-10 h-10 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 shadow-sm active:scale-90 transition-transform"
+                                    title="Enviar via WhatsApp"
+                                 >
+                                    <MessageCircle size={18} />
+                                 </button>
+                              );
+                           }
+                           
+                           return (
+                              <button 
+                                 onClick={(e) => { e.stopPropagation(); handleGeneratePaymentForInstallment(firstPending, order); }}
+                                 disabled={isGenerating === `${order.id}-${firstPending.id}`}
+                                 className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 shadow-sm active:scale-90 transition-transform disabled:opacity-50"
+                                 title="Gerar Link de Cobrança"
+                              >
+                                 {isGenerating === `${order.id}-${firstPending.id}` ? <RefreshCw size={16} className="animate-spin" /> : <CreditCardIcon size={18} />}
+                              </button>
+                           );
+                        })()}
+
                         <button
                           onClick={(e: React.MouseEvent) => { e.stopPropagation(); openHistory(e, order); }}
                           className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 shadow-sm active:scale-90 transition-transform"
