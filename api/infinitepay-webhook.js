@@ -12,9 +12,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { order_nsu, paid, status, value, net_value, payment_method, amount, capture_method } = req.body;
+    const payload = req.body;
+    
+    // Grava de forma segura no banco de dados para a gente bisbilhotar do que é feito
+    await supabase.from('webhook_payloads').insert({ payload });
+    
+    const { order_nsu, paid, status, value, net_value, payment_method, amount, capture_method } = payload;
 
-    console.log('📦 Webhook InfinitePay recebido (Payload completo):', JSON.stringify(req.body));
+    console.log('📦 Webhook InfinitePay recebido (Payload completo):', JSON.stringify(payload));
 
     // A API V1 de checkout pode retornar "status": "paid"
     const isApproved = paid === true || status === 'APPROVED' || status === 'paid';
