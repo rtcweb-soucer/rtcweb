@@ -21,11 +21,14 @@ export default async function handler(req, res) {
 
     console.log('📦 Webhook InfinitePay recebido (Payload completo):', JSON.stringify(payload));
 
-    // A API V1 de checkout pode retornar "status": "paid"
-    const isApproved = paid === true || status === 'APPROVED' || status === 'paid';
+    // A API V1 de checkout não envia campo "status". Ela envia "transaction_nsu" e "paid_amount"
+    const isApproved = paid === true || 
+                       status === 'APPROVED' || 
+                       status === 'paid' || 
+                       (payload.transaction_nsu && payload.paid_amount > 0);
 
     if (!isApproved) {
-      return res.status(200).json({ message: 'Pagamento ainda não aprovado ou status pendente', recebido: status });
+      return res.status(200).json({ message: 'Pagamento não validado como aprovado', payload_recebido: payload });
     }
 
     if (!order_nsu || !order_nsu.includes('_')) {
