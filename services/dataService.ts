@@ -199,18 +199,22 @@ export const dataService = {
     },
     async saveInstaller(installer: Installer) {
         const payload = {
-            ...installer,
+            id: installer.id,
+            name: installer.name,
+            phone: installer.phone,
             daily_rate: installer.dailyRate,
             hourly_rate: installer.hourlyRate,
+            active: installer.active,
             login: installer.login,
             password: installer.password,
         };
-        // @ts-ignore
-        delete payload.dailyRate;
-        // @ts-ignore
-        delete payload.hourlyRate;
+
         const { data, error } = await supabase.from('installers').upsert(payload).select().single();
-        if (error) throw error;
+        if (error) {
+            console.error('Error saving installer:', error);
+            throw error;
+        }
+
         return {
             ...data,
             dailyRate: Number(data.daily_rate),

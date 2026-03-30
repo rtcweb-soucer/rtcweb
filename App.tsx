@@ -462,8 +462,9 @@ const App = () => {
       await dataService.saveInstaller(i);
       setInstallers((prev: Installer[]) => prev.map((item: Installer) => item.id === i.id ? i : item));
       loadData(true);
-    } catch (err) {
-      alert("Erro ao atualizar instalador");
+    } catch (err: any) {
+      console.error("Failed to update installer:", err);
+      alert("Erro ao atualizar instalador: " + (err.message || err));
     }
   };
 
