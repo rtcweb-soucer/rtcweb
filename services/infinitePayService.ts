@@ -98,6 +98,79 @@ export const infinitePayService = {
   },
 
   /**
+   * Cria uma cobrança Mestre (Link Único de Cartão) agrupando o saldo devedor do pedido.
+   */
+  async createMasterOrderCharge(order: Order, pendingInstallments: Installment[], customerData?: { name: string, email: string, phone: string }, maxInstallments?: number) {
+    try {
+      const { data: apiData } = await supabase.from('api_settings').select('settings').eq('service', 'infinitepay').single();
+      const { handle } = apiData?.settings || {};
+      if (!handle) throw new Error('InfiniteTag (Handle) não configurada');
+
+      const totalAmount = pendingInstallments.reduce((acc, inst) => acc + inst.value, 0);
+      const amount = Math.round(totalAmount * 100);
+      
+      let cleanPhone = (customerData?.phone || '').replace(/\D/g, '');
+      if (cleanPhone && !cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+      if (cleanPhone) cleanPhone = '+' + cleanPhone;
+
+      const payload: any = {
+        handle: handle,
+        items: [
+          {
+            quantity: 1,
+            price: amount,
+            description: `RTC - Pagamento Pedido ${order.contractNumber || order.id.slice(0, 8)}`
+          }
+        ],
+        // NSU Pai (Sem _idParcela)
+        order_nsu: order.id,
+        redirect_url: `https://rtcweb.vercel.app/finance?orderId=${order.id}`,
+        webhook_url: 'https://rtcweb.vercel.app/api/infinitepay-webhook',
+        payment_methods: ['credit_card']
+      };
+
+      // Tenta impor o limte de parcelas (O comportamento exato depende de como a CloudWalk interpreta no V1)
+      if (maxInstallments) {
+         payload.max_installments = maxInstallments;
+         payload.installments = maxInstallments;
+      }
+
+      if (customerData) {
+        payload.customer = {
+          name: customerData.name,
+          email: customerData.email,
+          phone_number: cleanPhone
+        };
+      }
+
+      const response = await fetch(`${INFINITEPAY_BASE_URL}/invoices/public/checkout/links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      const text = await response.text();
+      let result: any = {};
+      try { result = text ? JSON.parse(text) : {}; } catch (e) { throw new Error('Resposta inválida do gateway'); }
+
+      if (!response.ok) throw new Error(result.message || result.error || 'Erro ao gerar cobrança unificada');
+
+      const url = result.url || result.checkout_url || '';
+      let paymentId = result.slug || result.id || result.invoice_slug || result.invoice_id;
+      if (!paymentId && url) paymentId = url.split('/').pop();
+
+      return {
+        type: 'LINK',
+        url: url,
+        id: paymentId,
+      };
+    } catch (err: any) {
+      console.error('InfinitePayService Master Order Error:', err);
+      throw err;
+    }
+  },
+
+  /**
    * Consulta o status de um pagamento na InfinitePay.
    */
   async checkStatus(paymentId: string, type: 'PIX' | 'LINK', orderId: string, installmentId: string) {

@@ -31,8 +31,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Pagamento não validado como aprovado', payload_recebido: payload });
     }
 
-    if (!order_nsu || !order_nsu.includes('_')) {
-      return res.status(400).json({ error: 'NSU inválido' });
+    if (!order_nsu) {
+      return res.status(400).json({ error: 'NSU inválido ou não referenciado' });
     }
 
     const [orderId, installmentId] = order_nsu.split('_');
@@ -49,27 +49,33 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
 
-    // 2. Localizar e atualizar a parcela
+    // 2. Localizar e atualizar a parcela (ou TODAS as parcelas pendentes se for Master)
     let updated = false;
-    const updatedInstallments = order.installments.map(inst => {
-      if (inst.id === installmentId && inst.status !== 'PAID') {
+    let targetInstallments = [];
+    const isMasterPayment = !installmentId;
+
+    const updatedInstallments = (order.installments || []).map(inst => {
+      // Condição: Está pendente E (é o Pagamento Mestre Múltiplo OU é a Parcela Específica)
+      if (inst.status !== 'PAID' && (isMasterPayment || inst.id === installmentId)) {
         updated = true;
+        targetInstallments.push(inst);
         return {
           ...inst,
           status: 'PAID',
           paymentDate: new Date().toISOString(),
-          netValue: net_value || inst.value,
-          paymentMethod: capture_method ? capture_method.toUpperCase() : (payment_method || inst.paymentMethod)
+          netValue: payload.net_value || net_value || inst.value,
+          paymentMethod: capture_method ? capture_method.toUpperCase() : (payment_method || inst.paymentMethod),
+          paymentLink: payload.receipt_url || inst.paymentLink // Guarda o recibo oficial por segurança
         };
       }
       return inst;
     });
 
     if (!updated) {
-      return res.status(200).json({ message: 'Parcela já estava paga ou não encontrada' });
+      return res.status(200).json({ message: 'Parcela(s) já estavam pagas ou não alocadas.', ignoradas: true });
     }
 
-    // 3. Salvar o pedido atualizado
+    // 3. Salvar o pedido com a(s) parcela(s) baixada(s)
     const { error: updateError } = await supabase
       .from('orders')
       .update({ installments: updatedInstallments })
@@ -77,8 +83,7 @@ export default async function handler(req, res) {
 
     if (updateError) throw updateError;
 
-    // 4. Registrar transação no financeiro (transaction table)
-    // Buscamos a categoria de receita padrão
+    // 4. Registrar a Transação Financeira Principal para o Fluxo de Caixa
     const { data: categories } = await supabase
       .from('account_categories')
       .select('id')
@@ -86,27 +91,28 @@ export default async function handler(req, res) {
       .eq('type', 'INCOME')
       .limit(1);
 
-    const categoryId = categories?.[0]?.id;
+    const categoryId = categories?.[0]?.id || null;
+    const finalAmount = payload.paid_amount || value || amount || net_value || targetInstallments.reduce((acc, curr) => acc + curr.value, 0);
 
     const { error: transError } = await supabase
       .from('financial_transactions')
       .insert({
-        description: `REC: Pedido ${order.contractNumber || order.id.slice(0,8)} (Parcela via Webhook)`,
-        amount: value || 0,
+        description: `REC: Pedido ${order.contractNumber || order.id.slice(0,8)} ${isMasterPayment ? '(Múltiplas - AUTO)' : `(Parc ${targetInstallments[0].number} - AUTO)`}`,
+        amount: finalAmount,
         type: 'INCOME',
         status: 'PAID',
         due_date: new Date().toISOString().split('T')[0],
         paid_date: new Date().toISOString(),
         order_id: orderId,
-        installment_id: installmentId,
+        installment_id: !isMasterPayment ? installmentId : null,
         category_id: categoryId,
-        payment_method: (payment_method || 'InfinitePay').toUpperCase()
+        payment_method: (capture_method || payment_method || 'InfinitePay').toUpperCase()
       });
 
-    if (transError) console.error('⚠️ Erro ao registrar transação financeira no Webhook:', transError);
+    if (transError) console.error('⚠️ Erro ao registrar transação financeira no Webhook (Master):', transError);
 
-    console.log(`✅ Parcela ${installmentId} do pedido ${orderId} liquidada via Webhook.`);
-    return res.status(200).json({ success: true });
+    console.log(`✅ Pagamento detectado! ${targetInstallments.length} parcelas do pedido ${orderId} liquidadas!`);
+    return res.status(200).json({ success: true, processed_installments: targetInstallments.length });
 
   } catch (error) {
     console.error('🔥 Erro no processamento do Webhook InfinitePay:', error);

@@ -120,6 +120,43 @@ const Orders = ({
     }
   };
 
+  const handleGenerateMasterPayment = async (order: Order) => {
+    setIsGenerating(`master-${order.id}`);
+    try {
+      const pendingInstallments = order.installments?.filter(i => i.status !== 'PAID') || [];
+      if (pendingInstallments.length === 0) {
+        alert("Não há parcelas pendentes para faturar neste pedido.");
+        return;
+      }
+
+      const { infinitePayService } = await import('../services/infinitePayService');
+      const customer = customers.find(c => c.id === order.customerId);
+      const customerData = {
+        name: customer?.name || 'Cliente',
+        email: customer?.email || '',
+        phone: customer?.phone || ''
+      };
+
+      // Tenta enviar o número de parcelas pendentes como limite do cartão
+      const charge = await infinitePayService.createMasterOrderCharge(order, pendingInstallments, customerData, pendingInstallments.length);
+
+      // Distribuir o LINK MESTRE para todas as pendentes para referência
+      const updatedInstallments = order.installments?.map(i => {
+        if (i.status !== 'PAID') {
+          return { ...i, paymentLink: charge.url, paymentId: charge.id };
+        }
+        return i;
+      });
+
+      onUpdateOrder({ ...order, installments: updatedInstallments });
+      alert("Link Único de Cartão (agrupado) gerado com sucesso! Envie pelo WhatsApp clicando no ícone do balãozinho.");
+    } catch (err: any) {
+      alert("Erro ao oferecer pagamento único: " + err.message);
+    } finally {
+      setIsGenerating(null);
+    }
+  };
+
   const handleWhatsAppManualShare = (inst: any, order: Order) => {
     const customer = customers.find(c => c.id === order.customerId);
     const phone = customer?.phone || order.customerPhone;
@@ -940,10 +977,23 @@ const Orders = ({
                   {/* Financeiro e Prazos */}
                   <div className="w-full">
                     <section className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60">
+                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60 gap-4">
                         <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <CreditCardIcon size={12} className="text-blue-500" /> Condições de Pagamento
                         </h4>
+                        
+                        {/* Botão MESTRE Gerador de LINK ÚNICO */}
+                        {selectedOrder.installments && selectedOrder.installments.some((i: any) => i.status !== 'PAID') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleGenerateMasterPayment(selectedOrder); }}
+                            disabled={isGenerating === `master-${selectedOrder.id}`}
+                            className="text-[9px] flex items-center gap-1.5 bg-blue-600 text-white font-black uppercase px-3 py-1.5 rounded-lg shadow-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+                            title="Gerar Link de Pagamento Completo (Cartão)"
+                          >
+                            {isGenerating === `master-${selectedOrder.id}` ? <RefreshCw size={12} className="animate-spin" /> : <CreditCardIcon size={12} />}
+                            Link Único (Restante)
+                          </button>
+                        )}
                       </div>
 
                       {selectedOrder.installments && selectedOrder.installments.length > 0 && (
@@ -976,13 +1026,13 @@ const Orders = ({
                                    {inst.status !== 'PAID' && (
                                       <>
                                          {!inst.paymentLink && !inst.pixCopyPaste ? (
-                                            (inst.paymentMethod?.toUpperCase().includes('PIX') || inst.paymentMethod?.toUpperCase().includes('CART')) && (
+                                            (inst.paymentMethod?.toUpperCase().includes('PIX')) && (
                                                <button
                                                   onClick={() => handleGeneratePaymentForInstallment(inst, selectedOrder)}
                                                   disabled={isGenerating === `${selectedOrder.id}-${inst.id}`}
-                                                  className="text-[8px] font-black uppercase tracking-tight px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded hover:bg-blue-100 disabled:opacity-50"
+                                                  className="text-[8px] font-black uppercase tracking-tight px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded hover:bg-emerald-100 disabled:opacity-50"
                                                >
-                                                  {isGenerating === `${selectedOrder.id}-${inst.id}` ? '...' : (inst.paymentMethod?.toUpperCase().includes('PIX') ? 'Gerar PIX' : 'Link')}
+                                                  {isGenerating === `${selectedOrder.id}-${inst.id}` ? '...' : 'Gerar PIX individual'}
                                                </button>
                                             )
                                          ) : (
@@ -1374,7 +1424,7 @@ const Orders = ({
                           
                           {/* Quick Payment Action */}
                           {(() => {
-                             const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX') || i.paymentMethod?.toUpperCase().includes('CART')));
+                             const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX')));
                              if (!firstPending) return null;
                              
                              if (firstPending.paymentLink || firstPending.pixCopyPaste) {
@@ -1393,8 +1443,8 @@ const Orders = ({
                                 <button 
                                    onClick={(e) => { e.stopPropagation(); handleGeneratePaymentForInstallment(firstPending, order); }}
                                    disabled={isGenerating === `${order.id}-${firstPending.id}`}
-                                   className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-50"
-                                   title="Gerar Link/PIX de Cobrança"
+                                   className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all disabled:opacity-50"
+                                   title="Gerar PIX (Atalho)"
                                 >
                                    {isGenerating === `${order.id}-${firstPending.id}` ? <RefreshCw size={14} className="animate-spin" /> : <CreditCardIcon size={16} />}
                                 </button>
@@ -1477,7 +1527,7 @@ const Orders = ({
                       <div className="flex items-center gap-2">
                         {/* Quick Payment Action Mobile */}
                         {(() => {
-                           const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX') || i.paymentMethod?.toUpperCase().includes('CART')));
+                           const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX')));
                            if (!firstPending) return null;
                            
                            if (firstPending.paymentLink || firstPending.pixCopyPaste) {
@@ -1496,8 +1546,8 @@ const Orders = ({
                               <button 
                                  onClick={(e) => { e.stopPropagation(); handleGeneratePaymentForInstallment(firstPending, order); }}
                                  disabled={isGenerating === `${order.id}-${firstPending.id}`}
-                                 className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 shadow-sm active:scale-90 transition-transform disabled:opacity-50"
-                                 title="Gerar Link de Cobrança"
+                                 className="w-10 h-10 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 shadow-sm active:scale-90 transition-transform disabled:opacity-50"
+                                 title="Gerar PIX"
                               >
                                  {isGenerating === `${order.id}-${firstPending.id}` ? <RefreshCw size={16} className="animate-spin" /> : <CreditCardIcon size={18} />}
                               </button>
