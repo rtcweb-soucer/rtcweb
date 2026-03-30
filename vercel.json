@@ -10,6 +10,10 @@
             "destination": "/api/nfemail?path=$1"
         },
         {
+            "source": "/api/infinitepay-remote/(.*)",
+            "destination": "https://api.infinitepay.io/$1"
+        },
+        {
             "source": "/((?!api/.*).*)",
             "destination": "/index.html"
         }
