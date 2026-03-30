@@ -25,7 +25,11 @@ import {
 } from 'lucide-react';
 
 
-const Tasks = () => {
+interface TasksProps {
+  currentUser: SystemUser;
+}
+
+const Tasks = ({ currentUser }: TasksProps) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +44,7 @@ const Tasks = () => {
     description: '',
     status: TaskStatus.PENDING,
     priority: TaskPriority.MEDIUM,
-    assigned_to: ''
+    assigned_to: currentUser.role === 'ADMIN' || currentUser.role === 'ATTENDANT' ? '' : currentUser.id
   });
 
   useEffect(() => {
@@ -69,14 +73,20 @@ const Tasks = () => {
 
     try {
       setIsSaving(true);
-      await dataService.saveTask(formData);
+      const taskToSave = {
+        ...formData,
+        id: formData.id || crypto.randomUUID(),
+        created_by: currentUser.id,
+        updated_at: new Date().toISOString()
+      };
+      await dataService.saveTask(taskToSave);
       setShowAddModal(false);
       setFormData({
         title: '',
         description: '',
         status: TaskStatus.PENDING,
         priority: TaskPriority.MEDIUM,
-        assigned_to: ''
+        assigned_to: currentUser.role === 'ADMIN' || currentUser.role === 'ATTENDANT' ? '' : currentUser.id
       });
       loadData();
     } catch (error) {
@@ -111,6 +121,11 @@ const Tasks = () => {
   };
 
   const filteredTasks = tasks.filter(task => {
+    const isOwner = task.assigned_to === currentUser.id || task.created_by === currentUser.id;
+    const canSeeAll = currentUser.role === 'ADMIN' || currentUser.role === 'ATTENDANT';
+    
+    if (!canSeeAll && !isOwner) return false;
+
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          (task.description?.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === 'ALL' || task.status === statusFilter;

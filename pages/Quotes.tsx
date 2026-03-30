@@ -704,6 +704,24 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         [{ stage: ProductionStage.NEW_ORDER, timestamp: new Date() }]
       );
 
+      // 4b. Criar tarefa inicial para Aline (PCP)
+      const alineId = 'e3211006-47a7-4ed1-97ac-4c6b7f71c92e';
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 2);
+      await dataService.saveTask({
+        id: crypto.randomUUID(),
+        title: `Novo Pedido no PCP: ${updatedOrder.contractNumber || updatedOrder.id}`,
+        description: `Pedido de ${selectedCustomer.name} disponível para conferência inicial no PCP.`,
+        status: TaskStatus.PENDING,
+        priority: TaskPriority.HIGH,
+        assigned_to: alineId,
+        created_by: currentUser.id,
+        due_date: dueDate.toISOString(),
+        order_id: updatedOrder.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
       // 5. Update UI and Navigate
       onUpdateOrder(updatedOrder);
       

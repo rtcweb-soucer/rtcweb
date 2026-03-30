@@ -678,7 +678,16 @@ const App = () => {
           onClearInitialOrder={() => setSelectedOrderIdForTab(null)}
         />;
       case 'pcp':
-        return <PCP orders={orders} products={products} sellers={sellers} customers={customers} onUpdateOrder={handleUpdateOrder} onSelectCustomer={handleSelectCustomer} />;
+        return <PCP 
+          orders={orders} 
+          products={products} 
+          sellers={sellers} 
+          customers={customers} 
+          systemUsers={systemUsers}
+          currentUser={currentUser!}
+          onUpdateOrder={handleUpdateOrder} 
+          onSelectCustomer={handleSelectCustomer} 
+        />;
       case 'buyer':
         return <Buyer orders={orders} customers={customers} />;
       case 'installations':
@@ -744,7 +753,7 @@ const App = () => {
       case 'api-config':
         return <ApiConfig />;
       case 'tarefas':
-        return <Tasks />;
+        return <Tasks currentUser={currentUser!} />;
       default:
 
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;

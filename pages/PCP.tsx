@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product, Seller, Customer } from '../types';
+import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product, Seller, Customer, SystemUser, TaskStatus, TaskPriority } from '../types';
 import { formatBusinessDate } from '../utils/dateUtils';
 import { dataService } from '../services/dataService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
@@ -26,7 +26,9 @@ import {
   Calendar,
   ShoppingCart,
   Plus,
-  Trash2
+  Trash2,
+  Search,
+  AlertTriangle
 } from 'lucide-react';
 
 interface PCPProps {
@@ -34,6 +36,8 @@ interface PCPProps {
   products: Product[];
   sellers: Seller[];
   customers: Customer[];
+  systemUsers: SystemUser[];
+  currentUser: SystemUser;
   onUpdateOrder: (updatedOrder: Order) => void;
   onSelectCustomer: (customerId: string) => void;
 }
@@ -47,8 +51,16 @@ const STAGES_CONFIG = [
   { id: ProductionStage.INSTALLATION, icon: <Truck size={16} />, color: 'bg-slate-700' }
 ];
 
-const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCustomer }: PCPProps) => {
+const RESPONSIBLE_IDS = {
+  ALINE: 'e3211006-47a7-4ed1-97ac-4c6b7f71c92e',
+  DENIS: '244017e8-b373-44e6-b989-ccda75145b05',
+  JOAO: '7a5fed36-d3a9-440a-8fea-128c29be19f7',
+  WELINGTON: '2006546b-d493-48f6-a9d0-27f3370cda7a'
+};
+
+const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, onUpdateOrder, onSelectCustomer }: PCPProps) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
@@ -60,7 +72,6 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
   const [requestNotes, setRequestNotes] = useState('');
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
-  /* REMOVED OLD LOGIC */
   // Internal state for orders with production tracking
   const [pcpOrders, setPcpOrders] = useState<Order[]>([]);
 
@@ -76,6 +87,77 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
     } catch (error) {
       console.error("Error loading PCP data:", error);
     }
+  };
+
+  const createPCPTask = async (assignedTo: string, title: string, description: string, days: number, orderId: string) => {
+    try {
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + days);
+      
+      await dataService.saveTask({
+        id: crypto.randomUUID(),
+        title,
+        description,
+        status: TaskStatus.PENDING,
+        priority: TaskPriority.HIGH,
+        assigned_to: assignedTo,
+        created_by: currentUser.id,
+        due_date: dueDate.toISOString(),
+        order_id: orderId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Erro ao criar tarefa de PCP:", error);
+    }
+  };
+
+  const handleNotifySeller = async (order: Order) => {
+    const sellerUser = systemUsers.find(u => u.sellerId === order.sellerId);
+    if (!sellerUser) {
+      alert("Vendedor não encontrado no sistema para notificação.");
+      return;
+    }
+
+    try {
+      await dataService.saveTask({
+        id: crypto.randomUUID(),
+        title: `Informações de Produção Faltando - Pedido ${order.contractNumber || order.quoteNumber || order.id}`,
+        description: `Aline (PCP) notificou que faltam detalhes de produção/instalação para este pedido. Por favor, verifique e complete os dados.`,
+        status: TaskStatus.PENDING,
+        priority: TaskPriority.URGENT,
+        assigned_to: sellerUser.id,
+        created_by: currentUser.id,
+        order_id: order.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      alert(`Vendedor ${sellerUser.name} notificado com sucesso!`);
+    } catch (error) {
+      alert("Erro ao notificar vendedor.");
+    }
+  };
+
+  const getDeadlineStatus = (order: Order) => {
+    if (!order.deliveryDeadline) return { color: 'bg-slate-50 text-slate-400', border: 'border-slate-200', label: 'Sem Prazo', isDark: false };
+    
+    const deadline = new Date(order.deliveryDeadline);
+    const today = new Date();
+    const createdAt = new Date(order.createdAt);
+    
+    if (today > deadline) return { color: 'bg-rose-600 text-white', border: 'border-rose-700', label: 'Vencido', icon: <AlertCircle size={12} className="text-white" />, isDark: true };
+    
+    const diffTime = Math.abs(deadline.getTime() - today.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 7) return { color: 'bg-orange-500 text-white', border: 'border-orange-600', label: '7 Dias Restantes', icon: <Clock size={12} className="text-white" />, isDark: true };
+    
+    const totalDuration = deadline.getTime() - createdAt.getTime();
+    const elapsed = today.getTime() - createdAt.getTime();
+    
+    if (elapsed > totalDuration / 2) return { color: 'bg-amber-400 text-slate-900', border: 'border-amber-500', label: 'Metade do Prazo', icon: <AlertCircle size={12} className="text-slate-900" />, isDark: false };
+    
+    return { color: 'bg-white text-slate-700 border-slate-200', border: 'border-slate-200', label: 'No Prazo', icon: <CheckCircle2 size={12} className="text-emerald-500" />, isDark: false };
   };
 
   const handleAdvanceStage = async (orderId: string) => {
@@ -120,6 +202,22 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
     try {
       // First update the production tracking
       await dataService.updateProductionStage(orderId, nextStage, newHistory);
+
+      // --- TASK AUTOMATION ---
+      const orderRef = order.contractNumber || order.quoteNumber || order.id;
+      if (nextStage === ProductionStage.PREPARATION) {
+        await createPCPTask(RESPONSIBLE_IDS.JOAO, `Preparação: Pedido ${orderRef}`, `Iniciar preparação do pedido de ${customers.find(c => c.id === order.customerId)?.name}`, 2, orderId);
+      } else if (nextStage === ProductionStage.PROVISIONING) {
+        await createPCPTask(RESPONSIBLE_IDS.DENIS, `Solicitar Material: Pedido ${orderRef}`, `Realizar solicitação de materiais via PCP`, 1, orderId);
+        await createPCPTask(RESPONSIBLE_IDS.WELINGTON, `Comprar Material: Pedido ${orderRef}`, `Efetivar ordens de compra para o pedido`, 1, orderId);
+      } else if (nextStage === ProductionStage.CUTTING_WELDING) {
+        const title = `Corte e Solda: Pedido ${orderRef}`;
+        const desc = `Etapa de corte e solda iniciada. Prazo de 4 dias.`;
+        await createPCPTask(RESPONSIBLE_IDS.ALINE, title, desc, 4, orderId);
+        await createPCPTask(RESPONSIBLE_IDS.JOAO, title, desc, 4, orderId);
+        await createPCPTask(RESPONSIBLE_IDS.DENIS, title, desc, 4, orderId);
+        await createPCPTask(RESPONSIBLE_IDS.WELINGTON, title, desc, 4, orderId);
+      }
 
       // Then sync the main order status if changed
       if (updatedOrder.status !== order.status) {
@@ -244,6 +342,16 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
           <p className="text-slate-500 text-sm">Acompanhe o fluxo fabril e gerencie o provisionamento.</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2 px-3 border-r border-slate-100">
+            <Search size={16} className="text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar contrato ou cliente..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="text-xs font-medium bg-transparent border-none focus:ring-0 w-48"
+            />
+          </div>
           <button
             onClick={() => setViewMode('kanban')}
             className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -262,7 +370,22 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
       <div className="flex-1 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-200">
         <div className="flex gap-5 min-w-max h-full">
           {STAGES_CONFIG.map((stage: any) => {
-            const stageOrders = pcpOrders.filter((o: Order) => o.productionStage === stage.id);
+            const stageOrders = pcpOrders.filter((o: Order) => {
+              const matchesStage = o.productionStage === stage.id;
+              if (!matchesStage) return false;
+              
+              if (!searchTerm) return true;
+              
+              const customerName = customers.find(c => c.id === o.customerId)?.name?.toLowerCase() || '';
+              const contractNum = (o.contractNumber || o.quoteNumber || o.id).toLowerCase();
+              const term = searchTerm.toLowerCase();
+              
+              return customerName.includes(term) || contractNum.includes(term);
+            }).sort((a, b) => {
+              const dateA = a.deliveryDeadline ? new Date(a.deliveryDeadline).getTime() : Infinity;
+              const dateB = b.deliveryDeadline ? new Date(b.deliveryDeadline).getTime() : Infinity;
+              return dateA - dateB;
+            });
 
             return (
               <div key={stage.id} className="w-80 flex flex-col gap-4">
@@ -281,102 +404,114 @@ const PCP = ({ orders, products, sellers, customers, onUpdateOrder, onSelectCust
 
                 {/* Área dos Cards */}
                 <div className="flex-1 bg-slate-100/40 border border-slate-200 rounded-3xl p-3 space-y-3 min-h-[500px] overflow-y-auto">
-                  {stageOrders.map((order: Order) => (
-                    <div key={order.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all group animate-in fade-in slide-in-from-bottom-2 duration-300">
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit mb-1">
-                            {order.contractNumber || order.quoteNumber || order.id}
-                          </span>
-                          <p className="text-sm font-black text-slate-900 leading-tight">Pedido de Produção</p>
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                          <Factory size={14} />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2.5 mb-4">
-                        <button
-                          onClick={() => onSelectCustomer(order.customerId)}
-                          className="flex items-center gap-2 text-[11px] text-slate-700 font-bold bg-slate-50 p-2 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-all w-full text-left group/cust"
-                        >
-                          <Users size={12} className="text-blue-500 group-hover/cust:scale-110 transition-transform" />
-                          <span className="truncate">{customers.find(c => c.id === order.customerId)?.name || 'Cliente Desconhecido'}</span>
-                        </button>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Vendedor</span>
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
-                              <UserIcon size={10} className="text-slate-400" />
-                              <span className="truncate">{sellers.find(s => s.id === order.sellerId)?.name || 'Vendedor RTC'}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Data Pedido</span>
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
-                              <Calendar size={10} className="text-slate-400" />
-                              <span>{new Date(order.createdAt).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                  {stageOrders.map((order: Order) => {
+                    const deadlineStatus = getDeadlineStatus(order);
+                    return (
+                      <div key={order.id} className={`${deadlineStatus.color} ${deadlineStatus.border} p-5 rounded-2xl border shadow-sm hover:shadow-xl transition-all group animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                        <div className="flex justify-between items-start mb-3">
                           <div className="flex flex-col">
-                            <span className="text-[8px] font-black text-amber-600 uppercase tracking-tighter">Prazo de Entrega</span>
-                            <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-900">
-                              <Truck size={12} className="text-amber-500" />
-                              <span>{order.deliveryDeadline ? formatBusinessDate(order.deliveryDeadline) : (order.installationDate ? new Date(order.installationDate).toLocaleDateString() : 'Não definida')}</span>
+                            <span className={`text-[9px] font-black ${deadlineStatus.isDark ? 'text-white bg-white/20' : 'text-blue-600 bg-white/60'} px-2 py-0.5 rounded-full w-fit mb-1`}>
+                              {order.contractNumber || order.quoteNumber || order.id}
+                            </span>
+                            <p className={`text-sm font-black ${deadlineStatus.isDark ? 'text-white' : 'text-slate-900'} leading-tight`}>Pedido de Produção</p>
+                          </div>
+                          <div className="h-8 w-8 rounded-full bg-white/40 backdrop-blur-sm flex items-center justify-center text-current">
+                            <Factory size={14} className={deadlineStatus.isDark ? 'text-white' : 'text-slate-600'} />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2.5 mb-4">
+                          <button
+                            onClick={() => onSelectCustomer(order.customerId)}
+                            className={`flex items-center gap-2 text-[11px] ${deadlineStatus.isDark ? 'text-white bg-white/10 border-white/20' : 'text-slate-700 bg-white/60 border-slate-100/50'} font-bold p-2 rounded-lg border hover:bg-white/20 transition-all w-full text-left group/cust`}
+                          >
+                            <Users size={12} className={deadlineStatus.isDark ? 'text-white/80' : 'text-blue-500'} />
+                            <span className="truncate">{customers.find(c => c.id === order.customerId)?.name || 'Cliente Desconhecido'}</span>
+                          </button>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-[9px] font-black ${deadlineStatus.isDark ? 'text-white/60' : 'text-slate-400'} uppercase tracking-tighter`}>Vendedor</span>
+                              <div className={`flex items-center gap-1.5 text-[10px] font-bold ${deadlineStatus.isDark ? 'text-white' : 'text-slate-600'}`}>
+                                <UserIcon size={10} className={deadlineStatus.isDark ? 'text-white/60' : 'text-slate-400'} />
+                                <span className="truncate">{sellers.find(s => s.id === order.sellerId)?.name || 'Vendedor RTC'}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-[9px] font-black ${deadlineStatus.isDark ? 'text-white/60' : 'text-slate-400'} uppercase tracking-tighter`}>Data Pedido</span>
+                              <div className={`flex items-center gap-1.5 text-[10px] font-bold ${deadlineStatus.isDark ? 'text-white' : 'text-slate-600'}`}>
+                                <Calendar size={10} className={deadlineStatus.isDark ? 'text-white/60' : 'text-slate-400'} />
+                                <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+                              </div>
                             </div>
                           </div>
-                          {((order.deliveryDeadline && new Date(order.deliveryDeadline) < new Date()) || (!order.deliveryDeadline && order.installationDate && new Date(order.installationDate) < new Date())) && (
-                            <AlertCircle size={14} className="text-rose-500 animate-pulse" />
-                          )}
-                        </div>
-                      </div>
 
-                      {stage.id === ProductionStage.PROVISIONING && (
-                        <div className="mb-4">
+                          <div className={`flex items-center justify-between gap-2 p-2 rounded-lg border border-white/20 bg-white/40`}>
+                            <div className="flex flex-col">
+                              <span className={`text-[8px] font-black uppercase tracking-tighter opacity-70 ${deadlineStatus.isDark ? 'text-white' : ''}`}>Prazo de Entrega</span>
+                              <div className={`flex items-center gap-1.5 text-[10px] font-black ${deadlineStatus.isDark ? 'text-white' : ''}`}>
+                                {deadlineStatus.icon}
+                                <span>{order.deliveryDeadline ? formatBusinessDate(order.deliveryDeadline) : (order.installationDate ? new Date(order.installationDate).toLocaleDateString() : 'Não definida')}</span>
+                              </div>
+                            </div>
+                            <span className={`text-[8px] font-black uppercase ${deadlineStatus.isDark ? 'text-white' : ''}`}>{deadlineStatus.label}</span>
+                          </div>
+                        </div>
+
+                        {stage.id === ProductionStage.NEW_ORDER && (
+                          <div className="mb-4">
+                            <button
+                              onClick={() => handleNotifySeller(order)}
+                              className={`w-full flex justify-center items-center gap-2 py-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-white/60 text-amber-900 hover:bg-white/80'} font-bold rounded-xl transition-colors border border-white/20 text-[10px] uppercase shadow-sm`}
+                            >
+                              <AlertTriangle size={14} className={deadlineStatus.isDark ? 'text-white' : 'text-amber-600'} /> Notificar Vendedor (Falta Info)
+                            </button>
+                          </div>
+                        )}
+
+                        {stage.id === ProductionStage.PROVISIONING && (
+                          <div className="mb-4">
+                            <button
+                              onClick={() => handleOpenRequestMaterial(order)}
+                              className={`w-full flex justify-center items-center gap-2 py-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30 border-white/40' : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-700'} font-bold rounded-xl transition-colors border shadow-md`}
+                            >
+                              <ShoppingCart size={16} /> Solicitar Material
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Controles de Movimentação (Forward/Encaminhar) */}
+                        <div className={`flex items-center gap-2 mt-4 pt-4 border-t ${deadlineStatus.isDark ? 'border-white/20' : 'border-slate-900/10'}`}>
                           <button
-                            onClick={() => handleOpenRequestMaterial(order)}
-                            className="w-full flex justify-center items-center gap-2 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-colors border border-indigo-200"
+                            onClick={() => handlePrintProductionSheet(order.id)}
+                            className={`p-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-white/40 text-blue-600 hover:bg-white/60'} rounded-xl transition-colors`}
+                            title="Imprimir Ficha de Produção"
                           >
-                            <ShoppingCart size={16} /> Solicitar Material
+                            <Printer size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleRegressStage(order.id)}
+                            disabled={stage.id === ProductionStage.NEW_ORDER}
+                            className={`p-2 ${deadlineStatus.isDark ? 'bg-white/10 text-white/50 hover:bg-white/20' : 'bg-white/40 text-slate-600 hover:bg-white/60'} rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}
+                            title="Voltar Etapa"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleAdvanceStage(order.id)}
+                            className={`ml-auto p-2 ${deadlineStatus.isDark ? 'bg-white text-rose-600' : 'bg-slate-900 text-white'} hover:opacity-90 rounded-xl transition-all shadow-lg active:scale-95 group/btn`}
+                            title="Avançar Etapa"
+                          >
+                            <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter pr-1">
+                              <span>Próxima</span>
+                              <ChevronRight size={16} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                            </div>
                           </button>
                         </div>
-                      )}
-
-                      {/* Controles de Movimentação (Forward/Encaminhar) */}
-                      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-50">
-                        <button
-                          onClick={() => handlePrintProductionSheet(order.id)}
-                          className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors"
-                          title="Imprimir Ficha de Produção"
-                        >
-                          <Printer size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleRegressStage(order.id)}
-                          disabled={stage.id === ProductionStage.NEW_ORDER}
-                          className="p-2 bg-slate-50 text-slate-400 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                          title="Voltar Etapa"
-                        >
-                          <ChevronLeft size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleAdvanceStage(order.id)}
-                          className="ml-auto p-2 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 group/btn"
-                          title="Avançar Etapa"
-                        >
-                          <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter pr-1">
-                            <span>Próxima</span>
-                            <ChevronRight size={16} className="group-hover/btn:translate-x-0.5 transition-transform" />
-                          </div>
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
