@@ -36,6 +36,20 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
     const [expectedDate, setExpectedDate] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
+    // Estados para o Modal de Detalhes
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [detailRequest, setDetailRequest] = useState<PurchaseRequest | null>(null);
+
+    const handleOpenDetail = (req: PurchaseRequest) => {
+        setDetailRequest(req);
+        setShowDetailModal(true);
+    };
+
+    const handleCloseDetail = () => {
+        setDetailRequest(null);
+        setShowDetailModal(false);
+    };
+
     useEffect(() => {
         loadData();
     }, []);
@@ -218,7 +232,7 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                         {pendingRequests.map(req => {
                             const ctx = getOrderContext(req.order_id);
                             return (
-                                <div key={req.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                                <div key={req.id} onClick={() => handleOpenDetail(req)} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 cursor-pointer hover:border-indigo-300 transition-colors group">
                                     <div className="flex justify-between items-start">
                                         <span className="text-xs font-bold text-slate-500">{new Date(req.created_at || '').toLocaleDateString()}</span>
                                         <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md uppercase">Requisição</span>
@@ -241,13 +255,13 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
 
                                     <div className="pt-3 border-t border-slate-100 flex gap-2">
                                         <button
-                                            onClick={() => handleOpenPOModal(req)}
+                                            onClick={(e) => { e.stopPropagation(); handleOpenPOModal(req); }}
                                             className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors"
                                         >
                                             Criar OC
                                         </button>
                                         <button
-                                            onClick={() => handleUpdateStatus(req, 'CANCELED')}
+                                            onClick={(e) => { e.stopPropagation(); handleUpdateStatus(req, 'CANCELED'); }}
                                             className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
                                             title="Cancelar solicitação"
                                         >
@@ -270,7 +284,7 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                         {orderedRequests.map(req => {
                             const ctx = getOrderContext(req.order_id);
                             return (
-                                <div key={req.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                                <div key={req.id} onClick={() => handleOpenDetail(req)} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 cursor-pointer hover:border-blue-300 transition-colors group">
                                     {ctx && <p className="text-xs font-bold text-slate-600">Para: Pedido {ctx.order.contractNumber}</p>}
                                     <ul className="space-y-1">
                                         {req.items_requested.map((item, idx) => (
@@ -301,7 +315,7 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
 
                                     <div className="pt-3 border-t border-slate-100 flex gap-2">
                                         <button
-                                            onClick={() => handleRegisterReceipt(req)}
+                                            onClick={(e) => { e.stopPropagation(); handleRegisterReceipt(req); }}
                                             disabled={isSaving}
                                             className="flex-1 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-bold rounded-xl transition-colors flex justify-center items-center gap-1 disabled:opacity-50"
                                         >
@@ -323,7 +337,7 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                         </div>
                         {receivedRequests.map(req => {
                             return (
-                                <div key={req.id} className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 shadow-sm space-y-2 opacity-70 hover:opacity-100 transition-opacity">
+                                <div key={req.id} onClick={() => handleOpenDetail(req)} className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 shadow-sm space-y-2 opacity-70 hover:opacity-100 cursor-pointer transition-opacity">
                                     <p className="text-xs font-bold text-emerald-700 flex items-center gap-1">
                                         <CheckCircle2 size={14} /> Entregue na Fábrica
                                     </p>
@@ -416,6 +430,154 @@ const Buyer = ({ orders, customers }: BuyerProps) => {
                                     {isSaving ? 'Gerando...' : 'Confirmar Ordem'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Detalhes da Requisição e Compra */}
+            {showDetailModal && detailRequest && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                    <FileText className="text-indigo-600" size={24} /> Detalhes do Pedido de Compra
+                                </h3>
+                                <p className="text-sm text-slate-500 font-medium ml-8">
+                                    Solicitado em {new Date(detailRequest.created_at || '').toLocaleDateString()}
+                                </p>
+                            </div>
+                            <button onClick={handleCloseDetail} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto space-y-6">
+                            {/* Bloco do Pedido/Cliente */}
+                            <div className="bg-white border text-sm border-slate-200 p-4 rounded-2xl shadow-sm">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Contexto da Demanda</h4>
+                                {(() => {
+                                    const ctx = getOrderContext(detailRequest.order_id);
+                                    if (ctx) {
+                                        return (
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <p className="text-slate-500 text-xs">Cliente</p>
+                                                    <p className="font-bold text-slate-800">{ctx.customer?.name}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500 text-xs">Contrato</p>
+                                                    <p className="font-bold text-indigo-700">#{ctx.order.contractNumber || ctx.order.quoteNumber || 'S/N'}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    } else {
+                                        return <p className="font-bold text-slate-800">Demanda Avulsa / Sem Pedido Vinculado</p>;
+                                    }
+                                })()}
+                                <div className="mt-3">
+                                    <p className="text-slate-500 text-xs">Requisitante</p>
+                                    <p className="font-bold text-slate-800">{detailRequest.requester_name || 'Desconhecido'}</p>
+                                </div>
+                            </div>
+
+                            {/* Bloco de Itens Solicitados */}
+                            <div>
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Itens Necessários</h4>
+                                <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-100/50 border-b border-slate-200 text-slate-500">
+                                            <tr>
+                                                <th className="font-bold py-2 px-4">Qtd</th>
+                                                <th className="font-bold py-2 px-4">Unidade</th>
+                                                <th className="font-bold py-2 px-4">Descrição</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {detailRequest.items_requested.map((item, idx) => (
+                                                <tr key={idx} className="hover:bg-white transition-colors">
+                                                    <td className="py-2 px-4 font-black w-16">{item.quantity}</td>
+                                                    <td className="py-2 px-4 font-bold text-slate-400 uppercase w-20">{item.unit}</td>
+                                                    <td className="py-2 px-4 font-bold text-slate-700">{item.name}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Bloco de Notas */}
+                            {detailRequest.notes && (
+                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                                    <h4 className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-1 pointer-events-none">Anotações do PCP</h4>
+                                    <p className="text-sm font-medium text-amber-900">{detailRequest.notes}</p>
+                                </div>
+                            )}
+
+                            {/* Bloco Dados da Compra (se existir) */}
+                            {detailRequest.status !== 'PENDING' && (
+                                <div>
+                                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Retorno de Compras (OC)</h4>
+                                    {(() => {
+                                        const po = purchaseOrders.find(p => p.id === (detailRequest as any).purchase_order_id);
+                                        if (po) {
+                                            return (
+                                                <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 grid grid-cols-2 gap-y-4 shadow-inner">
+                                                    <div>
+                                                        <p className="text-slate-500 text-xs font-medium">Fornecedor Selecionado</p>
+                                                        <p className="font-black text-indigo-900 flex items-center gap-1.5"><Truck size={14}/> {po.supplier_name}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-slate-500 text-xs font-medium">Custo Aprovado</p>
+                                                        <p className="font-black text-indigo-700">R$ {po.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-slate-500 text-xs font-medium">Data do Pedido</p>
+                                                        <p className="font-bold text-slate-800">{new Date(po.created_at || '').toLocaleDateString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-slate-500 text-xs font-medium">Status de Entrega</p>
+                                                        {po.status === 'RECEIVED' ? (
+                                                            <p className="font-bold text-emerald-600 flex items-center gap-1"><CheckCircle2 size={14}/> Recebido: {po.received_date ? new Date(po.received_date).toLocaleDateString() : 'Sim'}</p>
+                                                        ) : (
+                                                            <p className="font-bold text-slate-800">Previsto p/ {po.expected_delivery_date ? new Date(po.expected_delivery_date).toLocaleDateString() : 'N/A'}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        } else {
+                                            return <p className="text-sm text-slate-500 italic">Dados da OC não encontrados.</p>;
+                                        }
+                                    })()}
+                                </div>
+                            )}
+
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                            <button
+                                onClick={handleCloseDetail}
+                                className="px-6 py-2.5 text-slate-600 font-bold bg-white text-sm hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors shadow-sm"
+                            >
+                                Fechar
+                            </button>
+                            {detailRequest.status === 'PENDING' && (
+                                <button
+                                    onClick={() => { handleCloseDetail(); handleOpenPOModal(detailRequest); }}
+                                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg transition-all"
+                                >
+                                    Criar OC
+                                </button>
+                            )}
+                            {detailRequest.status === 'ORDERED' && (
+                                <button
+                                    onClick={() => { handleRegisterReceipt(detailRequest); handleCloseDetail(); }}
+                                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-lg transition-all"
+                                >
+                                    Registrar Chegada
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

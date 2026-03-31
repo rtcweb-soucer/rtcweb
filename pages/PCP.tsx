@@ -28,7 +28,8 @@ import {
   Plus,
   Trash2,
   Search,
-  AlertTriangle
+  AlertTriangle,
+  History
 } from 'lucide-react';
 
 interface PCPProps {
@@ -71,6 +72,13 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
   const [requestMaterialItems, setRequestMaterialItems] = useState([{ name: '', quantity: 1, unit: 'un' }]);
   const [requestNotes, setRequestNotes] = useState('');
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  // Histórico de Compras Expandido
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
+  const [historyRequests, setHistoryRequests] = useState<any[]>([]);
+  const [historyPOs, setHistoryPOs] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // Internal state for orders with production tracking
   const [pcpOrders, setPcpOrders] = useState<Order[]>([]);
@@ -304,6 +312,28 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
     setRequestMaterialOrder(null);
   };
 
+  const handleOpenHistory = async (order: Order) => {
+    setHistoryOrder(order);
+    setShowHistoryModal(true);
+    setIsLoadingHistory(true);
+    try {
+      const allRequests = await dataService.getPurchaseRequests();
+      const allPOs = await dataService.getPurchaseOrders();
+      const filteredReqs = allRequests.filter(r => r.order_id === order.id);
+      setHistoryRequests(filteredReqs);
+      setHistoryPOs(allPOs);
+    } catch (error) {
+       console.error("Error loading purchase history:", error);
+    } finally {
+       setIsLoadingHistory(false);
+    }
+  };
+
+  const handleCloseHistory = () => {
+    setShowHistoryModal(false);
+    setHistoryOrder(null);
+  };
+
   const handleSaveRequestMaterial = async () => {
     if (!requestMaterialOrder) return;
 
@@ -471,12 +501,18 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
                         )}
 
                         {stage.id === ProductionStage.PROVISIONING && (
-                          <div className="mb-4">
+                          <div className="mb-4 flex gap-2">
                             <button
                               onClick={() => handleOpenRequestMaterial(order)}
-                              className={`w-full flex justify-center items-center gap-2 py-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30 border-white/40' : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-700'} font-bold rounded-xl transition-colors border shadow-md`}
+                              className={`flex-[2] flex justify-center items-center gap-1.5 py-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30 border-white/40' : 'bg-indigo-600 text-white hover:bg-indigo-700 border-indigo-700'} font-bold rounded-xl transition-colors border shadow-md text-[11px] uppercase tracking-tighter`}
                             >
-                              <ShoppingCart size={16} /> Solicitar Material
+                              <ShoppingCart size={14} /> Solicitar
+                            </button>
+                            <button
+                              onClick={() => handleOpenHistory(order)}
+                              className={`flex-1 flex justify-center items-center gap-1.5 py-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30 border-white/40' : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'} font-bold rounded-xl transition-colors border shadow-sm text-[11px] uppercase tracking-tighter`}
+                            >
+                              <History size={14} /> Info
                             </button>
                           </div>
                         )}
@@ -672,6 +708,102 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
                 ) : (
                   <><ShoppingCart size={18} /> Enviar ao Comprador</>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal Histórico Compra PCP */}
+      {showHistoryModal && historyOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-100">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                  <History size={24} className="text-indigo-600" /> Histórico de Materiais
+                </h3>
+                <p className="text-sm font-medium text-slate-500 mt-1">
+                  Pedido {historyOrder.contractNumber || historyOrder.quoteNumber}
+                </p>
+              </div>
+              <button onClick={handleCloseHistory} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
+              {isLoadingHistory ? (
+                <div className="flex justify-center p-8">
+                  <span className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                </div>
+              ) : historyRequests.length === 0 ? (
+                <div className="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-slate-500 font-bold">Nenhuma solicitação de material encontrada para este pedido.</p>
+                </div>
+              ) : (
+                historyRequests.map((req, index) => {
+                  const po = historyPOs.find(p => p.id === req.purchase_order_id);
+                  let bgColor = 'bg-slate-50';
+                  let borderColor = 'border-slate-200';
+                  let titleColor = 'text-slate-600';
+                  let TimelineIcon = Clock;
+
+                  if (req.status === 'ORDERED') {
+                      bgColor = 'bg-amber-50'; borderColor = 'border-amber-200'; titleColor = 'text-amber-700'; TimelineIcon = Truck;
+                  } else if (req.status === 'RECEIVED') {
+                      bgColor = 'bg-emerald-50'; borderColor = 'border-emerald-200'; titleColor = 'text-emerald-700'; TimelineIcon = CheckCircle2;
+                  } else if (req.status === 'CANCELED') {
+                      bgColor = 'bg-rose-50'; borderColor = 'border-rose-200'; titleColor = 'text-rose-700';
+                  }
+
+                  return (
+                    <div key={req.id || index} className={`p-4 rounded-xl border ${borderColor} ${bgColor} relative overflow-hidden transition-all shadow-sm`}>
+                       <div className="flex items-start justify-between">
+                         <div className="flex gap-3">
+                           <div className={`mt-1 p-2 bg-white rounded-lg shadow-sm border ${borderColor}`}>
+                             <TimelineIcon size={16} className={titleColor} />
+                           </div>
+                           <div>
+                             <p className={`text-sm font-black uppercase tracking-wider mb-1 ${titleColor}`}>
+                               Status: {req.status === 'PENDING' ? 'Aguardando Comprador' : req.status === 'ORDERED' ? 'Comprado / Em Trânsito' : req.status === 'RECEIVED' ? 'Entregue na Fábrica' : req.status}
+                             </p>
+                             <ul className="mb-2">
+                               {req.items_requested?.map((it:any, i:number) => (
+                                 <li key={i} className="text-xs font-bold text-slate-700">• {it.quantity} {it.unit} - {it.name}</li>
+                               ))}
+                             </ul>
+                             <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-medium text-slate-500">
+                                <span className="flex items-center gap-1"><Clock size={12}/> Pedido PCP: {new Date(req.created_at).toLocaleDateString()}</span>
+                                {po && po.created_at && (
+                                   <span className="flex items-center gap-1"><ShoppingCart size={12}/> Comprado: {new Date(po.created_at).toLocaleDateString()}</span>
+                                )}
+                                {po && po.supplier_name && (
+                                   <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-slate-200 line-clamp-1 max-w-[150px]" title={po.supplier_name}>
+                                     Fornecedor: {po.supplier_name}
+                                   </span>
+                                )}
+                                {po && po.received_date && (
+                                   <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-100/50 px-2 py-0.5 rounded-md">
+                                     <CheckCircle2 size={12}/> Chegou: {new Date(po.received_date).toLocaleDateString()}
+                                   </span>
+                                )}
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                onClick={handleCloseHistory}
+                className="px-6 py-2.5 rounded-xl font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 shadow-sm transition-all"
+              >
+                Fechar
               </button>
             </div>
           </div>
