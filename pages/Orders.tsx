@@ -987,7 +987,7 @@ const Orders = ({
                           <button
                             onClick={(e) => { e.stopPropagation(); handleGenerateMasterPayment(selectedOrder); }}
                             disabled={isGenerating === `master-${selectedOrder.id}`}
-                            className="text-[9px] flex items-center gap-1.5 bg-blue-600 text-white font-black uppercase px-3 py-1.5 rounded-lg shadow-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+                            className="print:hidden text-[9px] flex items-center gap-1.5 bg-blue-600 text-white font-black uppercase px-3 py-1.5 rounded-lg shadow-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
                             title="Gerar Link de Pagamento Completo (Cartão)"
                           >
                             {isGenerating === `master-${selectedOrder.id}` ? <RefreshCw size={12} className="animate-spin" /> : <CreditCardIcon size={12} />}

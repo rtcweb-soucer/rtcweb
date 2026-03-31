@@ -61,7 +61,8 @@ const Dashboard = ({ orders, appointments, products, technicalSheets, transactio
           if (!product) return;
           const area = (item.width * item.height) || 1;
           const val = product.unidade === 'M2' ? product.valor * area : product.valor;
-          if (product.tipo === 'Toldo') orderToldoRaw += val;
+          const tipo = product.tipo?.toLowerCase() || '';
+          if (tipo === 'toldo' || tipo === 'cobertura') orderToldoRaw += val;
           else orderCortinaRaw += val;
         });
       }

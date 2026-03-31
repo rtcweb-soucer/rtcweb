@@ -51,6 +51,7 @@ export const dataService = {
         console.warn(`📦 Item salvo na fila de sincronização offline (${type})`);
     },
 
+
     // Products
     async getProducts() {
         try {
@@ -1281,6 +1282,31 @@ export const dataService = {
         const { data, error } = await supabase.from('api_settings').upsert(settings).select().single();
         if (error) throw error;
         return data as ApiSettings;
+    },
+
+    // Rotina de Backup Total
+    async generateSystemBackup() {
+        try {
+            const backup: any = {};
+            const collections = [
+                'products', 'customers', 'sellers', 'appointments', 'orders',
+                'technical_sheets', 'system_users', 'production_tracking', 'expenses',
+                'production_installation_sheets', 'seller_blocked_slots', 'installers',
+                'account_categories', 'financial_transactions', 'purchase_requests',
+                'purchase_orders', 'tasks', 'time_entries', 'reworks', 'api_settings',
+                'system_settings'
+            ];
+
+            for (const table of collections) {
+                const { data } = await supabase.from(table).select('*');
+                backup[table] = data || [];
+            }
+
+            return backup;
+        } catch (error) {
+            console.error("Erro ao gerar backup de tabelas:", error);
+            throw error;
+        }
     }
 };
 

@@ -1,7 +1,8 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Globe, Info, CheckCircle2 } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Globe, Info, CheckCircle2, DownloadCloud, DatabaseBackup } from 'lucide-react';
+import { dataService } from '../services/dataService';
 
 interface SettingsProps {
     settings: { id: string, key: string, value: string }[];
@@ -12,6 +13,7 @@ const Settings = ({ settings, onUpdateSetting }: SettingsProps) => {
     const [scriptUrl, setScriptUrl] = useState('');
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [isBackingUp, setIsBackingUp] = useState(false);
 
     useEffect(() => {
         const url = settings.find(s => s.key === 'google_apps_script_url')?.value || '';
@@ -107,6 +109,64 @@ const Settings = ({ settings, onUpdateSetting }: SettingsProps) => {
                             <p className="text-xs text-slate-300 italic leading-relaxed">
                                 "Certifique-se de que cada vendedor tenha seu e-mail do Google cadastrado na tela de Equipe de Vendas para que os convites funcionem corretamente."
                             </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Backup Zone */}
+                <div className="bg-gradient-to-br from-indigo-50 to-blue-100 p-8 rounded-[40px] border border-blue-200 shadow-sm space-y-6 md:col-span-2 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+                    
+                    <div className="flex items-center gap-3 relative">
+                        <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/20">
+                            <DatabaseBackup size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-black text-lg text-slate-900 uppercase tracking-tighter">Segurança & Copia de Base</h3>
+                            <p className="text-xs font-bold text-slate-500">Exporte toda a matriz do sistema para o seu Computador Oficial.</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 relative">
+                        <div className="p-4 bg-white/60 backdrop-blur-md rounded-2xl border border-white flex justify-between items-center max-md:flex-col gap-4">
+                            <div className="space-y-1">
+                                <p className="text-sm font-black text-slate-800">Exportação .JSON Criptografada</p>
+                                <p className="text-xs font-medium text-slate-500">Baixa a raiz de 21 tabelas oficiais, incluindo Clientes de Ponta a Ponta e Cadastros Nativos.</p>
+                            </div>
+                            
+                            <button
+                                onClick={async () => {
+                                    setIsBackingUp(true);
+                                    try {
+                                        const fileRaw = await dataService.generateSystemBackup();
+                                        const jsonString = JSON.stringify(fileRaw, null, 2);
+                                        const blob = new Blob([jsonString], { type: 'application/json' });
+                                        const href = URL.createObjectURL(blob);
+                                        const link = document.createElement('a');
+                                        link.href = href;
+                                        const dt = new Date();
+                                        const fileDate = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}T${String(dt.getHours()).padStart(2,'0')}h${String(dt.getMinutes()).padStart(2,'0')}m`;
+                                        link.download = `rtc_backup_global_${fileDate}.json`;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        URL.revokeObjectURL(href);
+                                    } catch (err) {
+                                        alert("Falha catastrofica ao sugar tabelas. Contate Suporte.");
+                                        console.error(err);
+                                    } finally {
+                                        setIsBackingUp(false);
+                                    }
+                                }}
+                                disabled={isBackingUp}
+                                className="flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black shadow-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50 min-w-[200px] justify-center"
+                            >
+                                {isBackingUp ? (
+                                    <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Exportando Base...</span>
+                                ) : (
+                                    <><DownloadCloud size={16} /> Gerar Backup Seguro</>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>
