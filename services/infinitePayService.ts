@@ -126,7 +126,7 @@ export const infinitePayService = {
         order_nsu: order.id,
         redirect_url: `https://rtcweb.vercel.app/finance?orderId=${order.id}`,
         webhook_url: 'https://rtcweb.vercel.app/api/infinitepay-webhook',
-        payment_methods: ['credit_card']
+        payment_methods: ['credit_card', 'pix']
       };
 
       // Tenta impor o limte de parcelas (O comportamento exato depende de como a CloudWalk interpreta no V1)

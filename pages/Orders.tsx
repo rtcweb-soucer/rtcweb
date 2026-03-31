@@ -137,8 +137,15 @@ const Orders = ({
         phone: customer?.phone || ''
       };
 
-      // Tenta enviar o número de parcelas pendentes como limite do cartão
-      const charge = await infinitePayService.createMasterOrderCharge(order, pendingInstallments, customerData, pendingInstallments.length);
+      // Analisa quantas parcelas do tipo Cartão de Crédito existem no contrato
+      const ccCount = order.installments?.filter(i => i.paymentMethod?.toUpperCase().includes('CARTÃO')).length || 0;
+      
+      // Se tiver parcelas de Cartão, trava o parcelamento máximo nessa mesma quantidade do contrato.
+      // E quando for só PIX (ou outro meio), trava imediatamente em 1 parcela (à vista).
+      const maxInstallments = ccCount > 0 ? ccCount : 1;
+
+      // Gera a cobrança impondo esse limite cravado
+      const charge = await infinitePayService.createMasterOrderCharge(order, pendingInstallments, customerData, maxInstallments);
 
       // Distribuir o LINK MESTRE para todas as pendentes para referência
       const updatedInstallments = order.installments?.map(i => {
