@@ -143,6 +143,8 @@ export const infinitePayService = {
         };
       }
 
+      console.log('PAYLOAD DA ÚLTIMA TENTATIVA DE LINK: ', JSON.stringify(payload, null, 2));
+
       const response = await fetch(`${INFINITEPAY_BASE_URL}/invoices/public/checkout/links`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
