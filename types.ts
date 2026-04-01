@@ -367,10 +367,12 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
-  assigned_to?: string; // UUID of system_user
+  assigned_to?: string; // UUID of system_user OR legacy role name
+  assigned_to_user_id?: string; // UUID of system_user (DB specific)
   created_by?: string;  // UUID of system_user
   due_date?: string;
   order_id?: string;
+  sale_id?: string; // DB specific
   created_at: string;
   updated_at: string;
   completed_at?: string;

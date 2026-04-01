@@ -1249,12 +1249,24 @@ export const dataService = {
     async getTasks() {
         const { data, error } = await supabase.from('tasks').select('*');
         if (error) throw error;
-        return data as Task[];
+        return (data || []).map(t => ({
+            ...t,
+            order_id: t.sale_id,
+            assigned_to: t.assigned_to_user_id || t.assigned_to,
+        })) as Task[];
     },
     async saveTask(task: Partial<Task>) {
-        const { data, error } = await supabase.from('tasks').upsert(task).select().single();
+        const payload = {
+            ...task,
+            sale_id: task.sale_id || task.order_id,
+            assigned_to_user_id: task.assigned_to_user_id || task.assigned_to,
+        };
+        const { data, error } = await supabase.from('tasks').upsert(payload).select().single();
         if (error) throw error;
-        return data as Task;
+        return {
+            ...data,
+            order_id: data.sale_id,
+        } as Task;
     },
     async deleteTask(id: string) {
         const { error } = await supabase.from('tasks').delete().eq('id', id);

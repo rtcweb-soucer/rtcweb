@@ -108,10 +108,12 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
         description,
         status: TaskStatus.PENDING,
         priority: TaskPriority.HIGH,
-        assigned_to: assignedTo,
+        assigned_to_user_id: assignedTo,
+        assigned_to: assignedTo, // Compatibility
         created_by: currentUser.id,
         due_date: dueDate.toISOString(),
-        order_id: orderId,
+        sale_id: orderId,
+        order_id: orderId, // Compatibility
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
@@ -134,9 +136,11 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
         description: `Aline (PCP) notificou que faltam detalhes de produção/instalação para este pedido. Por favor, verifique e complete os dados.`,
         status: TaskStatus.PENDING,
         priority: TaskPriority.URGENT,
-        assigned_to: sellerUser.id,
+        assigned_to_user_id: sellerUser.id,
+        assigned_to: sellerUser.id, // Compatibility
         created_by: currentUser.id,
-        order_id: order.id,
+        sale_id: order.id,
+        order_id: order.id, // Compatibility
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
