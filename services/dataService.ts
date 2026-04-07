@@ -140,6 +140,7 @@ export const dataService = {
                 contact_email: customer.contactEmail,
                 legacy_id: customer.legacyId,
                 legacy_history: customer.legacyHistory,
+                created_by: customer.createdBy || null,
             };
 
             console.log("Saving customer payload:", payload);
@@ -160,6 +161,7 @@ export const dataService = {
                 legacyId: data.legacy_id,
                 legacyHistory: data.legacy_history,
                 createdAt: data.created_at,
+                createdBy: data.created_by,
             } as Customer;
         } catch (err: any) {
             console.error("DataService Exception:", err);
@@ -627,13 +629,14 @@ export const dataService = {
 
     // Time Tracking
     async saveTimeEntry(entry: Partial<TimeEntry>) {
-        const payload = {
+        const payload: any = {
+            id: entry.id || crypto.randomUUID(),
             installer_id: entry.installerId,
             type: entry.type,
             timestamp: entry.timestamp || new Date().toISOString(),
             lat: entry.lat,
             lng: entry.lng,
-            is_extra: entry.isExtra,
+            is_extra: entry.isExtra || false,
             location_name: entry.locationName
         };
         const { data, error } = await supabase.from('time_entries').insert(payload).select().single();
@@ -1249,24 +1252,26 @@ export const dataService = {
     async getTasks() {
         const { data, error } = await supabase.from('tasks').select('*');
         if (error) throw error;
-        return (data || []).map(t => ({
-            ...t,
-            order_id: t.sale_id,
-            assigned_to: t.assigned_to_user_id || t.assigned_to,
-        })) as Task[];
+        return data as Task[];
     },
     async saveTask(task: Partial<Task>) {
-        const payload = {
-            ...task,
-            sale_id: task.sale_id || task.order_id,
-            assigned_to_user_id: task.assigned_to_user_id || task.assigned_to,
+        const payload: any = {
+            id: task.id || crypto.randomUUID(),
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            assigned_to: task.assigned_to,
+            created_by: task.created_by,
+            due_date: task.due_date,
+            order_id: task.order_id,
+            created_at: task.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            completed_at: task.completed_at
         };
         const { data, error } = await supabase.from('tasks').upsert(payload).select().single();
         if (error) throw error;
-        return {
-            ...data,
-            order_id: data.sale_id,
-        } as Task;
+        return data as Task;
     },
     async deleteTask(id: string) {
         const { error } = await supabase.from('tasks').delete().eq('id', id);

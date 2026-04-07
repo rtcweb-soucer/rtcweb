@@ -256,28 +256,25 @@ const InstallerPortal = ({
 
           <div className="grid grid-cols-2 gap-3">
             <button
-              disabled={isLoading || !hasInstallationsToday || (lastPoint?.type === 'IN')}
+              disabled={isLoading || (lastPoint?.type === 'IN')}
               onClick={() => handleBaterPonto('IN')}
               className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                !hasInstallationsToday ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white shadow-emerald-500/20'
+                lastPoint?.type === 'IN' ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white shadow-emerald-500/20'
               } disabled:opacity-50`}
             >
               <CheckCircle2 size={16} /> Entrada
             </button>
             <button
-              disabled={isLoading || !hasInstallationsToday || (lastPoint?.type === 'OUT' || !lastPoint)}
+              disabled={isLoading || (lastPoint?.type === 'OUT' || !lastPoint)}
               onClick={() => handleBaterPonto('OUT')}
               className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                !hasInstallationsToday ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-500 text-white shadow-rose-500/20'
+                (lastPoint?.type === 'OUT' || !lastPoint) ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-500 text-white shadow-rose-500/20'
               } disabled:opacity-50`}
             >
               <LogOut size={16} /> Saída
             </button>
           </div>
           
-          {!hasInstallationsToday && (
-            <p className="text-[9px] text-center text-slate-500 italic">Ponto desabilitado: Nenhuma instalação agendada hoje.</p>
-          )}
         </div>
       </div>
 

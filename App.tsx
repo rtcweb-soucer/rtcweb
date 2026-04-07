@@ -120,7 +120,7 @@ const App = () => {
 
       // Se ainda não houver usuários (primeiro acesso), criar o MASTER
       if (dbUsers.length === 0) {
-        const master: SystemUser = { id: 'm1', name: 'Administrador Master', login: 'Master', password: '123', role: UserRole.ADMIN, active: true };
+        const master: SystemUser = { id: crypto.randomUUID(), name: 'Administrador Master', login: 'Master', password: '123', role: UserRole.ADMIN, active: true };
         dataService.saveSystemUser(master).then((saved: SystemUser) => setSystemUsers([saved]));
       }
     } catch (err) {
@@ -142,8 +142,13 @@ const App = () => {
   };
 
   useEffect(() => {
+    // Fix legacy non-UUID IDs if they persist in localStorage
+    if (currentUser?.id === 'm1' || currentUser?.id === 'admin-master') {
+      setCurrentUser(null);
+      localStorage.removeItem('rtc_user');
+    }
     loadData();
-  }, [loadData]);
+  }, [loadData, currentUser?.id]);
 
   // Persistir usuário logado
   useEffect(() => {
@@ -236,7 +241,7 @@ const App = () => {
         role: UserRole.SELLER,
         active: true,
         sellerId: s.id,
-        permissions: ['quick-quote', 'my-schedule', 'measurements', 'quotes', 'orders']
+        permissions: ['quick-quote', 'my-schedule', 'measurements', 'quotes', 'orders', 'tarefas']
       };
       const savedUser = await dataService.saveSystemUser(newUser);
       setSystemUsers((prev: SystemUser[]) => [...prev, savedUser]);
@@ -367,6 +372,9 @@ const App = () => {
 
   const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
     try {
+      if (currentUser) {
+        c.createdBy = currentUser.id;
+      }
       const saved = await dataService.saveCustomer(c);
       setCustomers([...customers, saved]);
       loadData(true);
@@ -521,7 +529,8 @@ const App = () => {
   // --- Filtering Logic for Roles ---
   const getFilteredData = () => {
     // Admin, Attendant, Production sees everything
-    if (!currentUser || currentUser.role !== UserRole.SELLER || !currentUser.sellerId) {
+    const rolesWithFullAccess = [UserRole.ADMIN, UserRole.ATTENDANT, UserRole.FINANCE, UserRole.PRODUCTION, UserRole.BUYER];
+    if (!currentUser || rolesWithFullAccess.includes(currentUser.role) || !currentUser.sellerId) {
       return {
         viewOrders: orders,
         viewTechnicalSheets: technicalSheets,
@@ -541,18 +550,15 @@ const App = () => {
       }
     }
 
-    // If still no sellerId, we can't filter safely, but maybe we should return empty?
-    // For now, if we can't find the seller, we return EMPTY lists to be safe, rather than ALL data.
     if (!sellerId) {
       return { viewOrders: [], viewTechnicalSheets: [], viewAppointments: [], viewCustomers: [] };
     }
 
     const viewOrders = orders.filter(o => o.sellerId === sellerId);
-
     const viewTechnicalSheets = technicalSheets.filter(t => t.sellerId === sellerId);
     const viewAppointments = appointments.filter(a => a.sellerId === sellerId);
 
-    // Customers: anyone who has a Quote, Order or Appointment with this seller
+    // Customers: anyone who has a Quote, Order or Appointment with this seller, OR they registered
     const customerIds = new Set<string>();
     viewOrders.forEach(o => customerIds.add(o.customerId));
     viewTechnicalSheets.forEach(t => customerIds.add(t.customerId));
@@ -561,7 +567,13 @@ const App = () => {
     const todayStr = new Date().toISOString().split('T')[0];
 
     const viewCustomers = customers.filter(c => {
+      // Rule 1: Assigned to seller via Order/Appointment
       if (customerIds.has(c.id)) return true;
+      
+      // Rule 2: Registered by this seller
+      if (c.createdBy === currentUser.id) return true;
+
+      // Rule 3: Created today (fallback/new lead)
       const dateRaw = c.createdAt || (c as any).created_at;
       if (dateRaw) {
         const createdDateStr = typeof dateRaw === 'string' ? dateRaw.substring(0, 10) : getLocalISODate(dateRaw as Date);

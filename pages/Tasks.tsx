@@ -99,10 +99,16 @@ const Tasks = ({ currentUser }: TasksProps) => {
 
   const handleUpdateStatus = async (task: Task, newStatus: TaskStatus) => {
     try {
-      const updatedTask = { ...task, status: newStatus };
+      const updatedTask = { 
+        ...task, 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+      
       if (newStatus === TaskStatus.COMPLETED) {
         updatedTask.completed_at = new Date().toISOString();
       }
+      
       await dataService.saveTask(updatedTask);
       loadData();
     } catch (error) {
@@ -124,6 +130,11 @@ const Tasks = ({ currentUser }: TasksProps) => {
     const isOwner = task.assigned_to === currentUser.id || task.created_by === currentUser.id;
     const canSeeAll = currentUser.role === 'ADMIN' || currentUser.role === 'ATTENDANT';
     
+    // Filtro de Segurança: Vendedores não veem tarefas de autorização financeira
+    if (currentUser.role === 'SELLER' && task.title.toUpperCase().includes('AUTORIZAÇÃO FINANCEIRA')) {
+      return false;
+    }
+
     if (!canSeeAll && !isOwner) return false;
 
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) || 

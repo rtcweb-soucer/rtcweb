@@ -76,7 +76,15 @@ const Customers = ({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'history' | 'schedule'>('info');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [showOnlyToday, setShowOnlyToday] = useState(true);
+
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   const [scheduleData, setScheduleData] = useState<Partial<Appointment>>({
     date: getLocalISODate(new Date()),
@@ -236,22 +244,29 @@ const Customers = ({
 
   const todayStr = getLocalISODate(new Date());
 
-  const filteredCustomers = customers.filter((c: Customer) => {
-    const searchMatch = fuzzyMatch(c.name || '', searchTerm) || 
-                        fuzzyMatch(c.tradeName || '', searchTerm) ||
-                        (c.document || '').replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''));
+  const filteredCustomers = React.useMemo(() => {
+    const searchDigits = debouncedSearchTerm.replace(/\D/g, '');
+    const hasDigits = searchDigits.length > 0;
 
-    if (showOnlyToday && !searchTerm) {
-      const dateRaw = c.createdAt || (c as any).created_at;
-      let createdDateStr = '';
-      if (dateRaw) {
-        createdDateStr = typeof dateRaw === 'string' ? dateRaw.substring(0, 10) : getLocalISODate(dateRaw as Date);
+    const filtered = customers.filter((c: Customer) => {
+      const searchMatch = fuzzyMatch(c.name || '', debouncedSearchTerm) || 
+                          fuzzyMatch(c.tradeName || '', debouncedSearchTerm) ||
+                          (hasDigits && (c.document || '').replace(/\D/g, '').includes(searchDigits));
+
+      if (showOnlyToday && !debouncedSearchTerm) {
+        const dateRaw = c.createdAt || (c as any).created_at;
+        let createdDateStr = '';
+        if (dateRaw) {
+          createdDateStr = typeof dateRaw === 'string' ? dateRaw.substring(0, 10) : getLocalISODate(dateRaw as Date);
+        }
+        return searchMatch && createdDateStr === todayStr;
       }
-      return searchMatch && createdDateStr === todayStr;
-    }
 
-    return searchMatch;
-  });
+      return searchMatch;
+    });
+
+    return filtered.slice(0, 200);
+  }, [customers, debouncedSearchTerm, showOnlyToday, todayStr]);
 
   const customerAppointments = appointments.filter((a: Appointment) => a.customerId === selectedCustomer?.id);
   const customerOrders = orders.filter((o: Order) => o.customerId === selectedCustomer?.id);

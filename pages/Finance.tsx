@@ -27,7 +27,8 @@ import {
    RefreshCw,
    Copy,
    ExternalLink,
-   Check
+   Check,
+   Phone
 } from 'lucide-react';
 
 interface FinanceProps {
@@ -144,10 +145,13 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
          if (order.installments && order.installments.length > 0) {
             order.installments.forEach((inst, idx) => {
                const customer = customers.find(c => c.id === order.customerId);
+               const seller = sellers.find(s => s.id === order.sellerId);
                all.push({
                   ...inst,
                   orderId: order.id,
                   customerName: customer?.name || 'Cliente não encontrado',
+                  customerPhone: customer?.phone || '',
+                  sellerName: seller?.name || '---',
                   installmentNumber: idx + 1,
                   totalInstallments: order.installments?.length
                });
@@ -768,6 +772,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                  />
                               </th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato / Cliente</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendedor</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Parcela</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Produção</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Instalação</th>
@@ -816,7 +821,36 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                        </div>
                                        <div className="mt-1 space-y-1">
                                           <p className="text-[11px] font-bold text-slate-700 truncate max-w-[200px]">{inst.customerName}</p>
+                                          <div className="flex gap-2">
+                                             {inst.customerPhone && (
+                                                <>
+                                                   <button 
+                                                      onClick={() => {
+                                                         const cleanPhone = inst.customerPhone.replace(/\D/g, '');
+                                                         const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+                                                         window.open(`https://wa.me/${fullPhone}`, '_blank');
+                                                      }}
+                                                      className="flex items-center gap-1 text-[9px] font-bold text-emerald-600 hover:text-emerald-700"
+                                                      title="WhatsApp"
+                                                   >
+                                                      <MessageCircle size={10} />
+                                                      WhatsApp
+                                                   </button>
+                                                   <button 
+                                                      onClick={() => window.location.href = `tel:${inst.customerPhone}`}
+                                                      className="flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
+                                                      title="Ligar"
+                                                   >
+                                                      <Phone size={10} />
+                                                      Ligar
+                                                   </button>
+                                                </>
+                                             )}
+                                          </div>
                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                       <p className="text-[11px] font-bold text-slate-700 truncate max-w-[120px]">{inst.sellerName}</p>
                                     </td>
                                     <td className="px-6 py-4">
                                        <span className="text-[10px] font-black px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">

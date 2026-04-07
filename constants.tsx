@@ -37,7 +37,7 @@ export const MENU_ITEMS = [
   { id: 'measurements', label: 'Medições/Fichas', icon: <Ruler size={20} />, roles: ['ADMIN', 'SELLER'] },
   { id: 'quotes', label: 'Orçamentos', icon: <FileText size={20} />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
   { id: 'orders', label: 'Pedidos', icon: <Briefcase size={20} />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
-  { id: 'tarefas', label: 'Tarefas', icon: <CheckSquare size={20} className="text-blue-600" />, roles: ['ADMIN', 'ATTENDANT', 'SELLER'] },
+  { id: 'tarefas', label: 'Tarefas', icon: <CheckSquare size={20} className="text-blue-600" />, roles: ['ADMIN', 'ATTENDANT', 'SELLER', 'PRODUCTION', 'BUYER'] },
   { id: 'pcp', label: 'PCP (Produção)', icon: <Factory size={20} />, roles: ['ADMIN', 'PRODUCTION'] },
   { id: 'buyer', label: 'Compras', icon: <ShoppingCart size={20} className="text-emerald-500" />, roles: ['ADMIN', 'PRODUCTION', 'BUYER'] },
   { id: 'installations', label: 'Instalações', icon: <Truck size={20} />, roles: ['ADMIN', 'ATTENDANT', 'PRODUCTION'] },

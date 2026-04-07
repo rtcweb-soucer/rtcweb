@@ -59,6 +59,14 @@ const RESPONSIBLE_IDS = {
   WELINGTON: '2006546b-d493-48f6-a9d0-27f3370cda7a'
 };
 
+const STAGE_DEADLINES: Record<string, number> = {
+  [ProductionStage.NEW_ORDER]: 2,
+  [ProductionStage.PREPARATION]: 2,
+  [ProductionStage.PROVISIONING]: 4,
+  [ProductionStage.CUTTING_WELDING]: 4,
+  [ProductionStage.ASSEMBLY]: 3
+};
+
 const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, onUpdateOrder, onSelectCustomer }: PCPProps) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,8 +100,76 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
     try {
       const data = await dataService.getPCPOrders();
       setPcpOrders(data);
+      
+      // Verificamos os atrasos após carregar os pedidos
+      checkStageDeadlines(data);
     } catch (error) {
       console.error("Error loading PCP data:", error);
+    }
+  };
+
+  const checkStageDeadlines = async (ordersList: Order[]) => {
+    try {
+      const existingTasks = await dataService.getTasks();
+      
+      for (const order of ordersList) {
+        const currentStage = order.productionStage || ProductionStage.NEW_ORDER;
+        
+        // 1. Lógica para Instalação (Data Limite de Entrega)
+        if (currentStage === ProductionStage.INSTALLATION || currentStage === ProductionStage.READY) {
+          if (order.deliveryDeadline) {
+            const deadline = new Date(order.deliveryDeadline);
+            const today = new Date();
+            if (today > deadline) {
+              const taskTitle = `[ATRASO ENTREGA] Pedido ${order.contractNumber || order.id}`;
+              const alreadyExists = existingTasks.find(t => t.order_id === order.id && t.title === taskTitle && t.status !== TaskStatus.COMPLETED);
+              
+              if (!alreadyExists) {
+                await createPCPTask(RESPONSIBLE_IDS.DENIS, taskTitle, `Pedido com data de entrega vencida (${deadline.toLocaleDateString()}). Favor agilizar a instalação.`, 1, order.id);
+              }
+            }
+          }
+          continue; // Passa para o próximo pedido
+        }
+
+        // 2. Lógica para as demais etapas (Duração em dias)
+        const deadlineDays = STAGE_DEADLINES[currentStage];
+        if (!deadlineDays) continue;
+
+        // Pegamos a data em que entrou na etapa atual
+        const history = order.productionHistory || [];
+        const stageStartEntry = history.filter(h => h.stage === currentStage).pop();
+        
+        if (!stageStartEntry) continue;
+
+        const startDate = new Date(stageStartEntry.timestamp);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > deadlineDays) {
+          const taskTitle = `[ATRASO ETAPA] ${currentStage}: Pedido ${order.contractNumber || order.id}`;
+          
+          // Definir para quem mandar a tarefa baseada na etapa
+          const targets: string[] = [];
+          if (currentStage === ProductionStage.NEW_ORDER) targets.push(RESPONSIBLE_IDS.ALINE);
+          else if (currentStage === ProductionStage.PREPARATION) targets.push(RESPONSIBLE_IDS.JOAO);
+          else if (currentStage === ProductionStage.PROVISIONING) { targets.push(RESPONSIBLE_IDS.DENIS); targets.push(RESPONSIBLE_IDS.WELINGTON); }
+          else if (currentStage === ProductionStage.CUTTING_WELDING) { targets.push(RESPONSIBLE_IDS.ALINE); targets.push(RESPONSIBLE_IDS.JOAO); targets.push(RESPONSIBLE_IDS.DENIS); targets.push(RESPONSIBLE_IDS.WELINGTON); }
+          else if (currentStage === ProductionStage.ASSEMBLY) targets.push(RESPONSIBLE_IDS.DENIS);
+
+          for (const targetId of targets) {
+            const alreadyExists = existingTasks.find(t => t.order_id === order.id && t.assigned_to === targetId && t.title === taskTitle && t.status !== TaskStatus.COMPLETED);
+            
+            if (!alreadyExists) {
+              const description = `O pedido está na etapa ${currentStage} há ${diffDays} dias (Limite: ${deadlineDays} dias). Favor verificar pendências.`;
+              await createPCPTask(targetId, taskTitle, description, 1, order.id);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao verificar prazos do PCP:", error);
     }
   };
 
@@ -108,12 +184,10 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
         description,
         status: TaskStatus.PENDING,
         priority: TaskPriority.HIGH,
-        assigned_to_user_id: assignedTo,
-        assigned_to: assignedTo, // Compatibility
+        assigned_to: assignedTo,
         created_by: currentUser.id,
         due_date: dueDate.toISOString(),
-        sale_id: orderId,
-        order_id: orderId, // Compatibility
+        order_id: orderId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
@@ -129,24 +203,26 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
       return;
     }
 
+    const userDescription = prompt("O que o vendedor precisa fazer?", "Favor verificar detalhes de produção pendentes.");
+    if (userDescription === null) return; // Cancelado
+
     try {
       await dataService.saveTask({
         id: crypto.randomUUID(),
         title: `Informações de Produção Faltando - Pedido ${order.contractNumber || order.quoteNumber || order.id}`,
-        description: `Aline (PCP) notificou que faltam detalhes de produção/instalação para este pedido. Por favor, verifique e complete os dados.`,
+        description: `Notificado por ${currentUser.name} (PCP): ${userDescription}`,
         status: TaskStatus.PENDING,
         priority: TaskPriority.URGENT,
-        assigned_to_user_id: sellerUser.id,
-        assigned_to: sellerUser.id, // Compatibility
+        assigned_to: sellerUser.id,
         created_by: currentUser.id,
-        sale_id: order.id,
-        order_id: order.id, // Compatibility
+        order_id: order.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
       alert(`Vendedor ${sellerUser.name} notificado com sucesso!`);
-    } catch (error) {
-      alert("Erro ao notificar vendedor.");
+    } catch (error: any) {
+      console.error("Erro ao notificar vendedor:", error);
+      alert("Erro ao notificar vendedor: " + (error.message || error));
     }
   };
 
@@ -214,22 +290,6 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
     try {
       // First update the production tracking
       await dataService.updateProductionStage(orderId, nextStage, newHistory);
-
-      // --- TASK AUTOMATION ---
-      const orderRef = order.contractNumber || order.quoteNumber || order.id;
-      if (nextStage === ProductionStage.PREPARATION) {
-        await createPCPTask(RESPONSIBLE_IDS.JOAO, `Preparação: Pedido ${orderRef}`, `Iniciar preparação do pedido de ${customers.find(c => c.id === order.customerId)?.name}`, 2, orderId);
-      } else if (nextStage === ProductionStage.PROVISIONING) {
-        await createPCPTask(RESPONSIBLE_IDS.DENIS, `Solicitar Material: Pedido ${orderRef}`, `Realizar solicitação de materiais via PCP`, 1, orderId);
-        await createPCPTask(RESPONSIBLE_IDS.WELINGTON, `Comprar Material: Pedido ${orderRef}`, `Efetivar ordens de compra para o pedido`, 1, orderId);
-      } else if (nextStage === ProductionStage.CUTTING_WELDING) {
-        const title = `Corte e Solda: Pedido ${orderRef}`;
-        const desc = `Etapa de corte e solda iniciada. Prazo de 4 dias.`;
-        await createPCPTask(RESPONSIBLE_IDS.ALINE, title, desc, 4, orderId);
-        await createPCPTask(RESPONSIBLE_IDS.JOAO, title, desc, 4, orderId);
-        await createPCPTask(RESPONSIBLE_IDS.DENIS, title, desc, 4, orderId);
-        await createPCPTask(RESPONSIBLE_IDS.WELINGTON, title, desc, 4, orderId);
-      }
 
       // Then sync the main order status if changed
       if (updatedOrder.status !== order.status) {

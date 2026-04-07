@@ -32,7 +32,7 @@ const Login = ({ onLogin, systemUsers, installers }: LoginProps) => {
       // Regra 1: Usuário Master (Hardcoded conforme pedido)
       if (login === 'Master' && password === '#Toldocor2026') {
         onLogin({
-          id: 'admin-master',
+          id: '00000000-0000-0000-0000-000000000000', // Static valid UUID for master
           name: 'Administrador Master',
           login: 'Master',
           role: 'ADMIN' as any,
