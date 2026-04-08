@@ -40,6 +40,7 @@ export const MENU_ITEMS = [
   { id: 'tarefas', label: 'Tarefas', icon: <CheckSquare size={20} className="text-blue-600" />, roles: ['ADMIN', 'ATTENDANT', 'SELLER', 'PRODUCTION', 'BUYER'] },
   { id: 'pcp', label: 'PCP (Produção)', icon: <Factory size={20} />, roles: ['ADMIN', 'PRODUCTION'] },
   { id: 'buyer', label: 'Compras', icon: <ShoppingCart size={20} className="text-emerald-500" />, roles: ['ADMIN', 'PRODUCTION', 'BUYER'] },
+  { id: 'raw-material-stock', label: 'Estoque Matéria-Prima', icon: <Package size={20} className="text-indigo-500" />, roles: ['ADMIN', 'PRODUCTION', 'BUYER'] },
   { id: 'installations', label: 'Instalações', icon: <Truck size={20} />, roles: ['ADMIN', 'ATTENDANT', 'PRODUCTION'] },
   { id: 'finance', label: 'Contas a Receber', icon: <Wallet size={20} />, roles: ['ADMIN'] },
   { id: 'expenses', label: 'Despesas', icon: <Receipt size={20} className="text-rose-500" />, roles: ['ADMIN'] },

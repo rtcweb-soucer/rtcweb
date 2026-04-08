@@ -405,3 +405,37 @@ export interface ApiSettings {
   settings: any;
   updated_at: string;
 }
+
+// Raw Materials & Stock Management
+export interface RawMaterial {
+  id: string;
+  name: string;
+  unit: string;
+  min_stock: number;
+  category?: string;
+  created_at?: string;
+  current_stock?: number;
+  last_purchase_date?: string; // Virtual: from latest IN movement
+  last_supplier?: string;      // Virtual: from latest IN movement
+}
+
+export interface RawMaterialMovement {
+  id: string;
+  raw_material_id: string;
+  type: 'IN' | 'OUT';
+  quantity: number;
+  source: 'XML' | 'MANUAL' | 'PCP';
+  reference_id?: string;
+  supplier_name?: string;
+  invoice_number?: string;
+  notes?: string;
+  user_id?: string;
+  created_at?: string;
+}
+
+export interface RawMaterialMapping {
+  id: string;
+  xml_product_name: string;
+  raw_material_id: string;
+  created_at?: string;
+}

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task, TimeEntry, Rework, ApiSettings } from '../types';
+import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task, TimeEntry, Rework, ApiSettings, RawMaterial, RawMaterialMovement, RawMaterialMapping } from '../types';
 
 const SYNC_QUEUE_KEY = 'rtc_sync_queue';
 
@@ -1299,6 +1299,72 @@ export const dataService = {
         const { data, error } = await supabase.from('api_settings').upsert(settings).select().single();
         if (error) throw error;
         return data as ApiSettings;
+    },
+
+    // Raw Materials & Stock Control
+    async getRawMaterials() {
+        const { data: materials, error: mError } = await supabase.from('raw_materials').select('*').order('name');
+        if (mError) throw mError;
+        
+        const { data: movements, error: movError } = await supabase.from('raw_material_movements').select('*').order('created_at', { ascending: false });
+        if (movError) throw movError;
+
+        return materials.map(m => {
+            const matMovs = movements.filter(mov => mov.raw_material_id === m.id);
+            
+            // Calc Current Stock
+            const stock = matMovs.reduce((acc, mov) => {
+                const qty = Number(mov.quantity);
+                return mov.type === 'IN' ? acc + qty : acc - qty;
+            }, 0);
+
+            // Find Last Purchase
+            const lastIn = matMovs.find(mov => mov.type === 'IN');
+
+            return { 
+                ...m, 
+                current_stock: stock,
+                last_purchase_date: lastIn?.created_at,
+                last_supplier: lastIn?.supplier_name
+            };
+        }) as RawMaterial[];
+    },
+
+    async saveRawMaterial(material: Partial<RawMaterial>) {
+        const { data, error } = await supabase.from('raw_materials').upsert(material).select().single();
+        if (error) throw error;
+        return data as RawMaterial;
+    },
+
+    async deleteRawMaterial(id: string) {
+        const { error } = await supabase.from('raw_materials').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async getRawMaterialMovements(materialId?: string) {
+        let query = supabase.from('raw_material_movements').select('*');
+        if (materialId) query = query.eq('raw_material_id', materialId);
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error) throw error;
+        return data as RawMaterialMovement[];
+    },
+
+    async saveRawMaterialMovement(movement: Partial<RawMaterialMovement>) {
+        const { data, error } = await supabase.from('raw_material_movements').insert(movement).select().single();
+        if (error) throw error;
+        return data as RawMaterialMovement;
+    },
+
+    async getRawMaterialMappings() {
+        const { data, error } = await supabase.from('raw_material_mappings').select('*');
+        if (error) throw error;
+        return data as RawMaterialMapping[];
+    },
+
+    async saveRawMaterialMapping(mapping: Partial<RawMaterialMapping>) {
+        const { data, error } = await supabase.from('raw_material_mappings').upsert(mapping).select().single();
+        if (error) throw error;
+        return data as RawMaterialMapping;
     },
 
     // Rotina de Backup Total

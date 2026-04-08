@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer, FinancialTransaction, AccountCategory, TimeEntry } from './types';
+import { UserRole, Seller, Customer, Appointment, TechnicalSheet, Order, OrderStatus, ProductionStage, Product, SystemUser, SellerBlockedSlot, Installer, FinancialTransaction, AccountCategory, TimeEntry, RawMaterial, RawMaterialMovement } from './types';
 import { MENU_ITEMS } from './constants';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -28,6 +28,7 @@ import Settings from './pages/Settings';
 import SalesReport from './pages/SalesReport';
 import ApiConfig from './pages/ApiConfig';
 import InstallerPortal from './pages/InstallerPortal';
+import RawMaterialStock from './pages/RawMaterialStock';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -65,6 +66,7 @@ const App = () => {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
   const [accountCategories, setAccountCategories] = useState<AccountCategory[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [systemSettings, setSystemSettings] = useState<{ id: string, key: string, value: string }[]>([]);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
@@ -87,7 +89,7 @@ const App = () => {
     if (isAuto) setIsSyncing(true);
 
     try {
-      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings, dbTimeEntries] = await Promise.all([
+      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings, dbTimeEntries, dbRawMaterials] = await Promise.all([
         dataService.getSellers(),
         dataService.getCustomers(),
         dataService.getProducts(),
@@ -100,7 +102,8 @@ const App = () => {
         dataService.getFinancialTransactions(),
         dataService.getAccountCategories(),
         dataService.getSystemSettings(),
-        dataService.getTimeEntries()
+        dataService.getTimeEntries(),
+        dataService.getRawMaterials()
       ]);
 
       setSellers(dbSellers);
@@ -116,6 +119,7 @@ const App = () => {
       setFinancialTransactions(dbFinancialTransactions);
       setAccountCategories(dbAccountCategories);
       setSystemSettings(dbSystemSettings);
+      setRawMaterials(dbRawMaterials);
       setLastSync(new Date());
 
       // Se ainda não houver usuários (primeiro acesso), criar o MASTER
@@ -703,6 +707,8 @@ const App = () => {
         />;
       case 'buyer':
         return <Buyer orders={orders} customers={customers} />;
+      case 'raw-material-stock':
+        return <RawMaterialStock currentUser={currentUser!} />;
       case 'installations':
         return <Installations
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products}
