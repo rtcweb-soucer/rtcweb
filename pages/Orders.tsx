@@ -81,6 +81,8 @@ const Orders = ({
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
+  const [showCustomerChangeModal, setShowCustomerChangeModal] = useState(false);
+  const [searchTermCustomers, setSearchTermCustomers] = useState('');
 
   const handleCopyValue = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -743,6 +745,21 @@ const Orders = ({
     }
   };
 
+  const handleChangeCustomer = (newCustomer: Customer) => {
+    if (!selectedOrder) return;
+    if (confirm(`Deseja realmente transferir este pedido para o cliente ${newCustomer.name}? Medidas e valores permanecerão os mesmos.`)) {
+      const updatedOrder = {
+        ...selectedOrder,
+        customerId: newCustomer.id,
+        customerName: newCustomer.name,
+        customerPhone: newCustomer.phone
+      } as unknown as Order;
+      onUpdateOrder(updatedOrder);
+      setShowCustomerChangeModal(false);
+      setSearchTermCustomers('');
+    }
+  };
+
   if (selectedOrderId && selectedOrder && selectedCustomer) {
     return (
       <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 mb-20">
@@ -753,6 +770,9 @@ const Orders = ({
           <div className="flex flex-wrap gap-3">
             <button onClick={(e) => openHistory(e, selectedOrder)} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
               <Activity size={18} className="text-blue-500" /> Ver Log PCP
+            </button>
+            <button onClick={() => setShowCustomerChangeModal(true)} className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm font-bold hover:bg-amber-100 transition-all shadow-sm">
+              <UserCheck size={18} /> Trocar Cliente
             </button>
             <button onClick={handleEditClick} className="flex items-center gap-2 px-6 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
               <Edit3 size={18} /> Editar Pedido
@@ -1300,6 +1320,63 @@ const Orders = ({
                 <div className="flex gap-4 pt-4 border-t border-slate-100">
                   <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
                   <button onClick={saveEdits} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-xl shadow-blue-500/30 transition-all">Salvar Alterações</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Trocar Cliente - Movido para dentro do detalhe para funcionar */}
+        {showCustomerChangeModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[700] flex items-center justify-center p-4 no-print">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh]">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Trocar Cliente</h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Pedido: {selectedOrder?.contractNumber || selectedOrder?.id}</p>
+                </div>
+                <button 
+                  onClick={() => { setShowCustomerChangeModal(false); setSearchTermCustomers(''); }} 
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input 
+                    type="text"
+                    placeholder="Buscar novo cliente..."
+                    value={searchTermCustomers}
+                    onChange={(e) => setSearchTermCustomers(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-amber-500 outline-none"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="overflow-y-auto max-h-[40vh] space-y-2 pr-2 custom-scrollbar">
+                  {customers
+                    .filter(c => 
+                      c.name.toLowerCase().includes(searchTermCustomers.toLowerCase()) || 
+                      c.document.includes(searchTermCustomers)
+                    )
+                    .slice(0, 20)
+                    .map(customer => (
+                      <button
+                        key={customer.id}
+                        onClick={() => handleChangeCustomer(customer)}
+                        className="w-full p-4 flex items-center justify-between bg-white border border-slate-100 rounded-2xl hover:border-amber-400 hover:bg-amber-50 transition-all text-left group"
+                      >
+                        <div>
+                          <p className="font-black text-slate-800 group-hover:text-amber-700 transition-colors uppercase text-xs">{customer.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{customer.document}</p>
+                        </div>
+                        <ChevronRight className="text-slate-300 group-hover:text-amber-500 transition-all" size={18} />
+                      </button>
+                    ))
+                  }
                 </div>
               </div>
             </div>
