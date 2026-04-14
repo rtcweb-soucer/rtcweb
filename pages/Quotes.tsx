@@ -689,7 +689,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
       };
       
-      const validCreatorId = isValidUUID(currentUser?.id) ? currentUser.id : undefined;
+      const validCreatorId = (currentUser && isValidUUID(currentUser.id)) ? currentUser.id : undefined;
 
       // 3b. Se for antecipado, cria uma tarefa de autorização financeira
       if (isAnticipated) {

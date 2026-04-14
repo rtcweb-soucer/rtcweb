@@ -303,39 +303,6 @@ export const dataService = {
             }));
             const { error: itemsError } = await supabase.from('measurement_items').upsert(itemsToSave);
             if (itemsError) throw itemsError;
-
-            // [SINCRONIZAÇÃO] Atualiza os pedidos vinculados a esta ficha técnica para refletir os itens novos/editados
-            const { data: linkedOrders } = await supabase
-                .from('orders')
-                .select('id')
-                .eq('technical_sheet_id', sheetData.id);
-
-            if (linkedOrders && linkedOrders.length > 0) {
-                const itemIds = items.map(item => item.id);
-                const snapshot = items.map(item => ({
-                    id: item.id,
-                    productId: item.productId,
-                    environment: item.environment,
-                    width: item.width,
-                    height: item.height,
-                    quantity: item.quantity,
-                    color: item.color,
-                    notes: item.notes,
-                    parentItemId: item.parentItemId,
-                    productType: item.productType,
-                    command: item.command
-                }));
-
-                for (const order of linkedOrders) {
-                    await supabase
-                        .from('orders')
-                        .update({ 
-                            item_ids: itemIds,
-                            items_snapshot: snapshot
-                        })
-                        .eq('id', order.id);
-                }
-            }
         }
 
         return {
@@ -995,29 +962,78 @@ export const dataService = {
 
         if (orderError) throw orderError;
 
-        // Get technical sheet
-        const { data: sheetData, error: sheetError } = await supabase
-            .from('technical_sheets')
-            .select('*')
-            .eq('id', orderData.technical_sheet_id)
-            .single();
+        // Get measurement items from ALL technical sheets for this customer
+        // This ensures items added in any version of the technical sheet appear in production
+        let itemsData: any[] = [];
 
-        if (sheetError) throw sheetError;
+        // First, try to get items from the order's linked sheet
+        if (orderData.technical_sheet_id) {
+            const { data: fetchedItems } = await supabase
+                .from('measurement_items')
+                .select('*')
+                .eq('technical_sheet_id', orderData.technical_sheet_id);
 
-        // Get measurement items
-        // We want items that are explicitly in the order OR are sub-items of items in the order
-        let query = supabase
-            .from('measurement_items')
-            .select('*')
-            .eq('technical_sheet_id', sheetData.id);
-
-        if (orderData.item_ids && orderData.item_ids.length > 0) {
-            query = query.or(`id.in.(${orderData.item_ids.join(',')}),parent_item_id.in.(${orderData.item_ids.join(',')})`);
+            if (fetchedItems) {
+                itemsData = fetchedItems;
+            }
         }
 
-        const { data: itemsData, error: itemsError } = await query;
+        // Also fetch items from ALL other sheets for the same customer and merge
+        // This handles the case where items were edited into a newer/different sheet
+        if (orderData.customer_id) {
+            const { data: allSheets } = await supabase
+                .from('technical_sheets')
+                .select('id')
+                .eq('customer_id', orderData.customer_id);
 
-        if (itemsError) throw itemsError;
+            if (allSheets && allSheets.length > 0) {
+                const otherSheetIds = allSheets
+                    .map((s: any) => s.id)
+                    .filter((id: string) => id !== orderData.technical_sheet_id);
+
+                if (otherSheetIds.length > 0) {
+                    const { data: otherItems } = await supabase
+                        .from('measurement_items')
+                        .select('*')
+                        .in('technical_sheet_id', otherSheetIds);
+
+                    if (otherItems && otherItems.length > 0) {
+                        // Merge: add items that are not already in itemsData (by ID)
+                        const existingIds = new Set(itemsData.map((i: any) => i.id));
+                        for (const item of otherItems) {
+                            if (!existingIds.has(item.id)) {
+                                itemsData.push(item);
+                                existingIds.add(item.id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: use items_snapshot from the order if still no items found
+        if (itemsData.length === 0 && orderData.items_snapshot) {
+            const snapshot = typeof orderData.items_snapshot === 'string'
+                ? JSON.parse(orderData.items_snapshot)
+                : orderData.items_snapshot;
+
+            // Normalize snapshot fields to match measurement_items columns
+            itemsData = (snapshot || []).map((it: any) => ({
+                id: it.id,
+                technical_sheet_id: orderData.technical_sheet_id,
+                product_id: it.productId || it.product_id,
+                parent_item_id: it.parentItemId || it.parent_item_id,
+                environment: it.environment,
+                width: it.width,
+                height: it.height,
+                color: it.color,
+                command: it.command,
+                notes: it.notes,
+                quantity: it.quantity || 1,
+                product_type: it.productType || it.product_type
+            }));
+        }
+
 
         // Get production sheets for all items
         const itemIds = itemsData.map((item: any) => item.id);
@@ -1149,6 +1165,7 @@ export const dataService = {
                 name: customerData.name,
                 type: customerData.type,
                 document: customerData.document,
+                cpfCnpj: customerData.document, // alias expected by ProductionSheetPrint
                 phone: customerData.phone,
                 address: customerData.address
             },
