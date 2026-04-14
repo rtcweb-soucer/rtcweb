@@ -1004,11 +1004,11 @@ export const dataService = {
             supabase.from('production_sheet_cobertura').select('*').in('production_sheet_id', prodSheetIds)
         ]);
 
-        // Get customer
+        // Get customer from Order (Contract) instead of Technical Sheet
         const { data: customerData, error: customerError } = await supabase
             .from('customers')
             .select('*')
-            .eq('id', sheetData.customer_id)
+            .eq('id', orderData.customer_id)
             .single();
 
         if (customerError) throw customerError;
