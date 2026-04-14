@@ -312,10 +312,27 @@ export const dataService = {
 
             if (linkedOrders && linkedOrders.length > 0) {
                 const itemIds = items.map(item => item.id);
+                const snapshot = items.map(item => ({
+                    id: item.id,
+                    productId: item.productId,
+                    environment: item.environment,
+                    width: item.width,
+                    height: item.height,
+                    quantity: item.quantity,
+                    color: item.color,
+                    notes: item.notes,
+                    parentItemId: item.parentItemId,
+                    productType: item.productType,
+                    command: item.command
+                }));
+
                 for (const order of linkedOrders) {
                     await supabase
                         .from('orders')
-                        .update({ item_ids: itemIds })
+                        .update({ 
+                            item_ids: itemIds,
+                            items_snapshot: snapshot
+                        })
                         .eq('id', order.id);
                 }
             }
