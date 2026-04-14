@@ -230,6 +230,7 @@ const MeasurementForm = ({
   const updateItem = (id: string, field: string, value: any) => {
     setItems(items.map((item: MeasurementItem) => {
       if (item.id === id) {
+        // [CRÍTICO] Mantém o ID original do item para não quebrar o vínculo com o PCP
         const updated = { ...item, [field]: value };
         if (field === 'productId') {
           const product = products.find((p: Product) => p.id === value);

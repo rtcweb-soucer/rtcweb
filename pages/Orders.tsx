@@ -754,6 +754,11 @@ const Orders = ({
         customerName: newCustomer.name,
         customerPhone: newCustomer.phone
       } as unknown as Order;
+      
+      // Atualiza o estado local para que a ficha de impressão mostre o cliente correto IMEDIATAMENTE
+      setSelectedCustomer(newCustomer);
+      setSelectedOrder(updatedOrder);
+      
       onUpdateOrder(updatedOrder);
       setShowCustomerChangeModal(false);
       setSearchTermCustomers('');
