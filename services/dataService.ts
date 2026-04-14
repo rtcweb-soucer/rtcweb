@@ -303,6 +303,22 @@ export const dataService = {
             }));
             const { error: itemsError } = await supabase.from('measurement_items').upsert(itemsToSave);
             if (itemsError) throw itemsError;
+
+            // [SINCRONIZAÇÃO] Atualiza os pedidos vinculados a esta ficha técnica para refletir os itens novos/editados
+            const { data: linkedOrders } = await supabase
+                .from('orders')
+                .select('id')
+                .eq('technical_sheet_id', sheetData.id);
+
+            if (linkedOrders && linkedOrders.length > 0) {
+                const itemIds = items.map(item => item.id);
+                for (const order of linkedOrders) {
+                    await supabase
+                        .from('orders')
+                        .update({ item_ids: itemIds })
+                        .eq('id', order.id);
+                }
+            }
         }
 
         return {

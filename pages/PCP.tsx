@@ -340,6 +340,7 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
 
   const handlePrintProductionSheet = async (orderId: string) => {
     try {
+      setPrintData(null); // Limpa dados anteriores para evitar cache visual
       const data = await dataService.getOrderProductionData(orderId);
       setPrintData(data);
       setShowPrintModal(true);
