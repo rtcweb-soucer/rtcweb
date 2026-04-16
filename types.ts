@@ -383,7 +383,7 @@ export interface Task {
 export interface TimeEntry {
   id: string;
   installerId: string;
-  type: 'IN' | 'OUT';
+  type: 'IN' | 'OUT' | 'LUNCH_OUT' | 'LUNCH_IN';
   timestamp: string;
   lat?: number;
   lng?: number;

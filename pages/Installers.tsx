@@ -162,12 +162,28 @@ const Installers = ({
             
             const entrance = sorted.find(e => e.type === 'IN');
             const exit = sorted.find(e => e.type === 'OUT');
+            const lunchOut = sorted.find(e => e.type === 'LUNCH_OUT');
+            const lunchIn = sorted.find(e => e.type === 'LUNCH_IN');
             
             let duration = '---';
             if (entrance && exit) {
                 const start = new Date(entrance.timestamp);
                 const end = new Date(exit.timestamp);
-                const diffMs = end.getTime() - start.getTime();
+                let diffMs = end.getTime() - start.getTime();
+
+                // Desconta o almoço se houver marcação
+                if (lunchOut && lunchIn) {
+                    const lOut = new Date(lunchOut.timestamp);
+                    const lIn = new Date(lunchIn.timestamp);
+                    const lunchDuration = lIn.getTime() - lOut.getTime();
+                    diffMs -= lunchDuration;
+                } else {
+                    // Se não houver marcação, desconta 1 hora padrão (conforme regra de negócio)
+                    diffMs -= (1000 * 60 * 60);
+                }
+
+                if (diffMs < 0) diffMs = 0;
+
                 const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
                 const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
                 duration = `${diffHrs}h ${diffMins}m`;
@@ -178,6 +194,9 @@ const Installers = ({
                 date,
                 entrance: entrance ? new Date(entrance.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '---',
                 exit: exit ? new Date(exit.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '---',
+                lunch: (lunchOut && lunchIn) 
+                    ? `${new Date(lunchOut.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} / ${new Date(lunchIn.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                    : '---',
                 duration,
                 location: entrance?.locationName || exit?.locationName || 'Externo',
                 isExtra: entrance?.isExtra || exit?.isExtra
@@ -558,7 +577,8 @@ const Installers = ({
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Saída</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Permanência</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Almoço (S/R)</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Prat. Líquida</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Localização</th>
                                     </tr>
                                 </thead>
@@ -576,6 +596,7 @@ const Installers = ({
                                                 <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase truncate max-w-[150px]">{row.installerName}</td>
                                                 <td className="px-8 py-4 text-sm font-bold text-emerald-600">{row.entrance}</td>
                                                 <td className="px-8 py-4 text-sm font-bold text-rose-600">{row.exit}</td>
+                                                <td className="px-8 py-4 text-xs font-medium text-amber-600 text-center">{row.lunch}</td>
                                                 <td className="px-8 py-4 text-center">
                                                     <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-[10px] font-black">
                                                         {row.duration}
@@ -583,7 +604,7 @@ const Installers = ({
                                                 </td>
                                                 <td className="px-8 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-2 text-[10px] font-bold text-slate-500">
-                                                        <Clock size={12} className={row.location === 'RTC - Sede' ? 'text-blue-500' : 'text-slate-300'} />
+                                                        <Clock size={12} className={row.location === 'Sede Maria da Graça' ? 'text-blue-500' : 'text-slate-300'} />
                                                         {row.location}
                                                     </div>
                                                 </td>

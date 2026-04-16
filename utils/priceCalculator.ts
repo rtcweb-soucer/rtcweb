@@ -40,7 +40,8 @@ export const calculateProductPrice = (
       const totalPrice = Number(result);
       if (isNaN(totalPrice)) throw new Error('Resultado não é um número');
       
-      return totalPrice;
+      // Arredondar para 2 casas decimais (Padrão Monetário)
+      return Math.round(totalPrice * 100) / 100;
     } catch (error) {
       console.error(`Erro ao calcular fórmula para o produto ${product.nome}:`, error);
       // Fallback para o cálculo padrão em caso de erro na fórmula

@@ -99,14 +99,17 @@ const InstallerPortal = ({
     }
   }, [installer.id]);
 
-  const handleBaterPonto = async (type: 'IN' | 'OUT') => {
+  const handleBaterPonto = async (type: 'IN' | 'OUT' | 'LUNCH_OUT' | 'LUNCH_IN') => {
     if (!currentLocation || !distanceToOffice) {
       alert("Localização não encontrada. Ative o GPS.");
       return;
     }
 
-    if (distanceToOffice > ALLOWED_RADIUS_METERS) {
-      alert(`Você está fora do raio permitido (${Math.round(distanceToOffice)}m). Dirija-se à empresa na Travessa Manoel Lobo.`);
+    const isLunch = type === 'LUNCH_OUT' || type === 'LUNCH_IN';
+
+    // Regra: Somente Entrada e Saída (shift start/end) exigem estar na sede
+    if (!isLunch && distanceToOffice > ALLOWED_RADIUS_METERS) {
+      alert(`Você está fora do raio permitido (${Math.round(distanceToOffice)}m). Dirija-se à empresa para bater ${type === 'IN' ? 'Entrada' : 'Saída'}.`);
       return;
     }
 
@@ -118,10 +121,18 @@ const InstallerPortal = ({
         lat: currentLocation.lat,
         lng: currentLocation.lng,
         timestamp: new Date().toISOString(),
-        locationName: 'Sede Maria da Graça'
+        locationName: isLunch && distanceToOffice > ALLOWED_RADIUS_METERS ? 'Externo (Almoço)' : 'Sede Maria da Graça'
       });
       setLastPoint(entry);
-      alert(`Ponto de ${type === 'IN' ? 'Entrada' : 'Saída'} registrado com sucesso!`);
+      
+      const labels: Record<string, string> = {
+        'IN': 'Entrada',
+        'OUT': 'Saída',
+        'LUNCH_OUT': 'Saída p/ Almoço',
+        'LUNCH_IN': 'Retorno do Almoço'
+      };
+      
+      alert(`Ponto de ${labels[type]} registrado com sucesso!`);
     } catch (err) {
       console.error(err);
       alert("Erro ao registrar ponto.");
@@ -246,7 +257,11 @@ const InstallerPortal = ({
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
               <Clock size={16} className="text-blue-400" /> 
-              {lastPoint ? `Último ponto: ${lastPoint.type === 'IN' ? 'Entrada' : 'Saída'} às ${new Date(lastPoint.timestamp).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}` : 'Nenhum ponto hoje'}
+              {lastPoint ? `Último ponto: ${
+                lastPoint.type === 'IN' ? 'Entrada' : 
+                lastPoint.type === 'OUT' ? 'Saída' : 
+                lastPoint.type === 'LUNCH_OUT' ? 'Saída Almoço' : 'Retorno Almoço'
+              } às ${new Date(lastPoint.timestamp).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}` : 'Nenhum ponto hoje'}
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full text-[10px] font-black uppercase">
               <div className={`w-2 h-2 rounded-full ${distanceToOffice !== null && distanceToOffice <= ALLOWED_RADIUS_METERS ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
@@ -254,25 +269,50 @@ const InstallerPortal = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              disabled={isLoading || (lastPoint?.type === 'IN')}
-              onClick={() => handleBaterPonto('IN')}
-              className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                lastPoint?.type === 'IN' ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white shadow-emerald-500/20'
-              } disabled:opacity-50`}
-            >
-              <CheckCircle2 size={16} /> Entrada
-            </button>
-            <button
-              disabled={isLoading || (lastPoint?.type === 'OUT' || !lastPoint)}
-              onClick={() => handleBaterPonto('OUT')}
-              className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                (lastPoint?.type === 'OUT' || !lastPoint) ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-rose-500 text-white shadow-rose-500/20'
-              } disabled:opacity-50`}
-            >
-              <LogOut size={16} /> Saída
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                disabled={isLoading || (lastPoint && lastPoint.type !== 'OUT' && lastPoint.type !== undefined)}
+                onClick={() => handleBaterPonto('IN')}
+                className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  (lastPoint && lastPoint.type !== 'OUT') ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white shadow-emerald-500/20'
+                } disabled:opacity-50`}
+              >
+                <CheckCircle2 size={16} /> Entrada
+              </button>
+              
+              <button
+                disabled={isLoading || (lastPoint?.type !== 'IN' && lastPoint?.type !== 'LUNCH_IN')}
+                onClick={() => handleBaterPonto('OUT')}
+                className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  (lastPoint?.type === 'IN' || lastPoint?.type === 'LUNCH_IN') ? 'bg-rose-500 text-white shadow-rose-500/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                } disabled:opacity-50`}
+              >
+                <LogOut size={16} /> Saída
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                disabled={isLoading || lastPoint?.type !== 'IN'}
+                onClick={() => handleBaterPonto('LUNCH_OUT')}
+                className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  lastPoint?.type === 'IN' ? 'bg-amber-500 text-white shadow-amber-500/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                } disabled:opacity-50`}
+              >
+                <Clock size={16} /> Almoço (Saída)
+              </button>
+              
+              <button
+                disabled={isLoading || lastPoint?.type !== 'LUNCH_OUT'}
+                onClick={() => handleBaterPonto('LUNCH_IN')}
+                className={`py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  lastPoint?.type === 'LUNCH_OUT' ? 'bg-blue-500 text-white shadow-blue-500/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                } disabled:opacity-50`}
+              >
+                <RotateCcw size={16} /> Almoço (Volta)
+              </button>
+            </div>
           </div>
           
         </div>

@@ -27,7 +27,8 @@ import {
   Printer,
   Wallet,
   CreditCard,
-  Target
+  Target,
+  RefreshCw
 } from 'lucide-react';
 import { Order, OrderStatus, Product, TechnicalSheet, Seller, Customer, MeasurementItem } from '../types';
 import OrderContractPrint from '../components/OrderContractPrint';

@@ -29,6 +29,7 @@ import SalesReport from './pages/SalesReport';
 import ApiConfig from './pages/ApiConfig';
 import InstallerPortal from './pages/InstallerPortal';
 import RawMaterialStock from './pages/RawMaterialStock';
+import IAManager from './pages/IAManager';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -774,6 +775,13 @@ const App = () => {
         return <ApiConfig />;
       case 'tarefas':
         return <Tasks currentUser={currentUser!} />;
+      case 'gerente-ia':
+        return <IAManager 
+          orders={orders} 
+          sellers={sellers} 
+          customers={customers} 
+          currentUser={currentUser!} 
+        />;
       default:
 
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;
