@@ -75,6 +75,7 @@ export interface Product {
   acessorio: boolean;
   detalhamento_tecnico?: string;
   dias_garantia: number;
+  priceFormula?: string; // New: Custom formula for price calculation
 }
 
 export interface Customer {
@@ -221,6 +222,7 @@ export interface Installment {
   paymentLink?: string; // Novo: URL de pagamento InfinitePay
   pixCopyPaste?: string; // Novo: Código PIX Copia e Cola
   paymentId?: string; // Novo: ID da transação na InfinitePay para reconciliação
+  cvCode?: string; // Novo: Código do Comprovante de Venda (Máquina física) para conciliação bancária
 }
 
 export interface Expense {

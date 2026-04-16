@@ -1,5 +1,9 @@
 import * as React from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
+import { Download } from 'lucide-react';
 import { Order, Customer, FinancialTransaction, AccountCategory, Product, Seller, TechnicalSheet } from '../types';
 import {
    Wallet,
@@ -49,6 +53,8 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
    const [searchTerm, setSearchTerm] = useState('');
    const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PAID'>('ALL');
    const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
+   const [dateFilterType, setDateFilterType] = useState<'due' | 'payment'>('due');
+   const reportRef = useRef<HTMLDivElement>(null);
    const [showTransactionModal, setShowTransactionModal] = useState(false);
    const [newTransaction, setNewTransaction] = useState<Partial<FinancialTransaction>>({
       type: 'EXPENSE',
@@ -163,11 +169,64 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
          const matchesSearch = inst.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             inst.orderId.toLowerCase().includes(searchTerm.toLowerCase());
          const matchesStatus = statusFilter === 'ALL' || inst.status === statusFilter;
-         const matchesDate = (!dateFilter.start || inst.dueDate >= dateFilter.start) &&
-            (!dateFilter.end || inst.dueDate <= dateFilter.end);
+         
+         // Fix for date matching: paymentDate can be ISO string, dueDate is YYYY-MM-DD
+         const dateToCompare = dateFilterType === 'due' 
+            ? inst.dueDate 
+            : (inst.paymentDate ? inst.paymentDate.split('T')[0] : null);
+
+         const matchesDate = !dateFilter.start || !dateFilter.end || (
+            dateToCompare && dateToCompare >= dateFilter.start && dateToCompare <= dateFilter.end
+         );
+
          return matchesSearch && matchesStatus && matchesDate;
       }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-   }, [orders, customers, searchTerm, statusFilter, dateFilter]);
+   }, [orders, customers, searchTerm, statusFilter, dateFilter, dateFilterType]);
+
+   const exportToExcel = () => {
+      const exportData = filteredInstallments.map(inst => {
+         const order = orders.find(o => o.id === inst.orderId);
+         return {
+            'Contrato': order?.contractNumber || inst.orderId.slice(0, 8),
+            'Cliente': inst.customerName,
+            'Vendedor': inst.sellerName,
+            'NFe': order?.nfeNumber || '--',
+            'Parcela': `${inst.installmentNumber}/${inst.totalInstallments}`,
+            'Vencimento': new Date(inst.dueDate).toLocaleDateString('pt-BR'),
+            'Pagamento': inst.paymentDate ? new Date(inst.paymentDate).toLocaleDateString('pt-BR') : '--',
+            'Valor': inst.value,
+            'Status': inst.status === 'PAID' ? 'Liquidado' : 'Pendente'
+         };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Contas a Receber");
+      XLSX.writeFile(wb, `Relatorio_Financeiro_${new Date().toISOString().split('T')[0]}.xlsx`);
+   };
+
+   const exportToPDF = () => {
+      if (!reportRef.current) return;
+      
+      const element = reportRef.current.cloneNode(true) as HTMLElement;
+      
+      // Customize for PDF
+      const pdfHeader = element.querySelector('.pdf-header');
+      if (pdfHeader) pdfHeader.classList.remove('hidden');
+
+      const noPdfElements = element.querySelectorAll('.no-pdf');
+      noPdfElements.forEach(el => (el as HTMLElement).style.display = 'none');
+
+      const opt = {
+         margin: 10,
+         filename: `Relatorio_Financeiro_${new Date().toISOString().split('T')[0]}.pdf`,
+         image: { type: 'jpeg' as const, quality: 0.98 },
+         html2canvas: { scale: 2, useCORS: true },
+         jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const }
+      };
+
+      html2pdf().set(opt).from(element).save();
+   };
 
    const financialStats = useMemo(() => {
       const confirmedReceivables = filteredInstallments.filter(i => i.status === 'PAID').reduce((acc, current) => acc + current.value, 0);
@@ -553,6 +612,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                      <tr className="bg-slate-50/50 border-b border-slate-200">
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagto</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
@@ -635,7 +695,20 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
    };
 
    return (
-      <div className="space-y-6">
+      <div className="space-y-6" ref={reportRef}>
+         {/* PDF Header - Visible only in PDF */}
+         <div className="pdf-header hidden mb-8 border-b-2 border-slate-900 pb-4">
+            <div className="flex justify-between items-end">
+               <div>
+                  <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">RTC</h1>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Toldos & Cortinas</p>
+               </div>
+               <div className="text-right">
+                  <h2 className="text-xl font-black text-slate-900">Relatório Financeiro</h2>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
+               </div>
+            </div>
+         </div>
          {/* Top Header */}
          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -656,11 +729,18 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                   Novo Lançamento
                </button>
                <button
-                  onClick={() => { }}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-white transition-all shadow-sm active:scale-95"
+                  onClick={exportToExcel}
+                  className="no-pdf flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+               >
+                  <Download size={18} />
+                  Excel
+               </button>
+               <button
+                  onClick={exportToPDF}
+                  className="no-pdf flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-500/20 active:scale-95"
                >
                   <Printer size={18} />
-                  Relatório
+                  PDF
                </button>
             </div>
          </div>
@@ -717,7 +797,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
          </div>
 
          {/* Filters */}
-         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+         <div className="no-pdf grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <div className="relative">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                <input
@@ -736,6 +816,14 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                <option value="ALL">Todos os status</option>
                <option value="PENDING">Pendentes</option>
                <option value="PAID">Liquidados</option>
+            </select>
+            <select
+               value={dateFilterType}
+               onChange={(e: any) => setDateFilterType(e.target.value)}
+               className="px-4 py-2 bg-blue-50 text-blue-700 border-none rounded-xl text-xs font-black focus:ring-2 focus:ring-blue-500 outline-none appearance-none uppercase tracking-tight"
+            >
+               <option value="due">Por Vencimento</option>
+               <option value="payment">Por Pagamento</option>
             </select>
             <input
                type="date"
@@ -772,6 +860,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                  />
                               </th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato / Cliente</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">NFe</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendedor</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Parcela</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Produção</th>
@@ -784,9 +873,11 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                            {filteredInstallments.length === 0 ? (
-                              <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
+                              <tr><td colSpan={12} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
                            ) : (
-                              filteredInstallments.map((inst, idx) => (
+                              filteredInstallments.map((inst, idx) => {
+                                 const order = orders.find(o => o.id === inst.orderId);
+                                 return (
                                  <tr 
                                     key={`${inst.orderId}-${idx}`} 
                                     className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(`${inst.orderId}-${inst.id}`) ? 'bg-blue-50/30' : ''}`}
@@ -804,15 +895,12 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                     <td className="px-6 py-4">
                                        <div className="flex items-center gap-2">
                                           <p className="text-sm font-black text-slate-900 leading-tight">
-                                             {(() => {
-                                                const order = orders.find(o => o.id === inst.orderId);
-                                                return order?.contractNumber 
-                                                   ? `${order.quoteNumber || order.id.slice(0, 8).toUpperCase()} / ${order.contractNumber}`
-                                                   : `Nº ${order?.quoteNumber || inst.orderId.slice(0, 8).toUpperCase()}`;
-                                             })()}
+                                             {order?.contractNumber 
+                                                ? `${order.quoteNumber || order.id.slice(0, 8).toUpperCase()} / ${order.contractNumber}`
+                                                : `Nº ${order?.quoteNumber || inst.orderId.slice(0, 8).toUpperCase()}`}
                                           </p>
                                           <button 
-                                             onClick={() => setViewOrder(orders.find(o => o.id === inst.orderId) || null)}
+                                             onClick={() => setViewOrder(order || null)}
                                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                              title="Ver Pedido Completo"
                                           >
@@ -849,6 +937,12 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                           </div>
                                        </div>
                                     </td>
+
+                                     <td className="px-6 py-4">
+                                        <span className={`text-xs font-black ${order?.nfeNumber ? 'text-blue-600' : 'text-slate-300'}`}>
+                                           {order?.nfeNumber || '--'}
+                                        </span>
+                                     </td>
                                     <td className="px-6 py-4">
                                        <p className="text-[11px] font-bold text-slate-700 truncate max-w-[120px]">{inst.sellerName}</p>
                                     </td>
@@ -858,12 +952,12 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                        </span>
                                     </td>
                                     <td className="px-4 py-4 text-center">
-                                       {orders.find(o => o.id === inst.orderId)?.productionStage ? (
+                                       {order?.productionStage ? (
                                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight
-                                             ${orders.find(o => o.id === inst.orderId)?.productionStage === 'Finalizado' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                               orders.find(o => o.id === inst.orderId)?.productionStage === 'Novos Pedidos' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                                             ${order.productionStage === 'Finalizado' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                               order.productionStage === 'Novos Pedidos' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
                                                'bg-orange-50 text-orange-600 border border-orange-100'}`}>
-                                             {orders.find(o => o.id === inst.orderId)?.productionStage}
+                                             {order.productionStage}
                                           </span>
                                        ) : (
                                           <span className="text-slate-300 text-[9px]">---</span>
@@ -871,11 +965,18 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                     </td>
                                     <td className="px-4 py-4 text-center">
                                        <div className="flex flex-col items-center">
-                                          <span className="text-[10px] font-bold text-slate-700">{orders.find(o => o.id === inst.orderId)?.installationDate ? new Date(orders.find(o => o.id === inst.orderId)!.installationDate!).toLocaleDateString('pt-BR') : '---'}</span>
+                                          <span className="text-[10px] font-bold text-slate-700">{order?.installationDate ? new Date(order.installationDate).toLocaleDateString('pt-BR') : '---'}</span>
                                        </div>
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                       {new Date(inst.dueDate) instanceof Date && !isNaN(new Date(inst.dueDate).getTime()) ? new Date(inst.dueDate).toLocaleDateString('pt-BR') : '---'}
+                                    <td className="px-6 py-4 text-sm text-slate-400 font-medium">
+                                       {new Date(inst.dueDate).toLocaleDateString('pt-BR')}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                       {inst.paymentDate ? (
+                                          <p className="text-sm text-emerald-600 font-black italic">{new Date(inst.paymentDate).toLocaleDateString('pt-BR')}</p>
+                                       ) : (
+                                          <span className="text-[10px] font-bold text-slate-300 uppercase italic">Pendente</span>
+                                       )}
                                     </td>
                                     <td className="px-6 py-4 text-sm font-black text-slate-900 text-right">
                                        R$ {inst.value?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -959,7 +1060,8 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                        </div>
                                     </td>
                                  </tr>
-                              ))
+                                 );
+                              })
                            )}
                         </tbody>
                      </table>

@@ -7,6 +7,7 @@ import { Order, Customer, TechnicalSheet, Product, OrderStatus, Installment, Mea
 import CustomerModal from '../components/CustomerModal';
 import { normalizeString } from '../utils/searchUtils';
 import { addBusinessDays } from '../utils/dateUtils';
+import { calculateProductPrice } from '../utils/priceCalculator';
 import {
   Search,
   Plus,
@@ -341,7 +342,8 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
           color: '',
           width: 0,
           height: 0,
-          price: product.valor
+          quantity: 1,
+          price: calculateProductPrice(product, { width: 0, height: 0, qty: 1 })
         }
       ]
     }));
@@ -941,8 +943,11 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     const product = products.find((p: Product) => p.id === item.productId);
     if (!product) return 0;
 
-    const area = (item.width * item.height) || 1;
-    const baseValue = product.unidade === 'M2' ? product.valor * area : product.valor;
+    const baseValue = calculateProductPrice(product, {
+      width: item.width,
+      height: item.height,
+      qty: item.quantity || 1
+    });
 
     // 3. Se o total da proposta foi ajustado globalmente (desconto/acréscimo) 
     // e ainda não temos preços por item definidos, aplique a proporção
@@ -1663,7 +1668,7 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                                   />
                                 </div>
 
-                                <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                                <div className="lg:col-span-5 grid grid-cols-3 gap-3">
                                   <div className="space-y-1">
                                     <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest pl-1">Largura (m)</label>
                                     <ThreeDecimalInput
@@ -1671,10 +1676,13 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                                       onChange={(val) => {
                                         const newItems = [...quoteFormData.items];
                                         newItems[idx].width = val;
-                                        // Recalcular preço se for M2
                                         const p = products.find(prod => prod.id === it.productId);
-                                        if (p?.unidade === 'M2') {
-                                          newItems[idx].price = p.valor * val * it.height;
+                                        if (p) {
+                                          newItems[idx].price = calculateProductPrice(p, {
+                                            width: val,
+                                            height: it.height,
+                                            qty: it.quantity || 1
+                                          });
                                         }
                                         setQuoteFormData(prev => ({ ...prev, items: newItems }));
                                       }}
@@ -1689,12 +1697,39 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
                                         const newItems = [...quoteFormData.items];
                                         newItems[idx].height = val;
                                         const p = products.find(prod => prod.id === it.productId);
-                                        if (p?.unidade === 'M2') {
-                                          newItems[idx].price = p.valor * val * it.width;
+                                        if (p) {
+                                          newItems[idx].price = calculateProductPrice(p, {
+                                            width: it.width,
+                                            height: val,
+                                            qty: it.quantity || 1
+                                          });
                                         }
                                         setQuoteFormData(prev => ({ ...prev, items: newItems }));
                                       }}
                                       className="w-full px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-center"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest pl-1">Qtd</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={it.quantity || 1}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 1;
+                                        const newItems = [...quoteFormData.items];
+                                        newItems[idx].quantity = val;
+                                        const p = products.find(prod => prod.id === it.productId);
+                                        if (p) {
+                                          newItems[idx].price = calculateProductPrice(p, {
+                                            width: it.width,
+                                            height: it.height,
+                                            qty: val
+                                          });
+                                        }
+                                        setQuoteFormData(prev => ({ ...prev, items: newItems }));
+                                      }}
+                                      className="w-full px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-center"
                                     />
                                   </div>
                                 </div>

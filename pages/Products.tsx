@@ -29,7 +29,8 @@ const Products = ({ products, onAdd, onUpdate, onDelete }: ProductsProps) => {
     cst: '',
     cest: '',
     cfop: '',
-    detalhamento_tecnico: ''
+    detalhamento_tecnico: '',
+    priceFormula: ''
   });
 
   const filteredProducts = products.filter(p =>
@@ -56,7 +57,8 @@ const Products = ({ products, onAdd, onUpdate, onDelete }: ProductsProps) => {
         cst: '',
         cest: '',
         cfop: '',
-        detalhamento_tecnico: ''
+        detalhamento_tecnico: '',
+        priceFormula: ''
       });
     }
     setShowModal(true);
@@ -281,6 +283,39 @@ const Products = ({ products, onAdd, onUpdate, onDelete }: ProductsProps) => {
                       onChange={(e) => setFormData({ ...formData, detalhamento_tecnico: e.target.value })}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                     />
+                  </div>
+                </div>
+
+                {/* Seção Cálculo de Preço Avançado */}
+                <div className="md:col-span-2 space-y-4">
+                  <h4 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-50 pb-2">Cálculo de Preço (Avançado)</h4>
+                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <label className="block text-xs font-bold text-amber-900 uppercase">Fórmula Customizada</label>
+                      <div className="group relative">
+                        <Info size={14} className="text-amber-500 cursor-help" />
+                        <div className="absolute bottom-full left-0 mb-2 w-72 p-3 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-[110] pointer-events-none">
+                          <p className="font-bold mb-1">Variáveis Disponíveis:</p>
+                          <ul className="list-disc pl-3 space-y-0.5 opacity-80">
+                            <li><strong>Larg</strong>: Largura digitada</li>
+                            <li><strong>Alt</strong>: Altura digitada</li>
+                            <li><strong>Qtd</strong>: Quantidade</li>
+                            <li><strong>Valor</strong>: Preço base acima</li>
+                          </ul>
+                          <p className="mt-2 text-amber-400">Ex: <code>((Larg+Alt)*2)*Valor</code></p>
+                        </div>
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Ex: ((Larg+Alt)*2)*Valor"
+                      value={formData.priceFormula}
+                      onChange={(e) => setFormData({ ...formData, priceFormula: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-white border border-amber-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-amber-500 outline-none shadow-inner"
+                    />
+                    <p className="text-[10px] text-amber-700 font-medium italic">
+                      Se preenchida, esta fórmula substituirá o cálculo padrão (M2 ou Unitário).
+                    </p>
                   </div>
                 </div>
 

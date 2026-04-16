@@ -767,6 +767,7 @@ const App = () => {
             products={products}
             customers={customers}
             technicalSheets={technicalSheets}
+            onUpdateOrder={handleUpdateOrder}
           />
         );
       case 'api-config':

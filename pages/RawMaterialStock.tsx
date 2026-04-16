@@ -20,8 +20,12 @@ import {
   CheckCircle2,
   Calendar,
   Truck,
-  FileText
+  FileText,
+  CloudDownload,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
+import { nfEmailService } from '../services/nfEmailService';
 
 interface RawMaterialStockProps {
   currentUser: SystemUser;
@@ -40,7 +44,10 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const [showXmlModal, setShowXmlModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showHistoryListModal, setShowHistoryListModal] = useState(false);
+  const [showCloudNfeModal, setShowCloudNfeModal] = useState(false);
   const [historyMovements, setHistoryMovements] = useState<RawMaterialMovement[]>([]);
+  const [receivedInvoices, setReceivedInvoices] = useState<any[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
   
   const [selectedMaterial, setSelectedMaterial] = useState<RawMaterial | null>(null);
   const [newMaterial, setNewMaterial] = useState<Partial<RawMaterial>>({
@@ -151,54 +158,79 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
     }
   };
 
-  const handleXmlUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setXmlFile(file);
-    
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const xmlText = event.target?.result as string;
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-      
-      // Extract Supplier & Invoice info
-      const supplierName = xmlDoc.getElementsByTagName("xNome")[0]?.textContent || '';
-      const invoiceNum = xmlDoc.getElementsByTagName("nNF")[0]?.textContent || '';
-      setXmlSupplier(supplierName);
-      setXmlInvoice(invoiceNum);
+  const handleUpdateItemMapping = (index: number, materialId: string) => {
+    const updatedData = [...xmlData];
+    updatedData[index].mappedMaterialId = materialId;
+    setXmlData(updatedData);
+  };
 
-      const products = xmlDoc.getElementsByTagName("det");
-      const items = [];
-      
-      for (let i = 0; i < products.length; i++) {
+  const processXmlContent = (xmlText: string) => {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+    
+    const supplierName = xmlDoc.getElementsByTagName("xNome")[0]?.textContent || '';
+    const invoiceNum = xmlDoc.getElementsByTagName("nNF")[0]?.textContent || '';
+    setXmlSupplier(supplierName);
+    setXmlInvoice(invoiceNum);
+
+    const products = xmlDoc.getElementsByTagName("det");
+    const items = [];
+    
+    for (let i = 0; i < products.length; i++) {
         const prod = products[i].getElementsByTagName("prod")[0];
         const name = prod.getElementsByTagName("xProd")[0]?.textContent || '';
         const qty = prod.getElementsByTagName("qCom")[0]?.textContent || '0';
         const unit = prod.getElementsByTagName("uCom")[0]?.textContent || 'UN';
         const code = prod.getElementsByTagName("cProd")[0]?.textContent || '';
         
-        // Mapeamento Inteligente
         const mappingMatch = mappings.find(m => m.xml_product_name === name);
         const nameMatch = materials.find(m => m.name.toLowerCase() === name.toLowerCase());
         
         items.push({ 
-          name, 
-          qty: Number(qty), 
-          unit, 
-          code,
-          mappedMaterialId: mappingMatch?.raw_material_id || nameMatch?.id || ''
+            name, 
+            qty: Number(qty), 
+            unit, 
+            code,
+            mappedMaterialId: mappingMatch?.raw_material_id || nameMatch?.id || ''
         });
-      }
-      setXmlData(items);
-    };
-    reader.readAsText(file);
+    }
+    setXmlData(items);
+    setShowXmlModal(true);
   };
 
-  const handleUpdateItemMapping = (index: number, materialId: string) => {
-    const updatedData = [...xmlData];
-    updatedData[index].mappedMaterialId = materialId;
-    setXmlData(updatedData);
+  const handleFetchCloudInvoices = async () => {
+    setLoadingInvoices(true);
+    setReceivedInvoices([]);
+    try {
+      const xmlResponse = await nfEmailService.listReceivedNFe();
+      const list = nfEmailService.parseNFeList(xmlResponse);
+      setReceivedInvoices(list);
+    } catch (error) {
+      alert("Erro ao buscar notas na nuvem. Verifique sua conexão ou configurações da API.");
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  const handleImportInvoiceFromCloud = async (key: string) => {
+    setLoadingInvoices(true);
+    try {
+      // 1. Tentar manifestar ciência (muitas vezes necessário para liberar o XML)
+      try {
+        await nfEmailService.manifestNFe(key, 'Ciencia');
+      } catch (e) {
+        console.warn("Provavelmente nota já manifestada:", e);
+      }
+
+      // 2. Buscar XML
+      const xmlText = await nfEmailService.getReceivedXML(key);
+      processXmlContent(xmlText);
+      setShowCloudNfeModal(false);
+    } catch (error) {
+      alert("Erro ao processar XML da nuvem: " + error);
+    } finally {
+      setLoadingInvoices(false);
+    }
   };
 
   const handleImportXmlItems = async () => {
@@ -261,10 +293,16 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
         </div>
         <div className="flex gap-3">
           <button 
+            onClick={() => { setShowCloudNfeModal(true); handleFetchCloudInvoices(); }}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-700 font-bold rounded-xl hover:bg-rose-100 transition-all border border-rose-100"
+          >
+            <CloudDownload size={18} /> Consultar Notas (Nuvem)
+          </button>
+          <button 
             onClick={() => setShowXmlModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100 transition-all border border-indigo-100"
           >
-            <FileUp size={18} /> Importar NFe (XML)
+            <FileUp size={18} /> Arquivo XML
           </button>
           <button 
             onClick={() => setShowAddModal(true)}
@@ -711,6 +749,102 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Consulta Cloud NFe */}
+      {showCloudNfeModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[85vh] shadow-2xl animate-in zoom-in duration-200 flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-rose-50/50">
+              <div>
+                <h3 className="text-xl font-black text-rose-900 flex items-center gap-2">
+                   <CloudDownload size={24} /> Notas Contra o CNPJ (SEFAZ/Nuvem)
+                </h3>
+                <p className="text-xs font-bold text-rose-400">Clique para manifestar e importar o estoque automaticamente de notas recebidas.</p>
+              </div>
+              <button 
+                onClick={() => setShowCloudNfeModal(false)} 
+                className="p-2 hover:bg-white rounded-full transition-colors"
+                disabled={loadingInvoices}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingInvoices ? (
+                <div className="h-64 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="animate-spin text-rose-600" size={48} />
+                  <p className="font-black text-slate-400 animate-pulse uppercase text-xs tracking-widest">Buscando notas recebidas na SEFAZ...</p>
+                </div>
+              ) : receivedInvoices.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-4">
+                  <AlertCircle size={48} />
+                  <p className="font-bold">Nenhuma nota encontrada contra seu CNPJ recentemente.</p>
+                  <button onClick={handleFetchCloudInvoices} className="text-rose-600 font-black flex items-center gap-2 underline">
+                    <RefreshCw size={16} /> Tentar novamente
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest">
+                      <tr>
+                        <th className="px-6 py-4">Data Emissão</th>
+                        <th className="px-6 py-4">Nota / Série</th>
+                        <th className="px-6 py-4">Fornecedor (Emitente)</th>
+                        <th className="px-6 py-4 text-right">Valor Total</th>
+                        <th className="px-6 py-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {receivedInvoices.map((nfe: any) => (
+                        <tr key={nfe.key} className="hover:bg-slate-50 transition-colors group">
+                          <td className="px-6 py-4">
+                             <div className="text-xs font-bold text-slate-700">
+                                {nfe.date ? new Date(nfe.date).toLocaleDateString('pt-BR') : 'N/A'}
+                             </div>
+                          </td>
+                          <td className="px-6 py-4">
+                             <div className="flex flex-col">
+                                <span className="text-sm font-black text-slate-900"># {nfe.number}</span>
+                                <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter truncate w-32" title={nfe.key}>{nfe.key}</span>
+                             </div>
+                          </td>
+                          <td className="px-6 py-4">
+                             <div className="text-xs font-black text-slate-700 uppercase">{nfe.customerName}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                             <div className="text-sm font-black text-emerald-600">R$ {parseFloat(nfe.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                             <button 
+                                onClick={() => handleImportInvoiceFromCloud(nfe.key)}
+                                className="px-4 py-2 bg-rose-600 text-white text-xs font-black rounded-xl hover:bg-rose-700 transition-all shadow-md active:scale-95"
+                             >
+                                IMPORTAR
+                             </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+               <p className="text-[10px] text-slate-400 font-black uppercase max-w-sm">
+                 Ao importar, o sistema realizará a ciência da operação na SEFAZ automaticamente.
+               </p>
+               <button 
+                 onClick={() => setShowCloudNfeModal(false)} 
+                 className="px-8 py-2 bg-slate-200 text-slate-700 font-black rounded-xl hover:bg-slate-300 transition-all active:scale-95"
+               >
+                 Fechar
+               </button>
             </div>
           </div>
         </div>

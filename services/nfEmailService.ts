@@ -379,5 +379,62 @@ export const nfEmailService = {
             throw new Error(`Erro ao enviar CC-e (${response.status}): ${responseText}`);
         }
         return responseText;
+    },
+
+    async listReceivedNFe(page: number = 1, limit: number = 20) {
+        const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
+        const apiUrl = `/api/nfemail?path=NotasFiscais/Recebidas&page=${page}&limit=${limit}`;
+
+        const response = await fetch(apiUrl, {
+            headers: { "Authorization": authHeader }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erro ao listar notas recebidas (${response.status})`);
+        }
+
+        return await response.text();
+    },
+
+    async getReceivedXML(key: string) {
+        const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
+        // Endpoint provável para XML de nota de entrada
+        const apiUrl = `/api/nfemail?path=Xml/Recebida&chave=${key}`;
+
+        const response = await fetch(apiUrl, {
+            headers: { "Authorization": authHeader }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erro ao baixar XML de entrada (${response.status})`);
+        }
+
+        return await response.text();
+    },
+
+    async manifestNFe(key: string, type: string = 'Ciencia') {
+        const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
+        const apiUrl = `/api/nfemail?path=NotasFiscais/Recebidas/Manifestar`;
+
+        const payload = {
+            nfe_chave: key,
+            tipo_manifesto: type // Ciencia, Confirmacao, Desconhecimento, NaoRealizada
+        };
+
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": authHeader
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Erro ao manifestar nota (${response.status}): ${errorText}`);
+        }
+
+        return await response.text();
     }
 };

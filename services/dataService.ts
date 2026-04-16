@@ -58,7 +58,10 @@ export const dataService = {
             const { data, error } = await supabase.from('products').select('*');
             if (error) throw error;
             localStorage.setItem('rtc_cache_products', JSON.stringify(data));
-            return data as Product[];
+            return (data || []).map(p => ({
+                ...p,
+                priceFormula: p.price_formula
+            })) as Product[];
         } catch (error) {
             console.error('Offline Mode: Usando cache de produtos local');
             const cached = localStorage.getItem('rtc_cache_products');
@@ -67,7 +70,14 @@ export const dataService = {
         }
     },
     async saveProduct(product: Product) {
-        const { data, error } = await supabase.from('products').upsert(product).select().single();
+        const payload = {
+            ...product,
+            price_formula: product.priceFormula
+        };
+        // Remove camelCase version to avoid errors with Supabase
+        delete (payload as any).priceFormula;
+
+        const { data, error } = await supabase.from('products').upsert(payload).select().single();
         if (error) throw error;
         return data as Product;
     },

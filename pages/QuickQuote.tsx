@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useState, useMemo } from 'react';
 import { Product } from '../types';
 import { normalizeString, fuzzyMatch } from '../utils/searchUtils';
+import { calculateProductPrice } from '../utils/priceCalculator';
 import ThreeDecimalInput from '../components/ThreeDecimalInput';
 import {
   Search,
@@ -68,10 +69,11 @@ const QuickQuote = ({ products }: QuickQuoteProps) => {
   };
 
   const calculateItemTotal = (item: QuoteItem) => {
-    if (item.product.unidade === 'M2') {
-      return item.product.valor * item.width * item.height * item.qty;
-    }
-    return item.product.valor * item.qty;
+    return calculateProductPrice(item.product, {
+      width: item.width,
+      height: item.height,
+      qty: item.qty
+    });
   };
 
   const totalQuote = quoteItems.reduce((acc, curr) => acc + calculateItemTotal(curr), 0);

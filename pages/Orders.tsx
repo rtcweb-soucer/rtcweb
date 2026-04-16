@@ -60,6 +60,8 @@ interface OrdersProps {
   onClearInitialOrder?: () => void;
 }
 
+import OrderContractPrint from '../components/OrderContractPrint';
+
 
 const Orders = ({
   orders,
@@ -83,6 +85,8 @@ const Orders = ({
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [showCustomerChangeModal, setShowCustomerChangeModal] = useState(false);
   const [searchTermCustomers, setSearchTermCustomers] = useState('');
+  const [showCVModal, setShowCVModal] = useState(false);
+  const [cvInputs, setCvInputs] = useState<Record<string, string>>({});
 
   const handleCopyValue = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -882,296 +886,36 @@ const Orders = ({
             <button onClick={() => handleGeneratePrint(true)} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
               <Printer size={18} /> Imprimir / PDF
             </button>
+            <button 
+              onClick={() => {
+                const initialInputs: Record<string, string> = {};
+                selectedOrder.installments?.forEach(inst => {
+                  initialInputs[inst.id] = inst.cvCode || '';
+                });
+                setCvInputs(initialInputs);
+                setShowCVModal(true);
+              }} 
+              className="flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-sm font-bold hover:bg-rose-100 transition-all shadow-sm active:scale-95"
+            >
+              <DocIcon size={18} /> Informar CV
+            </button>
           </div>
         </div>
 
         {/* Layout de Pedido (Visível na tela e usado para Impressão) */}
-        <div ref={printRef} className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 print:shadow-none print:border-none print:m-0 print:rounded-none">
-          <thead>
-            <tr>
-              <td>
-                <div className="pb-4 mb-4 bg-white border-b-2 border-slate-100 flex justify-between items-start gap-8">
-                  <div className="flex items-center gap-4">
-                    <div className="h-16 w-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
-                      <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="logo-img object-contain" />
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Contrato de Venda</h1>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">
-                          {selectedOrder.contractNumber
-                            ? `${selectedOrder.quoteNumber || selectedOrder.id} / ${selectedOrder.contractNumber}`
-                            : `Nº ${selectedOrder.quoteNumber || selectedOrder.id}`}
-                        </span>
-                        <span className="text-slate-400 font-medium text-[9px]">Data: {new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <div className="mt-2 flex items-center gap-1.5 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded-md w-fit">
-                        <span className="text-[8px] font-black text-yellow-700 uppercase tracking-widest">Consultor:</span>
-                        <span className="text-[10px] font-black text-slate-900 uppercase">{sellers.find(s => s.id === selectedOrder.sellerId)?.name || 'NÃO DEFINIDO'}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right space-y-0">
-                    <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
-                    <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
-                    <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
-                    <p className="text-[9px] text-slate-500 font-medium">(21) 4062-7090 | (21) 2201-8118</p>
-                    <p className="text-[9px] text-emerald-600 font-bold">WhatsApp: (21) 97078-9399 / (21) 96433-4539</p>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr>
-              <td>
-                <div className="p-4 space-y-4">
-                  {/* Info do Cliente */}
-                  <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                    <div className="grid grid-cols-6 gap-x-6 gap-y-2">
-                      <div className="col-span-3">
-                        <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Contratante</p>
-                        <p className="text-xs font-bold text-slate-900">{selectedCustomer.name}</p>
-                        {selectedCustomer.tradeName && (
-                          <p className="text-[9px] text-slate-500 font-medium font-italic">({selectedCustomer.tradeName})</p>
-                        )}
-                      </div>
-                      <div className="col-span-1">
-                        <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Documento</p>
-                        <p className="text-xs font-bold text-slate-900">{selectedCustomer.document}</p>
-                      </div>
-                      <div className="col-span-2 text-right">
-                        <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Telefone</p>
-                        <p className="text-xs font-bold text-slate-900">{selectedCustomer.phone}{selectedCustomer.phone2 ? ` / ${selectedCustomer.phone2}` : ''}</p>
-                      </div>
-
-                      <div className="col-span-3">
-                        <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Endereço de Instalação</p>
-                        <p className="text-xs font-bold text-slate-900">
-                          {selectedCustomer.address.street}, {selectedCustomer.address.number}
-                          {selectedCustomer.address.complement ? ` - ${selectedCustomer.address.complement}` : ''}
-                        </p>
-                        <p className="text-[9px] text-slate-500 font-medium">{selectedCustomer.address.neighborhood} - {selectedCustomer.address.city}/{selectedCustomer.address.state}</p>
-                      </div>
-                      <div className="col-span-1">
-                        <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">CEP</p>
-                        <p className="text-xs font-bold text-slate-900">{selectedCustomer.address.cep}</p>
-                      </div>
-                      <div className="col-span-2 text-right">
-                        <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">E-mail</p>
-                        <p className="text-xs font-bold text-slate-900 truncate">{selectedCustomer.email}</p>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Itens do Pedido */}
-                  <section>
-                    <h2 className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5 underline decoration-blue-500/30 underline-offset-4">
-                      <Layers size={10} className="text-blue-500" /> Detalhamento dos Itens Contratados
-                    </h2>
-                    <div className="overflow-hidden rounded-xl border border-slate-200">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-900 text-white">
-                          <tr>
-                            <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '8%' }}>Ambiente</th>
-                            <th className="px-3 py-1.5 text-[8px] font-black uppercase" style={{ width: '43%' }}>Descrição do Produto</th>
-                            <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center" style={{ width: '10%' }}>Cor</th>
-                            <th className="px-3 py-1.5 text-[8px] font-black uppercase text-center" style={{ width: '21%' }}>Medida (L x A)</th>
-                            <th className="px-3 py-1.5 text-[8px] font-black uppercase text-right" style={{ width: '18%' }}>Subtotal</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {orderItems.map((item: MeasurementItem) => (
-                            <tr key={item.id}>
-                              <td className="px-3 py-1.5 text-xs font-bold text-slate-900">{item.environment}</td>
-                              <td className="px-3 py-1.5 text-xs text-slate-700 font-medium">{products.find((p: Product) => p.id === item.productId)?.nome || 'Item Personalizado'}</td>
-                              <td className="px-3 py-1.5 text-xs text-center text-slate-600 italic">{item.color || '-'}</td>
-                              <td className="px-3 py-1.5 text-xs text-center font-mono font-bold text-blue-600">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
-                              <td className="px-3 py-1.5 text-xs text-right font-black text-slate-900 whitespace-nowrap">R$ {(calculateItemPrice(item) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="bg-slate-50">
-                          <tr>
-                            <td colSpan={4} className="px-4 py-3 text-right text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor Total do Pedido</td>
-                            <td className="px-4 py-3 text-right text-sm font-black text-slate-900 whitespace-nowrap">R$ {(selectedOrder.totalValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </section>
-
-                  {/* Financeiro e Prazos */}
-                  <div className="w-full">
-                    <section className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60 gap-4">
-                        <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <CreditCardIcon size={12} className="text-blue-500" /> Condições de Pagamento
-                        </h4>
-                        
-                        {/* Botão MESTRE Gerador de LINK ÚNICO */}
-                        {selectedOrder.installments && selectedOrder.installments.some((i: any) => i.status !== 'PAID') && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleGenerateMasterPayment(selectedOrder); }}
-                            disabled={isGenerating === `master-${selectedOrder.id}`}
-                            className="print:hidden text-[9px] flex items-center gap-1.5 bg-blue-600 text-white font-black uppercase px-3 py-1.5 rounded-lg shadow-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
-                            title="Gerar Link de Pagamento Completo (Cartão)"
-                          >
-                            {isGenerating === `master-${selectedOrder.id}` ? <RefreshCw size={12} className="animate-spin" /> : <CreditCardIcon size={12} />}
-                            Link Único (Restante)
-                          </button>
-                        )}
-                      </div>
-
-                      {selectedOrder.installments && selectedOrder.installments.length > 0 && (
-                        <div className="space-y-1 list-none mb-4">
-                          <div className="px-3 flex justify-between text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">
-                            <div className="flex gap-4">
-                              <span className="w-16 text-center">Nº Parcela</span>
-                              <span>Forma de Pagamento</span>
-                            </div>
-                            <div className="flex gap-10">
-                              <span className="w-16 text-right">Vencimento</span>
-                              <span className="w-20 text-right">Valor</span>
-                            </div>
-                          </div>
-                          {selectedOrder.installments.map((inst, idx, arr) => (
-                            <div key={inst.id} className="py-2 px-3 bg-white border border-slate-100 rounded-lg flex items-center justify-between text-[9px] uppercase group hover:border-blue-200 transition-colors">
-                              <div className="flex items-center gap-4">
-                                <span className="font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[8px] w-16 text-center">{inst.number}/{arr.length}</span>
-                                <div className="flex flex-col">
-                                   <span className="font-bold text-slate-600 truncate max-w-[150px]">{inst.paymentMethod || 'Espécie'}</span>
-                                   {inst.status === 'PAID' ? (
-                                      <span className="text-[7px] font-black text-emerald-600">LIQUIDADO</span>
-                                   ) : (
-                                      <span className="text-[7px] font-black text-amber-500 text-left">PENDENTE</span>
-                                   )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-6">
-                                <div className="no-print flex items-center gap-1">
-                                   {inst.status !== 'PAID' && (
-                                      <>
-                                         {!inst.paymentLink && !inst.pixCopyPaste ? (
-                                            (inst.paymentMethod?.toUpperCase().includes('PIX')) && (
-                                               <button
-                                                  onClick={() => handleGeneratePaymentForInstallment(inst, selectedOrder)}
-                                                  disabled={isGenerating === `${selectedOrder.id}-${inst.id}`}
-                                                  className="text-[8px] font-black uppercase tracking-tight px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded hover:bg-emerald-100 disabled:opacity-50"
-                                               >
-                                                  {isGenerating === `${selectedOrder.id}-${inst.id}` ? '...' : 'Gerar PIX individual'}
-                                               </button>
-                                            )
-                                         ) : (
-                                            <div className="flex items-center gap-1">
-                                               <button onClick={() => handleCopyValue(inst.pixCopyPaste || inst.paymentLink || '')} className="p-1 text-slate-400 hover:text-blue-600 bg-slate-50 rounded" title="Copiar"><Copy size={10} /></button>
-                                               <button onClick={() => handleWhatsAppManualShare(inst, selectedOrder)} className="p-1 text-slate-400 hover:text-emerald-600 bg-slate-50 rounded" title="Enviar WhatsApp"><MessageCircle size={10} /></button>
-                                            </div>
-                                         )}
-                                      </>
-                                   )}
-                                </div>
-                                <div className="flex flex-col items-end w-16">
-                                  <span className="font-black text-slate-900 leading-tight d-block">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
-                                </div>
-                                <div className="flex flex-col items-end min-w-[80px]">
-                                  <span className="font-black text-blue-700 leading-tight">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Observações e Condições */}
-                      <div className="space-y-2">
-                        {selectedOrder.paymentConditions && (
-                          <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
-                            <h4 className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-1 flex items-center gap-1">
-                              <CreditCardIcon size={10} /> Observações de Pagamento
-                            </h4>
-                            <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{selectedOrder.paymentConditions}</p>
-                          </div>
-                        )}
-
-                        {selectedOrder.contractObservations && (
-                          <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                            <h4 className="text-[8px] font-black text-amber-600 uppercase tracking-widest mb-1 flex items-center gap-1">
-                              <Info size={10} /> Observações do Contrato
-                            </h4>
-                            <p className="text-[9px] font-bold text-slate-700 whitespace-pre-wrap">{selectedOrder.contractObservations}</p>
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  </div>
-
-                  {/* Contract Clauses */}
-                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
-                    <h3 className="text-[9px] font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2">Cláusulas Contratuais</h3>
-
-                    <div className="grid grid-cols-1 gap-4 text-[7.5px] text-slate-500 leading-relaxed text-justify px-2">
-                      <div>
-                        <p className="font-black text-slate-700 mb-1 uppercase tracking-wider">DA ENTREGA E INSTALAÇÃO:</p>
-                        <p>O prazo de entrega será de <span className="font-black text-slate-900">{(selectedOrder.deliveryDays || 25)} dias úteis</span> para os Produtos Contratados, definido a partir do primeiro pagamento efetuado a CONTRATADA. Prazo contado a partir do 1º dia útil após o pagamento efetuado e comprovado. Havendo ausência de pagamento o prazo será suspenso e remarcado após a comprovação dos pagamentos. Os pagamentos efetuados por depósito ou transferências deverão ser comprovados pela CONTRATANTE sob pena de não serem reconhecidos. O prazo acima definido está sujeito a alteração mediante a condições especiais como clima, chuvas intensas e etc.</p>
-                      </div>
-
-                      <div>
-                        <p className="font-black text-slate-700 mb-1 uppercase tracking-wider">DA GARANTIA:</p>
-                        <p>Os Produtos e seus componentes, acessórios e os complementos que deles fazem parte, descritos neste Contrato e seus anexos, têm garantia contra defeitos de fabricação de <span className="font-black text-slate-900">01 ano (já inclusa a garantia legal)</span>, estabelecida pela CONTRATADA e por seus fornecedores, de acordo com o disposto no art. 26, inciso II, da Lei 8.078 (CDC), a partir da entrega ou disponibilização dos produtos.</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="font-black text-slate-700 mb-1 uppercase italic tracking-wider">A garantia ficará automaticamente cancelada se:</p>
-                          <p>1ª- Houver danos por mau uso, manuseio ou remoção das embalagens inadequadamente por pessoal não autorizado; 2ª- Ajustes forem executados por terceiros inabilitados; 3ª- Houver problemas estruturais nos locais de fixação (paredes, lajes). É responsabilidade da CONTRATANTE providenciar os reforços necessários; 4ª- Intempéries naturais causarem danos. Nestes casos a CONTRATADA prestará suporte mediante nova proposta de custos.</p>
-                        </div>
-                        <div>
-                          <p className="font-black text-slate-700 mb-1 uppercase tracking-wider">DEMAIS CLÁUSULAS:</p>
-                          <div className="space-y-1">
-                            <p>a) A CONTRATANTE confirma as medidas, cores e modelos detalhados no item de especificações deste contrato.</p>
-                            <p>b) A fabricação observará o planejamento de produção conduzido pela CONTRATADA para atender ao prazo estipulado.</p>
-                            <p>c) No caso de desistência a CONTRATANTE se obriga a arcar com o valor de 30% do valor do contrato para custos de material sob medida e administração.</p>
-                            <p>d) O comprador obriga-se a pagar pela compra a importância lançada no item de valor total deste contrato.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-
-          <tfoot>
-            <tr>
-              <td>
-                <div className="p-8 bg-white">
-                  <div className="flex justify-between items-end gap-12">
-                    <div className="flex-1 text-center">
-                      <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
-                      <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">Assinatura do Cliente</p>
-                    </div>
-                    <div className="flex-1 text-center flex flex-col items-center">
-                      <img
-                        src="/signature.png"
-                        alt="Assinatura RTC"
-                        className="h-10 mb-[-10px] z-10"
-                        style={{ mixBlendMode: 'multiply' }}
-                      />
-                      <div className="h-0.5 w-full bg-slate-900 mb-2 opacity-30"></div>
-                      <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">RTC TOLDOS E COBERTURAS LTDA</p>
-                    </div>
-                  </div>
-                  <div className="mt-8 bg-slate-900 py-3 text-center rounded-xl">
-                    <p className="text-[7px] text-white/30 uppercase font-black tracking-[0.4em]">RTC DECOR • QUALIDADE E EXCELÊNCIA EM RIO DE JANEIRO</p>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tfoot>
-        </div>
+        <OrderContractPrint 
+          ref={printRef}
+          order={selectedOrder}
+          customers={customers}
+          sellers={sellers}
+          products={products}
+          technicalSheets={technicalSheets}
+          showActions={true}
+          isGenerating={isGenerating}
+          onGeneratePayment={handleGeneratePaymentForInstallment}
+          onWhatsAppShare={handleWhatsAppManualShare}
+          onCopyValue={handleCopyValue}
+        />
 
 
 
@@ -1509,7 +1253,7 @@ const Orders = ({
                           
                           {/* Quick Payment Action */}
                           {(() => {
-                             const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX')));
+                             const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase() === 'PIX'));
                              if (!firstPending) return null;
                              
                              if (firstPending.paymentLink || firstPending.pixCopyPaste) {
@@ -1612,7 +1356,7 @@ const Orders = ({
                       <div className="flex items-center gap-2">
                         {/* Quick Payment Action Mobile */}
                         {(() => {
-                           const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase().includes('PIX')));
+                           const firstPending = order.installments?.find(i => i.status !== 'PAID' && (i.paymentMethod?.toUpperCase() === 'PIX'));
                            if (!firstPending) return null;
                            
                            if (firstPending.paymentLink || firstPending.pixCopyPaste) {
@@ -1844,6 +1588,82 @@ const Orders = ({
               >
                 {isProcessingAction ? <RefreshCw size={18} className="animate-spin" /> : <SendHorizontal size={18} />}
                 Enviar Correção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Informar CV */}
+      {showCVModal && selectedOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-600 text-white rounded-xl shadow-lg">
+                  <DocIcon size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900">Informar CV</h3>
+                  <p className="text-xs text-slate-500">Contrato Nº {selectedOrder.contractNumber || selectedOrder.id}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCVModal(false)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 text-amber-700">
+                <Info size={20} className="shrink-0" />
+                <p className="text-xs font-medium">Informe o código CV (Comprovante de Venda) da maquininha para cada parcela paga fisicamente.</p>
+              </div>
+              
+              <div className="space-y-3">
+                {selectedOrder.installments?.map((inst, idx) => (
+                  <div key={inst.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center px-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Parcela {inst.number} - R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      {inst.status === 'PAID' && <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">PAGA</span>}
+                    </div>
+                    <input
+                      type="text"
+                      value={cvInputs[inst.id] || ''}
+                      onChange={(e) => setCvInputs({ ...cvInputs, [inst.id]: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                      placeholder="Digite o código CV..."
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setShowCVModal(false)}
+                className="flex-1 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  setIsProcessingAction(true);
+                  try {
+                    const updatedInstallments = selectedOrder.installments?.map(inst => ({
+                      ...inst,
+                      cvCode: cvInputs[inst.id]
+                    }));
+                    await onUpdateOrder({ ...selectedOrder, installments: updatedInstallments });
+                    setShowCVModal(false);
+                  } catch (e: any) {
+                    alert("Erro ao salvar CVs: " + e.message);
+                  } finally {
+                    setIsProcessingAction(false);
+                  }
+                }}
+                disabled={isProcessingAction}
+                className="flex-[2] py-3 bg-rose-600 text-white rounded-2xl text-sm font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-500/20 flex items-center justify-center gap-2"
+              >
+                {isProcessingAction ? <RefreshCw size={18} className="animate-spin" /> : <Check size={18} />}
+                Salvar Códigos
               </button>
             </div>
           </div>
