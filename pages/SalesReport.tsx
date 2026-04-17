@@ -28,7 +28,8 @@ import {
   Wallet,
   CreditCard,
   Target,
-  RefreshCw
+  RefreshCw,
+  Edit2
 } from 'lucide-react';
 import { Order, OrderStatus, Product, TechnicalSheet, Seller, Customer, MeasurementItem } from '../types';
 import OrderContractPrint from '../components/OrderContractPrint';
@@ -68,6 +69,11 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
     not_found: any[],
     already_paid: any[]
   }>({ matches: [], not_found: [], already_paid: [] });
+  const [editingPaymentDate, setEditingPaymentDate] = useState<{
+    orderId: string;
+    installmentId: string;
+    currentDate: string;
+  } | null>(null);
 
   const handlePrintOrder = () => {
     if (!printRef.current) return;
@@ -82,6 +88,30 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
     };
 
     html2pdf().from(element).set(opt).save();
+  };
+
+  const handleUpdatePaymentDate = async (orderId: string, installmentId: string, newDate: string) => {
+    if (!onUpdateOrder) {
+      alert("Erro: Função de atualização não disponível.");
+      return;
+    }
+
+    try {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      const updatedInstallments = order.installments?.map(inst => {
+        if (inst.id === installmentId) {
+          return { ...inst, paymentDate: newDate };
+        }
+        return inst;
+      });
+
+      await onUpdateOrder({ ...order, installments: updatedInstallments });
+      setEditingPaymentDate(null);
+    } catch (err: any) {
+      alert("Erro ao atualizar data: " + err.message);
+    }
   };
 
   const reportData = useMemo(() => {
@@ -200,38 +230,37 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
       const installments = order.installments || [];
       
       installments.forEach(inst => {
+        const vlrPago = inst.status === 'PAID' ? (inst.netValue ?? inst.value) : 0;
+        const jurosLocal = inst.status === 'PAID' ? (vlrPago - inst.value) : 0;
+
         data.push({
           cliente: customer?.name || 'N/D',
+          linkId: order.id,
           contrato: order.contractNumber || order.id.slice(0, 8),
           nf: order.nfeNumber || inst.nfe || '--',
-          dataNF: order.createdAt, // Usando creation date como data NF se não houver campo específico
+          dataNF: order.createdAt,
           vlrTotalNF: order.totalValue,
           parcela: `${String(inst.number).padStart(2, '0')}/${String(installments.length).padStart(2, '0')}`,
           vlrParcela: inst.value,
           vencimento: inst.dueDate,
           dtPagto: inst.paymentDate,
           status: inst.status,
-          valorPago: inst.status === 'PAID' ? inst.value : 0,
-          // Placeholders solicitados na imagem mas não presentes no banco
+          valorPago: vlrPago,
           descontos: 0,
-          juros: 0,
-          banco: 'Itaú - RTC', // Placeholder conforme imagem
-          conta: '16083-6',    // Placeholder conforme imagem
-          orderId: order.id     // Necessário para o link do modal
+          juros: jurosLocal,
+          banco: 'Itaú - RTC',
+          conta: '16083-6',
+          orderId: order.id,
+          installmentId: inst.id
         });
       });
     });
 
     return data.sort((a, b) => {
-      // Primeiro agrupar por data da NF (pedido) de forma decrescente (mais recentes primeiro)
-      const dateA = new Date(a.dataNF).getTime();
-      const dateB = new Date(b.dataNF).getTime();
-      if (dateB !== dateA) return dateB - dateA;
+      // Primeiro agrupar pelo contrato de forma decrescente (mais novos no topo)
+      if (b.contrato !== a.contrato) return b.contrato.localeCompare(a.contrato);
       
-      // Se for a mesma data, agrupar pelo contrato
-      if (a.contrato !== b.contrato) return a.contrato.localeCompare(b.contrato);
-      
-      // Por fim, ordenar as parcelas (01/02, 02/02, etc)
+      // Depois ordenar as parcelas (01/02, 02/02, etc) dentro do contrato de forma crescente
       return a.parcela.localeCompare(b.parcela);
     });
   }, [reportData, customers]);
@@ -278,8 +307,8 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
           'Vlr. Total NF': row.vlrTotalNF,
           'Parcela': row.parcela,
           'Vlr Parcela': row.vlrParcela,
-          'Vencimento': new Date(row.vencimento).toLocaleDateString(),
-          'Dt. Pagto.': row.dtPagto ? new Date(row.dtPagto).toLocaleDateString() : '-',
+          'Vencimento': new Date(row.vencimento + 'T12:00:00').toLocaleDateString(),
+          'Dt. Pagto.': row.dtPagto ? new Date(row.dtPagto.split('T')[0] + 'T12:00:00').toLocaleDateString() : '-',
           'Descontos': row.descontos,
           'Juros': row.juros,
           'Valor Pago': row.valorPago,
@@ -1014,16 +1043,59 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-900 font-black">R$ {row.vlrParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                                <td className="px-4 py-3 text-slate-600">{new Date(row.vencimento).toLocaleDateString()}</td>
-                                <td className="px-4 py-3 font-black italic">
-                                    {row.dtPagto ? (
-                                        <span className="text-emerald-600">{new Date(row.dtPagto).toLocaleDateString()}</span>
+                                <td className="px-4 py-3 text-slate-600">{new Date(row.vencimento + 'T12:00:00').toLocaleDateString()}</td>
+                                <td className="px-4 py-3 font-black text-[10px]">
+                                    {editingPaymentDate?.installmentId === row.installmentId ? (
+                                        <div className="flex items-center gap-1">
+                                            <input 
+                                                type="date"
+                                                value={editingPaymentDate.currentDate}
+                                                onChange={(e) => setEditingPaymentDate({ ...editingPaymentDate, currentDate: e.target.value })}
+                                                className="px-1 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] outline-none focus:ring-1 focus:ring-blue-500"
+                                            />
+                                            <button 
+                                                onClick={() => handleUpdatePaymentDate(row.orderId, row.installmentId, editingPaymentDate.currentDate)}
+                                                className="p-1 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200"
+                                                title="Confirmar"
+                                            >
+                                                <Check size={10} />
+                                            </button>
+                                            <button 
+                                                onClick={() => setEditingPaymentDate(null)}
+                                                className="p-1 bg-rose-100 text-rose-600 rounded hover:bg-rose-200"
+                                                title="Cancelar"
+                                            >
+                                                <X size={10} />
+                                            </button>
+                                        </div>
                                     ) : (
-                                        <span className="text-slate-300 font-normal">--/--/----</span>
+                                        <div className="flex items-center gap-2">
+                                            {row.dtPagto ? (
+                                                <span className="text-emerald-600 font-bold italic">{new Date(row.dtPagto.split('T')[0] + 'T12:00:00').toLocaleDateString()}</span>
+                                            ) : (
+                                                <span className="text-slate-300 font-normal">--/--/----</span>
+                                            )}
+                                            <button 
+                                                onClick={() => setEditingPaymentDate({ orderId: row.orderId, installmentId: row.installmentId, currentDate: row.dtPagto || '' })}
+                                                className="flex items-center gap-1 p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all border border-blue-100 ml-1"
+                                                title="Editar Data de Pagamento"
+                                            >
+                                                <Edit2 size={14} />
+                                                <span className="text-[9px] font-black uppercase tracking-tighter">MUDAR</span>
+                                            </button>
+                                        </div>
                                     )}
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-400">{row.descontos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                                <td className="px-4 py-3 text-right text-slate-400">{row.juros.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                <td className="px-4 py-3 text-right text-slate-900 font-bold">
+                                    {row.juros !== 0 ? (
+                                        <span className={row.juros > 0 ? 'text-blue-600' : 'text-rose-600'}>
+                                            {row.juros.toLocaleString('pt-BR', { minimumFractionDigits: 2, signDisplay: 'always' })}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400">0,00</span>
+                                    )}
+                                </td>
                                 <td className="px-4 py-3 text-right text-emerald-600 font-black italic">
                                     {row.valorPago > 0 ? `R$ ${row.valorPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
                                 </td>

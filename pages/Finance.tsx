@@ -32,7 +32,8 @@ import {
    Copy,
    ExternalLink,
    Check,
-   Phone
+   Phone,
+   Edit2
 } from 'lucide-react';
 
 interface FinanceProps {
@@ -81,6 +82,11 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
    });
    const [isSincronizing, setIsSincronizing] = useState<string | null>(null);
    const [isGenerating, setIsGenerating] = useState<string | null>(null);
+   const [editingPaymentDate, setEditingPaymentDate] = useState<{
+      orderId: string;
+      installmentId: string;
+      currentDate: string;
+   } | null>(null);
 
    const handleCopyValue = (text: string) => {
       navigator.clipboard.writeText(text);
@@ -170,7 +176,6 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             inst.orderId.toLowerCase().includes(searchTerm.toLowerCase());
          const matchesStatus = statusFilter === 'ALL' || inst.status === statusFilter;
          
-         // Fix for date matching: paymentDate can be ISO string, dueDate is YYYY-MM-DD
          const dateToCompare = dateFilterType === 'due' 
             ? inst.dueDate 
             : (inst.paymentDate ? inst.paymentDate.split('T')[0] : null);
@@ -210,7 +215,6 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       
       const element = reportRef.current.cloneNode(true) as HTMLElement;
       
-      // Customize for PDF
       const pdfHeader = element.querySelector('.pdf-header');
       if (pdfHeader) pdfHeader.classList.remove('hidden');
 
@@ -425,6 +429,25 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       }
    };
 
+   const handleUpdatePaymentDate = async (orderId: string, installmentId: string, newDate: string) => {
+      try {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        const updatedInstallments = order.installments?.map(inst => {
+          if (inst.id === installmentId) {
+            return { ...inst, paymentDate: newDate };
+          }
+          return inst;
+        });
+
+        await onUpdateOrder({ ...order, installments: updatedInstallments });
+        setEditingPaymentDate(null);
+      } catch (err: any) {
+        alert("Erro ao atualizar data: " + err.message);
+      }
+   };
+
    const handleBatchSettle = () => {
       if (selectedIds.length === 0) return;
       
@@ -615,6 +638,8 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagto</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor Pago</th>
+                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor Pago</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Ações</th>
                      </tr>
@@ -866,14 +891,16 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Produção</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Instalação</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagamento</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor Pago</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Ações</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                            {filteredInstallments.length === 0 ? (
-                              <tr><td colSpan={12} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
+                              <tr><td colSpan={13} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
                            ) : (
                               filteredInstallments.map((inst, idx) => {
                                  const order = orders.find(o => o.id === inst.orderId);
@@ -969,18 +996,54 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-400 font-medium">
-                                       {new Date(inst.dueDate).toLocaleDateString('pt-BR')}
+                                       {new Date(inst.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}
                                     </td>
                                     <td className="px-6 py-4">
-                                       {inst.paymentDate ? (
-                                          <p className="text-sm text-emerald-600 font-black italic">{new Date(inst.paymentDate).toLocaleDateString('pt-BR')}</p>
+                                       {editingPaymentDate?.installmentId === inst.id ? (
+                                          <div className="flex items-center gap-1">
+                                             <input 
+                                                type="date"
+                                                value={editingPaymentDate.currentDate}
+                                                onChange={(e) => setEditingPaymentDate({ ...editingPaymentDate, currentDate: e.target.value })}
+                                                className="px-1 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] outline-none focus:ring-1 focus:ring-blue-500"
+                                             />
+                                             <button 
+                                                onClick={() => handleUpdatePaymentDate(inst.orderId, inst.id, editingPaymentDate.currentDate)}
+                                                className="p-1 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200"
+                                             >
+                                                <Check size={10} />
+                                             </button>
+                                             <button 
+                                                onClick={() => setEditingPaymentDate(null)}
+                                                className="p-1 bg-rose-100 text-rose-600 rounded hover:bg-rose-200"
+                                             >
+                                                <X size={10} />
+                                             </button>
+                                          </div>
                                        ) : (
-                                          <span className="text-[10px] font-bold text-slate-300 uppercase italic">Pendente</span>
+                                          <div className="flex items-center gap-2">
+                                             {inst.paymentDate ? (
+                                                <p className="text-sm text-emerald-600 font-black italic">{new Date(inst.paymentDate.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                                             ) : (
+                                                <span className="text-[10px] font-bold text-slate-300 uppercase italic">Pendente</span>
+                                             )}
+                                             <button 
+                                                onClick={() => setEditingPaymentDate({ orderId: inst.orderId, installmentId: inst.id, currentDate: inst.paymentDate ? inst.paymentDate.split('T')[0] : '' })}
+                                                className="flex items-center gap-1 p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all border border-blue-100 ml-1"
+                                                title="Editar Data de Pagamento"
+                                             >
+                                                <Edit2 size={12} />
+                                                <span className="text-[9px] font-black uppercase tracking-tighter">MUDAR</span>
+                                             </button>
+                                          </div>
                                        )}
                                     </td>
                                     <td className="px-6 py-4 text-sm font-black text-slate-900 text-right">
                                        R$ {inst.value?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </td>
+                                     <td className="px-6 py-4 text-sm font-black text-emerald-600 text-right italic">
+                                        {inst.netValue > 0 ? `R$ ${inst.netValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '--'}
+                                     </td>
                                     <td className="px-6 py-4">
                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter ${inst.status === 'PAID' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                                           }`}>

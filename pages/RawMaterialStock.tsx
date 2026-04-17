@@ -23,7 +23,8 @@ import {
   FileText,
   CloudDownload,
   AlertCircle,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { nfEmailService } from '../services/nfEmailService';
 
@@ -45,9 +46,11 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showHistoryListModal, setShowHistoryListModal] = useState(false);
   const [showCloudNfeModal, setShowCloudNfeModal] = useState(false);
-  const [historyMovements, setHistoryMovements] = useState<RawMaterialMovement[]>([]);
-  const [receivedInvoices, setReceivedInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [receivedInvoices, setReceivedInvoices] = useState<any[]>([]);
+  const [filterStartDate, setFilterStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [historyMovements, setHistoryMovements] = useState<RawMaterialMovement[]>([]);
   
   const [selectedMaterial, setSelectedMaterial] = useState<RawMaterial | null>(null);
   const [newMaterial, setNewMaterial] = useState<Partial<RawMaterial>>({
@@ -110,7 +113,6 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
       setShowAddModal(false);
       setNewMaterial({ name: '', unit: 'm', min_stock: 0, category: 'Componente' });
       
-      // Se viemos de um cadastro rápido no XML, já selecionamos o item automaticamente
       const quickIdx = (window as any)._quickRegisterIndex;
       if (quickIdx !== undefined && quickIdx !== null) {
         const updatedXml = [...xmlData];
@@ -121,7 +123,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
         (window as any)._quickRegisterIndex = null;
       }
 
-      loadInitialData(); // Recarrega tudo para garantir sincronia
+      loadInitialData();
     } catch (error) {
       alert("Erro ao salvar material");
     }
@@ -198,12 +200,16 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
     setShowXmlModal(true);
   };
 
-  const handleFetchCloudInvoices = async () => {
+  const handleFetchCloudInvoices = async (useDates: boolean = false) => {
     setLoadingInvoices(true);
     setReceivedInvoices([]);
     try {
-      const xmlResponse = await nfEmailService.listReceivedNFe();
-      const list = nfEmailService.parseNFeList(xmlResponse);
+      const response = await nfEmailService.listReceivedNFe(
+        30, 
+        useDates ? filterStartDate : undefined, 
+        useDates ? filterEndDate : undefined
+      );
+      const list = nfEmailService.parseNFeReceivedList(response);
       setReceivedInvoices(list);
     } catch (error) {
       alert("Erro ao buscar notas na nuvem. Verifique sua conexão ou configurações da API.");
@@ -215,14 +221,12 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const handleImportInvoiceFromCloud = async (key: string) => {
     setLoadingInvoices(true);
     try {
-      // 1. Tentar manifestar ciência (muitas vezes necessário para liberar o XML)
       try {
         await nfEmailService.manifestNFe(key, 'Ciencia');
       } catch (e) {
         console.warn("Provavelmente nota já manifestada:", e);
       }
 
-      // 2. Buscar XML
       const xmlText = await nfEmailService.getReceivedXML(key);
       processXmlContent(xmlText);
       setShowCloudNfeModal(false);
@@ -235,12 +239,10 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
 
   const handleImportXmlItems = async () => {
     let processed = 0;
-    
     try {
       for (const item of xmlData) {
         if (!item.mappedMaterialId) continue;
         
-        // 1. Mapeamento persistente
         const existingMapping = mappings.find(m => m.xml_product_name === item.name);
         if (!existingMapping) {
           await dataService.saveRawMaterialMapping({
@@ -250,7 +252,6 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
           });
         }
 
-        // 2. Criar movimentação com dados de compra
         await dataService.saveRawMaterialMovement({
           id: crypto.randomUUID(),
           raw_material_id: item.mappedMaterialId,
@@ -399,41 +400,23 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                     )}
                   </td>
                   <td className="p-4 text-center">
-                    {m.current_stock !== undefined && m.current_stock <= m.min_stock ? (
-                      <span className="inline-flex items-center gap-1 text-rose-500 font-bold text-[10px] bg-rose-50 px-2 py-1 rounded-full border border-rose-100">
-                        <AlertTriangle size={12} /> ESTOQUE BAIXO
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-emerald-500 font-bold text-[10px] bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
-                        <CheckCircle2 size={12} /> NORMAL
-                      </span>
-                    )}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${m.current_stock !== undefined && m.current_stock <= m.min_stock ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {m.current_stock !== undefined && m.current_stock <= m.min_stock ? 'ESTOQUE BAIXO' : 'NORMAL'}
+                    </span>
                   </td>
                   <td className="p-4 pr-6 text-right">
                     <div className="flex justify-end gap-2">
-                      <button 
-                        onClick={() => { setSelectedMaterial(m); setShowMovementModal(true); }}
-                        className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm"
-                        title="Movimentar"
-                      >
-                        <ArrowUpCircle size={18} />
-                      </button>
-                      <button 
-                        onClick={() => handleViewHistory(m)}
-                        className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all shadow-sm"
-                        title="Histórico"
-                      >
-                        <History size={18} />
-                      </button>
+                       <button onClick={() => handleViewHistory(m)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl" title="Ver Histórico"><History size={18} /></button>
+                       <button 
+                         onClick={() => { setSelectedMaterial(m); setMovement({ type: 'IN', quantity: 0, notes: '' }); setShowMovementModal(true); }}
+                         className="px-3 py-1 bg-indigo-50 text-indigo-600 font-black rounded-lg hover:bg-indigo-100 text-[10px] uppercase shadow-sm"
+                       >
+                         Movimentar
+                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {filteredMaterials.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-20 text-center text-slate-400 font-bold">Nenhum material encontrado.</td>
-                </tr>
-              )}
             </tbody>
           </table>
         )}
@@ -444,7 +427,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[600] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-in zoom-in duration-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-xl font-black text-slate-800">Cadastrar Insumo</h3>
+              <h3 className="text-xl font-black text-slate-800">Novo Material</h3>
               <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20} /></button>
             </div>
             <div className="p-6 space-y-4">
@@ -455,7 +438,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                   value={newMaterial.name}
                   onChange={(e) => setNewMaterial({...newMaterial, name: e.target.value})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  placeholder="Ex: Cantoneira Alumínio Branca"
+                  placeholder="Ex: Alumínio Branco 6mt"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -466,11 +449,11 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                     onChange={(e) => setNewMaterial({...newMaterial, unit: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                   >
-                    <option value="un">UN</option>
-                    <option value="m">METRO</option>
-                    <option value="m2">M²</option>
-                    <option value="kg">KG</option>
-                    <option value="cx">CAIXA</option>
+                    <option value="m">METROS (m)</option>
+                    <option value="un">UNIDADE (un)</option>
+                    <option value="kg">QUILOS (kg)</option>
+                    <option value="rl">ROLO (rl)</option>
+                    <option value="cx">CAIXA (cx)</option>
                   </select>
                 </div>
                 <div>
@@ -490,7 +473,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                   onChange={(e) => setNewMaterial({...newMaterial, category: e.target.value})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                 >
-                  {categories.filter(c => c !== 'Todas').map(c => <option key={c} value={c}>{c}</option>)}
+                   {categories.filter(c => c !== 'Todas').map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
@@ -528,7 +511,6 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                   <ArrowDownCircle size={18} /> SAÍDA
                 </button>
               </div>
-              
               <div>
                 <label className="text-xs font-black text-slate-500 uppercase block mb-1">Quantidade ({selectedMaterial.unit})</label>
                 <input 
@@ -538,7 +520,6 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                   className="w-full text-center text-3xl font-black py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-
               <div>
                 <label className="text-xs font-black text-slate-500 uppercase block mb-1">Notas / Motivo</label>
                 <textarea 
@@ -573,11 +554,11 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
               </div>
               <button onClick={() => setShowHistoryListModal(false)} className="p-2 hover:bg-white rounded-full"><X size={20} /></button>
             </div>
-            <div className="p-0 overflow-y-auto flex-1">
-              <table className="w-full text-sm text-left">
+            <div className="p-0 overflow-y-auto flex-1 text-xs">
+              <table className="w-full text-left">
                 <thead className="text-[10px] font-black text-slate-400 uppercase border-b border-slate-100 sticky top-0 bg-white">
                   <tr>
-                    <th className="p-4 pl-6 text-left">Data/Hora</th>
+                    <th className="p-4 pl-6">Data/Hora</th>
                     <th className="p-4">Tipo</th>
                     <th className="p-4 text-center">Qtde</th>
                     <th className="p-4">Fornecedor</th>
@@ -585,7 +566,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                     <th className="p-4">Notas</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50 text-xs">
+                <tbody className="divide-y divide-slate-50">
                   {historyMovements.map(mov => (
                     <tr key={mov.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 pl-6 text-slate-600 flex flex-col">
@@ -634,61 +615,66 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
       {/* Modal XML Avançado com Mapeamento */}
       {showXmlModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl animate-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
-              <div>
-                <h3 className="text-xl font-black text-indigo-900 flex items-center gap-2">
-                   <LinkIcon size={24} /> Importador Inteligente de NFe (XML)
-                </h3>
-                <p className="text-xs font-bold text-indigo-400">Vincule os produtos do fornecedor aos seus materiais do estoque.</p>
-              </div>
-              <button onClick={() => setShowXmlModal(false)} className="p-2 hover:bg-white rounded-full"><X size={20} /></button>
-            </div>
-            <div className="p-6">
-              {!xmlFile ? (
-                <div className="border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center hover:border-indigo-400 transition-all group">
-                   <input 
-                      type="file" 
-                      accept=".xml" 
-                      onChange={handleXmlUpload} 
-                      className="hidden" 
-                      id="xml-input-mapping" 
-                   />
-                   <label htmlFor="xml-input-mapping" className="cursor-pointer">
-                      <div className="bg-indigo-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                        <FileUp className="text-indigo-600" size={32} />
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[85vh] shadow-2xl animate-in zoom-in duration-200 flex flex-col overflow-hidden">
+             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+               <div>
+                  <h3 className="text-xl font-black text-indigo-900 flex items-center gap-2">
+                    <FileUp size={24} /> Importação XML (NF-e)
+                  </h3>
+                  <p className="text-xs font-bold text-indigo-400">Arraste um arquivo XML ou selecione no seu computador.</p>
+               </div>
+               <button onClick={() => setShowXmlModal(false)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={20} /></button>
+             </div>
+             <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+                {!xmlFile ? (
+                   <div 
+                    onClick={() => document.getElementById('xml-input')?.click()}
+                    className="h-64 border-4 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all cursor-pointer group"
+                   >
+                      <div className="p-6 bg-slate-50 text-slate-300 rounded-full group-hover:scale-110 transition-transform">
+                         <FileUp size={48} />
                       </div>
-                      <p className="font-black text-slate-700">Clique para selecionar o XML da NFe</p>
-                      <p className="text-slate-400 text-xs mt-1">O sistema lerá os itens e tentará identificar os vínculos salvos.</p>
-                   </label>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase">Fornecedor</span>
-                        <p className="font-bold text-slate-700 truncate">{xmlSupplier}</p>
+                      <div className="text-center">
+                        <p className="font-black text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest text-xs">Clique para selecionar arquivo</p>
+                        <p className="text-[10px] text-slate-300 font-bold mt-1">APENAS ARQUIVOS .XML DE NF-E FORNECEDOR</p>
                       </div>
+                      <input 
+                        id="xml-input"
+                        type="file" 
+                        accept=".xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                             setXmlFile(file);
+                             const reader = new FileReader();
+                             reader.onload = (ev) => processXmlContent(ev.target?.result as string);
+                             reader.readAsText(file);
+                          }
+                        }}
+                      />
+                   </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                       <div className="flex items-center gap-4">
+                          <div className="p-3 bg-white rounded-xl shadow-sm text-indigo-600"><FileText size={20} /></div>
+                          <div>
+                             <p className="text-[10px] font-black text-slate-400 uppercase">Arquivo Carregado</p>
+                             <p className="font-black text-slate-700">NF {xmlInvoice} - {xmlSupplier}</p>
+                          </div>
+                       </div>
                     </div>
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase">Nota Fiscal #</span>
-                        <p className="font-black text-indigo-600">{xmlInvoice}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="max-h-[350px] overflow-y-auto rounded-2xl border border-slate-100 shadow-inner">
-                    <table className="w-full text-left text-xs">
-                      <thead className="sticky top-0 bg-slate-100 font-black text-slate-500 uppercase tracking-wider z-10">
+                    
+                    <table className="w-full text-left">
+                      <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                         <tr>
-                          <th className="p-4">Item na Nota</th>
+                          <th className="p-4">Item na NF</th>
                           <th className="p-4 text-center">Qtde</th>
-                          <th className="p-4">Vincular ao Meu Material...</th>
+                          <th className="p-4">Material Vinculado</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody className="divide-y divide-slate-50 text-xs">
                         {xmlData.map((item, idx) => (
                           <tr key={idx} className={`${item.mappedMaterialId ? 'bg-emerald-50/30' : 'bg-rose-50/30'}`}>
                             <td className="p-4">
@@ -732,27 +718,27 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
-            </div>
-            <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50 rounded-b-3xl">
-              <button onClick={() => {setXmlFile(null); setXmlData([]);}} className="text-rose-500 font-bold text-xs underline">Limpar Arquivo</button>
-              <div className="flex gap-3">
-                <button onClick={() => setShowXmlModal(false)} className="px-6 py-2 text-slate-500 font-bold">Cancelar</button>
-                {xmlData.length > 0 && (
-                  <button 
-                    onClick={handleImportXmlItems}
-                    disabled={xmlData.some(i => !i.mappedMaterialId)}
-                    className={`px-8 py-2 text-white font-black rounded-xl shadow-lg transition-all ${xmlData.some(i => !i.mappedMaterialId) ? 'bg-slate-300 shadow-none cursor-not-allowed' : 'bg-indigo-600 shadow-indigo-100 hover:scale-105'}`}
-                  >
-                    Confirmar Compra da NF {xmlInvoice}
-                  </button>
                 )}
-              </div>
-            </div>
+             </div>
+             <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50 rounded-b-3xl">
+                <button onClick={() => {setXmlFile(null); setXmlData([]);}} className="text-rose-500 font-bold text-xs underline">Limpar Arquivo</button>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowXmlModal(false)} className="px-6 py-2 text-slate-500 font-bold">Cancelar</button>
+                  {xmlData.length > 0 && (
+                    <button 
+                      onClick={handleImportXmlItems}
+                      disabled={xmlData.some(i => !i.mappedMaterialId)}
+                      className={`px-8 py-2 text-white font-black rounded-xl shadow-lg transition-all ${xmlData.some(i => !i.mappedMaterialId) ? 'bg-slate-300 shadow-none cursor-not-allowed' : 'bg-indigo-600 shadow-indigo-100 hover:scale-105'}`}
+                    >
+                      Confirmar Compra da NF {xmlInvoice}
+                    </button>
+                  )}
+                </div>
+             </div>
           </div>
         </div>
       )}
+
       {/* Modal Consulta Cloud NFe */}
       {showCloudNfeModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
@@ -779,66 +765,112 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                   <Loader2 className="animate-spin text-rose-600" size={48} />
                   <p className="font-black text-slate-400 animate-pulse uppercase text-xs tracking-widest">Buscando notas recebidas na SEFAZ...</p>
                 </div>
-              ) : receivedInvoices.length === 0 ? (
-                <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-4">
-                  <AlertCircle size={48} />
-                  <p className="font-bold">Nenhuma nota encontrada contra seu CNPJ recentemente.</p>
-                  <button onClick={handleFetchCloudInvoices} className="text-rose-600 font-black flex items-center gap-2 underline">
-                    <RefreshCw size={16} /> Tentar novamente
-                  </button>
-                </div>
               ) : (
-                <div className="rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-50 border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest">
-                      <tr>
-                        <th className="px-6 py-4">Data Emissão</th>
-                        <th className="px-6 py-4">Nota / Série</th>
-                        <th className="px-6 py-4">Fornecedor (Emitente)</th>
-                        <th className="px-6 py-4 text-right">Valor Total</th>
-                        <th className="px-6 py-4 text-right">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {receivedInvoices.map((nfe: any) => (
-                        <tr key={nfe.key} className="hover:bg-slate-50 transition-colors group">
-                          <td className="px-6 py-4">
-                             <div className="text-xs font-bold text-slate-700">
-                                {nfe.date ? new Date(nfe.date).toLocaleDateString('pt-BR') : 'N/A'}
-                             </div>
-                          </td>
-                          <td className="px-6 py-4">
-                             <div className="flex flex-col">
-                                <span className="text-sm font-black text-slate-900"># {nfe.number}</span>
-                                <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter truncate w-32" title={nfe.key}>{nfe.key}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-4">
-                             <div className="text-xs font-black text-slate-700 uppercase">{nfe.customerName}</div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                             <div className="text-sm font-black text-emerald-600">R$ {parseFloat(nfe.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                             <button 
-                                onClick={() => handleImportInvoiceFromCloud(nfe.key)}
-                                className="px-4 py-2 bg-rose-600 text-white text-xs font-black rounded-xl hover:bg-rose-700 transition-all shadow-md active:scale-95"
-                             >
-                                IMPORTAR
-                             </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  {/* Barra de Filtros por Período */}
+                  <div className="mb-6 p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-wrap items-end gap-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Início (Consulta)</label>
+                      <input 
+                        type="date" 
+                        value={filterStartDate}
+                        onChange={(e) => setFilterStartDate(e.target.value)}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fim (Consulta)</label>
+                      <input 
+                        type="date" 
+                        value={filterEndDate}
+                        onChange={(e) => setFilterEndDate(e.target.value)}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                      />
+                    </div>
+                    <button 
+                      onClick={() => handleFetchCloudInvoices(true)}
+                      className="px-6 py-2.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 transition-all flex items-center gap-2 text-xs"
+                    >
+                      <Search size={14} /> Filtrar por Período
+                    </button>
+                    <button 
+                      onClick={() => handleFetchCloudInvoices(false)}
+                      className="px-6 py-2.5 bg-rose-50 text-rose-600 font-black rounded-xl hover:bg-rose-100 transition-all flex items-center gap-2 text-xs border border-rose-100"
+                    >
+                      <RefreshCw size={14} /> Buscar Novas
+                    </button>
+                  </div>
+
+                  {receivedInvoices.length === 0 ? (
+                    <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-4">
+                      <AlertCircle size={48} />
+                      <p className="font-bold">Nenhuma nota encontrada.</p>
+                      <p className="text-[10px] uppercase font-black text-slate-300">Tente um período mais amplo ou busque por novas.</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest">
+                          <tr>
+                            <th className="px-6 py-4">Data Emissão</th>
+                            <th className="px-6 py-4">Nota / Série</th>
+                            <th className="px-6 py-4">Fornecedor (Emitente)</th>
+                            <th className="px-6 py-4 text-center">Status</th>
+                            <th className="px-6 py-4 text-right">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {receivedInvoices.map((nfe: any) => (
+                            <tr key={nfe.key} className="hover:bg-slate-50 transition-colors group text-xs">
+                              <td className="px-6 py-4">
+                                <div className="font-bold text-slate-700">
+                                   {nfe.date || 'N/A'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-col">
+                                   <span className="font-black text-rose-600">NF {nfe.number}</span>
+                                   <span className="text-[10px] font-bold text-slate-400">Série {nfe.series}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-col">
+                                   <span className="font-black text-slate-700 uppercase truncate max-w-[200px]">{nfe.customerName}</span>
+                                   <span className="text-[10px] text-slate-400 font-bold">CNPJ: {nfe.cnpj}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${nfe.status === 'AUTORIZADA' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                  {nfe.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <button 
+                                   onClick={() => handleImportInvoiceFromCloud(nfe.key)}
+                                   className="px-4 py-1.5 bg-rose-600 text-white font-black rounded-lg hover:bg-rose-700 transition-all shadow-md active:scale-95 uppercase text-[10px]"
+                                >
+                                   Importar
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50">
-               <p className="text-[10px] text-slate-400 font-black uppercase max-w-sm">
-                 Ao importar, o sistema realizará a ciência da operação na SEFAZ automaticamente.
-               </p>
+               <div className="flex flex-col">
+                  <p className="text-[10px] text-slate-400 font-black uppercase max-w-sm">
+                    Ao importar, o sistema realizará a ciência da operação na SEFAZ automaticamente.
+                  </p>
+                  <p className="text-[9px] text-slate-300 font-bold uppercase mt-1">
+                    CNPJ CONSULTADO: {nfEmailService.config.cnpj}
+                  </p>
+               </div>
                <button 
                  onClick={() => setShowCloudNfeModal(false)} 
                  className="px-8 py-2 bg-slate-200 text-slate-700 font-black rounded-xl hover:bg-slate-300 transition-all active:scale-95"

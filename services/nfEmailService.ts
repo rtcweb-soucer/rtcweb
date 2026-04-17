@@ -255,6 +255,30 @@ export const nfEmailService = {
         }
     },
 
+    parseNFeReceivedList(jsonStr: string) {
+        try {
+            const data = JSON.parse(jsonStr);
+            const list = data?.NFRecebidas?.ListaRecebida?.NFRecebida;
+            
+            if (!list || !Array.isArray(list)) return [];
+
+            return list.map((node: any) => ({
+                id: node.cod_nfemail,
+                number: node.nfe_chave ? node.nfe_chave.substring(25, 34).replace(/^0+/, '') : '--',
+                series: node.nfe_chave ? node.nfe_chave.substring(22, 25).replace(/^0+/, '') : '--',
+                key: node.nfe_chave,
+                status: node.dat_cancelamento ? 'CANCELADA' : 'AUTORIZADA',
+                customerName: node.nom_fantasia || node.nom_razaosocial || 'Fornecedor Desconhecido',
+                date: node.dat_emissao,
+                total: '0.00', // Este endpoint não traz o valor total diretamente
+                cnpj: node.num_cnpj
+            }));
+        } catch (e) {
+            console.error("Erro ao processar lista de notas recebidas:", e);
+            return [];
+        }
+    },
+
     async downloadDANFe(key: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
         // Usamos a Serverless Function /api/download para evitar CORS e problemas de redirect
@@ -381,16 +405,35 @@ export const nfEmailService = {
         return responseText;
     },
 
-    async listReceivedNFe(page: number = 1, limit: number = 20) {
+    async listReceivedNFe(limit: number = 30, startDate?: string, endDate?: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const apiUrl = `/api/nfemail?path=NotasFiscais/Recebidas&page=${page}&limit=${limit}`;
+        
+        // Se houver datas, usa o endpoint de reprocessamento. Caso contrário, busca apenas as novas.
+        let apiUrl = `/api/nfemail/NFeRecebidas?limit=${limit}`;
+        
+        if (startDate && endDate) {
+            apiUrl = `/api/nfemail/NFeRecebidas?dataInicial=${startDate}&dataFinal=${endDate}&limit=${limit}`;
+        }
 
         const response = await fetch(apiUrl, {
             headers: { "Authorization": authHeader }
         });
 
         if (!response.ok) {
-            throw new Error(`Erro ao listar notas recebidas (${response.status})`);
+            const errorText = await response.text();
+            console.warn(`⚠️ NFEmail API Response (${response.status}):`, errorText, response.statusText);
+            
+            // Verificação robusta: status 400 e qualquer menção a não encontrado no corpo ou no texto do status
+            const isNotFoundError = (response.status === 400 || response.status === 404) && 
+                                   (errorText.toUpperCase().includes("NAO ENCONTRADOS") || 
+                                    response.statusText.toUpperCase().includes("NAO ENCONTRADOS") ||
+                                    errorText.toUpperCase().includes("NOT FOUND"));
+
+            if (isNotFoundError) {
+                console.log("ℹ️ Nenhuma nota nova encontrada no NFEmail (400 Not Found).");
+                return JSON.stringify({ "NFRecebidas": { "ListaRecebida": { "NFRecebida": [] } } });
+            }
+            throw new Error(`Erro ao listar notas recebidas (${response.status}): ${errorText || response.statusText}`);
         }
 
         return await response.text();
@@ -398,8 +441,8 @@ export const nfEmailService = {
 
     async getReceivedXML(key: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        // Endpoint provável para XML de nota de entrada
-        const apiUrl = `/api/nfemail?path=Xml/Recebida&chave=${key}`;
+        // Endpoint conforme manual: api/ArquivoXML?chave={chave}
+        const apiUrl = `/api/nfemail/ArquivoXML?chave=${key}`;
 
         const response = await fetch(apiUrl, {
             headers: { "Authorization": authHeader }
@@ -414,7 +457,7 @@ export const nfEmailService = {
 
     async manifestNFe(key: string, type: string = 'Ciencia') {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
-        const apiUrl = `/api/nfemail?path=NotasFiscais/Recebidas/Manifestar`;
+        const apiUrl = `/api/nfemail/NotasFiscais/Recebidas/Manifestar`;
 
         const payload = {
             nfe_chave: key,
