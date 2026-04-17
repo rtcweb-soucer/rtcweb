@@ -258,9 +258,29 @@ export const nfEmailService = {
     parseNFeReceivedList(jsonStr: string) {
         try {
             const data = JSON.parse(jsonStr);
-            const list = data?.NFRecebidas?.ListaRecebida?.NFRecebida;
+            console.log("🔍 NFEmail API Parser Data:", data);
             
-            if (!list || !Array.isArray(list)) return [];
+            // Suporta múltiplas variações de raiz e lista:
+            // 1. NFRecebidas.ListaRecebida.NFRecebida[] (Manual)
+            // 2. ListaRecebida[] (Algumas rotas de reprocessamento)
+            // 3. NFRecebida[]
+            const dataRoot = data?.NFRecebidas || data?.NFeRecebidas || data?.NotasFiscais || data;
+            
+            let list = null;
+            if (Array.isArray(dataRoot?.ListaRecebida)) {
+                list = dataRoot.ListaRecebida;
+            } else if (Array.isArray(dataRoot?.ListaRecebida?.NFRecebida)) {
+                list = dataRoot.ListaRecebida.NFRecebida;
+            } else if (Array.isArray(dataRoot?.NFRecebida)) {
+                list = dataRoot.NFRecebida;
+            } else if (Array.isArray(dataRoot)) {
+                list = dataRoot;
+            }
+            
+            if (!list || !Array.isArray(list)) {
+                console.warn(`⚠️ Lista não encontrada no JSON:`, data);
+                return [];
+            }
 
             return list.map((node: any) => ({
                 id: node.cod_nfemail,
@@ -408,12 +428,15 @@ export const nfEmailService = {
     async listReceivedNFe(limit: number = 30, startDate?: string, endDate?: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
         
-        // Se houver datas, usa o endpoint de reprocessamento. Caso contrário, busca apenas as novas.
+        // Se houver datas, usa o endpoint NotasFiscais (conforme exemplos C#/PHP). 
+        // Caso contrário, usa NFeRecebidas para apenas as novas.
         let apiUrl = `/api/nfemail/NFeRecebidas?limit=${limit}`;
         
         if (startDate && endDate) {
             apiUrl = `/api/nfemail/NFeRecebidas?dataInicial=${startDate}&dataFinal=${endDate}&limit=${limit}`;
         }
+
+        console.log(`🌐 Chamando API NFEmail: ${apiUrl}`);
 
         const response = await fetch(apiUrl, {
             headers: { "Authorization": authHeader }

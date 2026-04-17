@@ -48,7 +48,8 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const [showCloudNfeModal, setShowCloudNfeModal] = useState(false);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [receivedInvoices, setReceivedInvoices] = useState<any[]>([]);
-  const [filterStartDate, setFilterStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [lastApiError, setLastApiError] = useState<string | null>(null);
+  const [filterStartDate, setFilterStartDate] = useState(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [historyMovements, setHistoryMovements] = useState<RawMaterialMovement[]>([]);
   
@@ -204,6 +205,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
     setLoadingInvoices(true);
     setReceivedInvoices([]);
     try {
+      setLastApiError(null);
       const response = await nfEmailService.listReceivedNFe(
         30, 
         useDates ? filterStartDate : undefined, 
@@ -211,7 +213,12 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
       );
       const list = nfEmailService.parseNFeReceivedList(response);
       setReceivedInvoices(list);
-    } catch (error) {
+      
+      if (list.length === 0) {
+          setLastApiError("Nenhuma nota encontrada para este período ou critério.");
+      }
+    } catch (error: any) {
+      setLastApiError(error.message || "Erro desconhecido na API.");
       alert("Erro ao buscar notas na nuvem. Verifique sua conexão ou configurações da API.");
     } finally {
       setLoadingInvoices(false);
@@ -749,6 +756,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                    <CloudDownload size={24} /> Notas Contra o CNPJ (SEFAZ/Nuvem)
                 </h3>
                 <p className="text-xs font-bold text-rose-400">Clique para manifestar e importar o estoque automaticamente de notas recebidas.</p>
+                <p className="text-[10px] font-black text-rose-300 uppercase mt-1">💡 Importante: Filtros de data referem-se ao dia em que a nota foi consultada pela primeira vez.</p>
               </div>
               <button 
                 onClick={() => setShowCloudNfeModal(false)} 
@@ -803,9 +811,13 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
 
                   {receivedInvoices.length === 0 ? (
                     <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-4">
-                      <AlertCircle size={48} />
-                      <p className="font-bold">Nenhuma nota encontrada.</p>
-                      <p className="text-[10px] uppercase font-black text-slate-300">Tente um período mais amplo ou busque por novas.</p>
+                      <AlertCircle size={48} className={receivedInvoices.length === 0 && lastApiError ? "text-amber-500" : ""} />
+                      <p className="font-bold text-center px-8 text-slate-500 text-sm">
+                        {lastApiError || "Inicie uma busca para visualizar as notas da nuvem."}
+                      </p>
+                      <p className="text-[10px] uppercase font-black text-slate-300">
+                        {lastApiError ? "Tente um período diferente ou 'Buscar Novas'" : "Utilize os filtros acima."}
+                      </p>
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
