@@ -323,6 +323,21 @@ export const nfEmailService = {
         window.URL.revokeObjectURL(downloadUrl);
     },
 
+    async getXMLContent(key: string): Promise<string> {
+        const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
+        const proxyUrl = `/api/download?endpoint=/Xml?chave=${key}`;
+
+        const response = await fetch(proxyUrl, {
+            headers: { "Authorization": authHeader }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erro ao buscar conteúdo XML: ${response.status}`);
+        }
+
+        return await response.text();
+    },
+
     async downloadXML(key: string) {
         const authHeader = 'Basic ' + btoa(`${this.config.cnpj}:${this.config.apiKey}`);
         // Usamos a Serverless Function /api/download
@@ -475,7 +490,21 @@ export const nfEmailService = {
             throw new Error(`Erro ao baixar XML de entrada (${response.status})`);
         }
 
-        return await response.text();
+        const responseText = await response.text();
+        
+        // Verifica se a resposta é JSON e contém o XML dentro de um campo
+        if (responseText.trim().startsWith('{')) {
+            try {
+                const jsonData = JSON.parse(responseText);
+                // Procura por campos comuns que contenham o XML
+                const xml = jsonData.ArquivoXML || jsonData.xml || jsonData.conteudo || jsonData.Content;
+                if (xml) return xml;
+            } catch (e) {
+                console.warn("Falha ao processar JSON no getReceivedXML, tentando retorno bruto.");
+            }
+        }
+
+        return responseText;
     },
 
     async manifestNFe(key: string, type: string = 'Ciencia') {

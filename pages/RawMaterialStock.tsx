@@ -54,6 +54,8 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const [historyMovements, setHistoryMovements] = useState<RawMaterialMovement[]>([]);
   
   const [selectedMaterial, setSelectedMaterial] = useState<RawMaterial | null>(null);
+  const [importedKeys, setImportedKeys] = useState<Set<string>>(new Set());
+  const [currentCloudKey, setCurrentCloudKey] = useState<string | null>(null);
   const [newMaterial, setNewMaterial] = useState<Partial<RawMaterial>>({
     name: '',
     unit: 'm',
@@ -81,12 +83,19 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [mats, maps] = await Promise.all([
+      const [mats, maps, movs] = await Promise.all([
         dataService.getRawMaterials(),
-        dataService.getRawMaterialMappings()
+        dataService.getRawMaterialMappings(),
+        dataService.getRawMaterialMovements()
       ]);
       setMaterials(mats);
       setMappings(maps);
+      
+      const keys = new Set<string>();
+      movs.forEach((m: any) => {
+          if (m.nfe_key) keys.add(m.nfe_key);
+      });
+      setImportedKeys(keys);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
     } finally {
@@ -167,38 +176,82 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
     setXmlData(updatedData);
   };
 
-  const processXmlContent = (xmlText: string) => {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-    
-    const supplierName = xmlDoc.getElementsByTagName("xNome")[0]?.textContent || '';
-    const invoiceNum = xmlDoc.getElementsByTagName("nNF")[0]?.textContent || '';
-    setXmlSupplier(supplierName);
-    setXmlInvoice(invoiceNum);
+  const processXmlContent = (xmlText: string): boolean => {
+    try {
+      if (!xmlText || xmlText.length < 100) {
+        console.error("Conteúdo XML inválido ou muito curto:", xmlText);
+        alert("O conteúdo do XML recebido parece inválido ou está vazio.");
+        return false;
+      }
 
-    const products = xmlDoc.getElementsByTagName("det");
-    const items = [];
-    
-    for (let i = 0; i < products.length; i++) {
-        const prod = products[i].getElementsByTagName("prod")[0];
-        const name = prod.getElementsByTagName("xProd")[0]?.textContent || '';
-        const qty = prod.getElementsByTagName("qCom")[0]?.textContent || '0';
-        const unit = prod.getElementsByTagName("uCom")[0]?.textContent || 'UN';
-        const code = prod.getElementsByTagName("cProd")[0]?.textContent || '';
-        
-        const mappingMatch = mappings.find(m => m.xml_product_name === name);
-        const nameMatch = materials.find(m => m.name.toLowerCase() === name.toLowerCase());
-        
-        items.push({ 
-            name, 
-            qty: Number(qty), 
-            unit, 
-            code,
-            mappedMaterialId: mappingMatch?.raw_material_id || nameMatch?.id || ''
-        });
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+      
+      const parseError = xmlDoc.getElementsByTagName("parsererror");
+      if (parseError.length > 0) {
+        console.error("Erro ao analisar XML:", parseError[0].textContent);
+        alert("Erro técnico ao processar o formato do arquivo.");
+        return false;
+      }
+
+      // Função auxiliar para buscar tags ignorando namespace
+      const getTags = (parent: Element | Document, name: string) => {
+          return Array.from(parent.querySelectorAll('*')).filter(el => 
+              el.localName === name || el.tagName === name || el.tagName.endsWith(':' + name)
+          );
+      };
+
+      const getVal = (parent: any, name: string) => {
+          return getTags(parent, name)[0]?.textContent || '';
+      };
+
+      const supplierName = getVal(xmlDoc, "xNome");
+      const invoiceNum = getVal(xmlDoc, "nNF");
+      
+      setXmlSupplier(supplierName);
+      setXmlInvoice(invoiceNum);
+
+      const products = getTags(xmlDoc, "det");
+      const items = [];
+      
+      console.log(`📦 Processando XML: Encontrados ${products.length} itens correspondentes.`);
+
+      for (const det of products) {
+          const prod = getTags(det, "prod")[0];
+          if (!prod) continue;
+
+          const name = getVal(prod, "xProd");
+          const qty = getVal(prod, "qCom");
+          const unit = getVal(prod, "uCom");
+          const code = getVal(prod, "cProd");
+          
+          const mappingMatch = mappings.find(m => m.xml_product_name === name);
+          const nameMatch = materials.find(m => m.name.toLowerCase() === name.toLowerCase());
+          
+          items.push({ 
+              name, 
+              qty: Number(qty), 
+              unit, 
+              code,
+              mappedMaterialId: mappingMatch?.raw_material_id || nameMatch?.id || ''
+          });
+      }
+
+      if (items.length === 0) {
+          console.warn("Nenhum item 'det'/'prod' encontrado. XML Bruto (100 chars):", xmlText.substring(0, 100));
+          const firstTag = xmlDoc.documentElement?.tagName || 'Desconhecida';
+          alert(`Não foi possível encontrar produtos nesta nota (Tag Raiz: ${firstTag}). Verifique se é uma NF-e de mercadoria válida.\n\nInício do conteúdo: ${xmlText.substring(0, 50)}...`);
+          return false;
+      }
+
+      setXmlData(items);
+      setShowXmlModal(true);
+      return true;
+    } catch (err) {
+      console.error("Erro no processXmlContent:", err);
+      alert("Falha crítica ao processar os dados do XML.");
+      return false;
     }
-    setXmlData(items);
-    setShowXmlModal(true);
   };
 
   const handleFetchCloudInvoices = async (useDates: boolean = false) => {
@@ -228,17 +281,26 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
   const handleImportInvoiceFromCloud = async (key: string) => {
     setLoadingInvoices(true);
     try {
+      // 1. Tenta manifestar (Ciência) - Ignora se já manifestada
       try {
         await nfEmailService.manifestNFe(key, 'Ciencia');
       } catch (e) {
-        console.warn("Provavelmente nota já manifestada:", e);
+        console.warn("Manifestação já realizada ou falhou:", e);
       }
 
+      // 2. Busca o conteúdo do XML via endpoint direto da API recebida
       const xmlText = await nfEmailService.getReceivedXML(key);
-      processXmlContent(xmlText);
-      setShowCloudNfeModal(false);
-    } catch (error) {
-      alert("Erro ao processar XML da nuvem: " + error);
+      
+      // 3. Prepara os dados para o modal de XML existente
+      setCurrentCloudKey(key);
+      const success = processXmlContent(xmlText);
+      
+      // 4. Se processou com sucesso, fecha o modal da nuvem
+      if (success) {
+        setShowCloudNfeModal(false);
+      }
+    } catch (error: any) {
+      alert("Erro ao importar dados da nota: " + error.message);
     } finally {
       setLoadingInvoices(false);
     }
@@ -267,7 +329,10 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
           source: 'XML',
           supplier_name: xmlSupplier,
           invoice_number: xmlInvoice,
-          notes: `Importado via XML NFe #${xmlInvoice}`,
+          nfe_key: currentCloudKey || undefined,
+          notes: currentCloudKey 
+            ? `Importado via Nuvem NFe #${xmlInvoice}` 
+            : `Importado via XML NFe #${xmlInvoice}`,
           user_id: currentUser.id
         });
         processed++;
@@ -277,6 +342,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
       setShowXmlModal(false);
       setXmlFile(null);
       setXmlData([]);
+      setCurrentCloudKey(null);
       loadInitialData();
     } catch (err) {
       alert("Erro durante a importação.");
@@ -633,7 +699,7 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                <button onClick={() => setShowXmlModal(false)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={20} /></button>
              </div>
              <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-                {!xmlFile ? (
+                {(!xmlFile && xmlData.length === 0) ? (
                    <div 
                     onClick={() => document.getElementById('xml-input')?.click()}
                     className="h-64 border-4 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center gap-4 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all cursor-pointer group"
@@ -852,16 +918,28 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                                 </div>
                               </td>
                               <td className="px-6 py-4 text-center">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${nfe.status === 'AUTORIZADA' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                  {nfe.status}
-                                </span>
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${nfe.status === 'AUTORIZADA' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                    {nfe.status}
+                                  </span>
+                                  {importedKeys.has(nfe.key) && (
+                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[9px] font-black uppercase">
+                                      <CheckCircle2 size={10} /> Lançada
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <button 
                                    onClick={() => handleImportInvoiceFromCloud(nfe.key)}
-                                   className="px-4 py-1.5 bg-rose-600 text-white font-black rounded-lg hover:bg-rose-700 transition-all shadow-md active:scale-95 uppercase text-[10px]"
+                                   disabled={importedKeys.has(nfe.key)}
+                                   className={`px-4 py-1.5 font-black rounded-lg transition-all shadow-md active:scale-95 uppercase text-[10px] ${
+                                     importedKeys.has(nfe.key) 
+                                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                                     : 'bg-rose-600 text-white hover:bg-rose-700'
+                                   }`}
                                 >
-                                   Importar
+                                   {importedKeys.has(nfe.key) ? 'Importada' : 'Importar'}
                                 </button>
                               </td>
                             </tr>

@@ -74,6 +74,9 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
     installmentId: string;
     currentDate: string;
   } | null>(null);
+  
+  const [showOnlyPaid, setShowOnlyPaid] = useState(false);
+  const [includeOldPaid, setIncludeOldPaid] = useState(false);
 
   const handlePrintOrder = () => {
     if (!printRef.current) return;
@@ -114,12 +117,14 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
     }
   };
 
-  const reportData = useMemo(() => {
-    const confirmedOrders = orders.filter((o: Order) => 
+  const confirmedOrders = useMemo(() => {
+    return orders.filter((o: Order) => 
       o.status !== OrderStatus.QUOTE_SENT && 
       o.status !== OrderStatus.PENDING_MEASUREMENT
     );
+  }, [orders]);
 
+  const reportData = useMemo(() => {
     return confirmedOrders.filter(order => {
       const orderDate = new Date(order.createdAt);
       const customer = customers.find(c => c.id === order.customerId);
@@ -132,7 +137,7 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
         order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.contractNumber?.toLowerCase().includes(searchTerm.toLowerCase());
-
+ 
       let matchType = true;
       if (filterType !== '') {
         const sheet = technicalSheets.find(s => s.id === order.technicalSheetId);
@@ -142,10 +147,10 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
             return prod?.tipo === filterType || item.productType === filterType;
         });
       }
-
+ 
       return matchSeller && matchDateStart && matchDateEnd && matchSearch && matchType;
     }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [orders, customers, filterSellerId, filterStartDate, filterEndDate, searchTerm, filterType, technicalSheets, products]);
+  }, [confirmedOrders, customers, filterSellerId, filterStartDate, filterEndDate, searchTerm, filterType, technicalSheets, products]);
 
   const stats = useMemo(() => {
     const totalValue = reportData.reduce((acc, o) => acc + o.totalValue, 0);
@@ -224,46 +229,85 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
 
   const receivableData = useMemo(() => {
     const data: any[] = [];
+    const startDate = filterStartDate ? new Date(filterStartDate) : null;
+    const endDate = filterEndDate ? new Date(filterEndDate + 'T23:59:59') : null;
+
+    // Se incluir contratos antigos, processamos TODOS os pedidos confirmados.
+    // Caso contrário, apenas os que já passaram pelo filtro de data (reportData).
+    const ordersToProcess = includeOldPaid ? confirmedOrders : reportData;
     
-    reportData.forEach(order => {
+    ordersToProcess.forEach(order => {
+      const isFromReportData = reportData.some(ro => ro.id === order.id);
       const customer = customers.find(c => c.id === order.customerId);
       const installments = order.installments || [];
       
       installments.forEach(inst => {
-        const vlrPago = inst.status === 'PAID' ? (inst.netValue ?? inst.value) : 0;
-        const jurosLocal = inst.status === 'PAID' ? (vlrPago - inst.value) : 0;
+        const instPaymentDateStr = inst.paymentDate?.split('T')[0];
+        const instPaymentDate = instPaymentDateStr ? new Date(instPaymentDateStr + 'T12:00:00') : null;
+        
+        let shouldInclude = false;
+        let isOldContractPayment = false;
 
-        data.push({
-          cliente: customer?.name || 'N/D',
-          linkId: order.id,
-          contrato: order.contractNumber || order.id.slice(0, 8),
-          nf: order.nfeNumber || inst.nfe || '--',
-          dataNF: order.createdAt,
-          vlrTotalNF: order.totalValue,
-          parcela: `${String(inst.number).padStart(2, '0')}/${String(installments.length).padStart(2, '0')}`,
-          vlrParcela: inst.value,
-          vencimento: inst.dueDate,
-          dtPagto: inst.paymentDate,
-          status: inst.status,
-          valorPago: vlrPago,
-          descontos: 0,
-          juros: jurosLocal,
-          banco: 'Itaú - RTC',
-          conta: '16083-6',
-          orderId: order.id,
-          installmentId: inst.id
-        });
+        if (isFromReportData) {
+          // Caso padrão: Contrato criado dentro do período
+          shouldInclude = true;
+        } else if (includeOldPaid && instPaymentDate && startDate && endDate) {
+          // Caso Injetado: Contrato é antigo, mas foi pago neste período
+          const orderDate = new Date(order.createdAt);
+          if (orderDate < startDate && instPaymentDate >= startDate && instPaymentDate <= endDate) {
+            shouldInclude = true;
+            isOldContractPayment = true;
+          }
+        }
+
+        // Filtro: Apenas Liquidadas
+        if (shouldInclude && showOnlyPaid && inst.status !== 'PAID') {
+          shouldInclude = false;
+        }
+
+        // Se passar por todos os critérios, adiciona à lista
+        if (shouldInclude) {
+          const vlrPago = inst.status === 'PAID' ? (inst.netValue ?? inst.value) : 0;
+          const jurosLocal = inst.status === 'PAID' ? (vlrPago - inst.value) : 0;
+
+          data.push({
+            cliente: customer?.name || 'N/D',
+            linkId: order.id,
+            contrato: order.contractNumber || order.id.slice(0, 8),
+            nf: order.nfeNumber || inst.nfe || '--',
+            dataNF: order.createdAt,
+            vlrTotalNF: order.totalValue,
+            parcela: `${String(inst.number).padStart(2, '0')}/${String(installments.length).padStart(2, '0')}`,
+            vlrParcela: inst.value,
+            vencimento: inst.dueDate,
+            dtPagto: inst.paymentDate,
+            status: inst.status,
+            valorPago: vlrPago,
+            descontos: 0,
+            juros: jurosLocal,
+            banco: 'Itaú - RTC',
+            conta: '16083-6',
+            orderId: order.id,
+            installmentId: inst.id,
+            isOldContractPayment
+          });
+        }
       });
     });
 
     return data.sort((a, b) => {
-      // Primeiro agrupar pelo contrato de forma decrescente (mais novos no topo)
+      // 1. Separar pagamentos de contratos antigos (colocar no final)
+      if (a.isOldContractPayment !== b.isOldContractPayment) {
+        return a.isOldContractPayment ? 1 : -1;
+      }
+      
+      // 2. Para o mesmo grupo, agrupar pelo contrato de forma decrescente
       if (b.contrato !== a.contrato) return b.contrato.localeCompare(a.contrato);
       
-      // Depois ordenar as parcelas (01/02, 02/02, etc) dentro do contrato de forma crescente
+      // 3. Ordenar as parcelas dentro do contrato
       return a.parcela.localeCompare(b.parcela);
     });
-  }, [reportData, customers]);
+  }, [reportData, confirmedOrders, customers, includeOldPaid, showOnlyPaid, filterStartDate, filterEndDate]);
 
   const productTypes = useMemo(() => {
     const types = new Set<string>();
@@ -507,10 +551,43 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
             />
           </div>
         </div>
+        {activeTab === 'receivables' && (
+          <>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Parcelas</label>
+              <button 
+                onClick={() => setShowOnlyPaid(!showOnlyPaid)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                  showOnlyPaid 
+                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm' 
+                    : 'bg-slate-50 text-slate-400 border border-transparent hover:bg-slate-100'
+                }`}
+              >
+                {showOnlyPaid ? <Check size={14} /> : <div className="w-3.5 h-3.5 border-2 border-slate-300 rounded-sm" />}
+                APENAS LIQUIDADAS
+              </button>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Abrangência</label>
+              <button 
+                onClick={() => setIncludeOldPaid(!includeOldPaid)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                  includeOldPaid 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' 
+                    : 'bg-slate-50 text-slate-400 border border-transparent hover:bg-slate-100'
+                }`}
+              >
+                {includeOldPaid ? <Check size={14} /> : <div className="w-3.5 h-3.5 border-2 border-slate-300 rounded-sm" />}
+                INCLUIR CONTRATOS ANTIGOS
+              </button>
+            </div>
+          </>
+        )}
         <button 
           onClick={() => {
             setFilterStartDate(''); setFilterEndDate(''); 
             setFilterSellerId(''); setFilterType(''); setSearchTerm('');
+            setShowOnlyPaid(false); setIncludeOldPaid(false);
           }}
           className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
           title="Limpar Filtros"
@@ -1021,18 +1098,25 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
                             <tr key={`${row.contrato}-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="px-4 py-3 text-slate-900 font-bold uppercase">{row.cliente}</td>
                                 <td className="px-4 py-3 text-blue-600 font-black uppercase">
-                                    <button 
-                                        onClick={() => {
-                                            const originalOrder = orders.find(o => o.id === row.orderId);
-                                            if (originalOrder) {
-                                                setSelectedOrderForView(originalOrder);
-                                                setShowPrintModal(true);
-                                            }
-                                        }}
-                                        className="hover:underline text-left"
-                                    >
-                                        {row.contrato}
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                        <button 
+                                            onClick={() => {
+                                                const originalOrder = orders.find(o => o.id === row.orderId);
+                                                if (originalOrder) {
+                                                    setSelectedOrderForView(originalOrder);
+                                                    setShowPrintModal(true);
+                                                }
+                                            }}
+                                            className="hover:underline text-left"
+                                        >
+                                            {row.contrato}
+                                        </button>
+                                        {row.isOldContractPayment && (
+                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded text-[8px] font-black border border-blue-100 animate-pulse">
+                                                ANTIGO
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-4 py-3 text-slate-500 font-black">{row.nf}</td>
                                 <td className="px-4 py-3 text-slate-600">{new Date(row.dataNF).toLocaleDateString()}</td>

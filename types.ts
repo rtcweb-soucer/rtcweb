@@ -432,6 +432,7 @@ export interface RawMaterialMovement {
   invoice_number?: string;
   notes?: string;
   user_id?: string;
+  nfe_key?: string;
   created_at?: string;
 }
 
