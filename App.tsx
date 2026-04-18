@@ -246,7 +246,7 @@ const App = () => {
         role: UserRole.SELLER,
         active: true,
         sellerId: s.id,
-        permissions: ['quick-quote', 'my-schedule', 'measurements', 'quotes', 'orders', 'tarefas']
+        permissions: ['quick-quote', 'my-schedule', 'measurements', 'quotes', 'orders', 'tarefas', 'gerente-ia']
       };
       const savedUser = await dataService.saveSystemUser(newUser);
       setSystemUsers((prev: SystemUser[]) => [...prev, savedUser]);
@@ -780,6 +780,7 @@ const App = () => {
           orders={orders} 
           sellers={sellers} 
           customers={customers} 
+          appointments={viewAppointments}
           currentUser={currentUser!} 
         />;
       default:

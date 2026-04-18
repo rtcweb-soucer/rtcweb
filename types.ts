@@ -442,3 +442,10 @@ export interface RawMaterialMapping {
   raw_material_id: string;
   created_at?: string;
 }
+
+export interface SalesGoal {
+  id: string;
+  sellerId: string | null;
+  goalAmount: number;
+  updatedAt: string;
+}

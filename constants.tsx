@@ -47,7 +47,7 @@ export const MENU_ITEMS = [
   { id: 'expenses', label: 'Despesas', icon: <Receipt size={20} className="text-rose-500" />, roles: ['ADMIN'] },
   { id: 'commissions', label: 'Comissões', icon: <Coins size={20} className="text-amber-500" />, roles: ['ADMIN'] },
   { id: 'sales-report', label: 'Relatório de Vendas', icon: <BarChart3 size={20} className="text-indigo-500" />, roles: ['ADMIN', 'ATTENDANT'] },
-  { id: 'gerente-ia', label: 'Gerente IA', icon: <Bot size={20} className="text-purple-600" />, roles: ['ADMIN'] },
+  { id: 'gerente-ia', label: 'Gerente IA', icon: <Bot size={20} className="text-purple-600" />, roles: ['ADMIN', 'SELLER'] },
   { id: 'installers', label: 'Instaladores', icon: <HardHat size={20} className="text-blue-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'nfe-management', label: 'Gerenciar NF-e', icon: <FileText size={20} className="text-blue-500" />, roles: ['ADMIN'] },
   { id: 'api-config', label: 'Configuração de APIs', icon: <SettingsIcon size={20} className="text-indigo-600" />, roles: ['ADMIN'] },

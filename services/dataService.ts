@@ -1427,6 +1427,32 @@ export const dataService = {
         return data as RawMaterialMapping;
     },
 
+    // AI Sales Goals
+    async getSalesGoals(): Promise<SalesGoal[]> {
+        const { data, error } = await supabase.from('ai_sales_goals').select('*');
+        if (error) throw error;
+        return (data || []).map(g => ({
+            id: g.id,
+            sellerId: g.seller_id,
+            goalAmount: Number(g.goal_amount),
+            updatedAt: g.updated_at
+        }));
+    },
+    async saveSalesGoal(sellerId: string | null, amount: number) {
+        const { data, error } = await supabase
+            .from('ai_sales_goals')
+            .upsert({ seller_id: sellerId, goal_amount: amount }, { onConflict: 'seller_id' })
+            .select()
+            .single();
+        if (error) throw error;
+        return {
+            id: data.id,
+            sellerId: data.seller_id,
+            goalAmount: Number(data.goal_amount),
+            updatedAt: data.updated_at
+        } as SalesGoal;
+    },
+
     // Rotina de Backup Total
     async generateSystemBackup() {
         try {
