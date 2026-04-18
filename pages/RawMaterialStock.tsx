@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { RawMaterial, RawMaterialMovement, SystemUser, RawMaterialMapping } from '../types';
+import { RawMaterial, RawMaterialMovement, SystemUser, RawMaterialMapping, AccountCategory } from '../types';
 import { dataService } from '../services/dataService';
 import { 
   Plus, 
@@ -63,6 +63,13 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
     category: 'Componente'
   });
   
+  // Financeiro no XML
+  const [xmlInstallments, setXmlInstallments] = useState<any[]>([]);
+  const [generateFinancial, setGenerateFinancial] = useState(true);
+  const [expenseCategories, setExpenseCategories] = useState<AccountCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+
+  
   const [movement, setMovement] = useState({
     type: 'IN' as 'IN' | 'OUT',
     quantity: 0,
@@ -91,7 +98,18 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
       setMaterials(mats);
       setMappings(maps);
       
+      const cats = await dataService.getAccountCategories();
+      const expenseCats = cats.filter(c => c.type === 'EXPENSE');
+      setExpenseCategories(expenseCats);
+      
+      // Tentar encontrar categoria "Matéria Prima" ou "Custos Variáveis"
+      const defaultCat = expenseCats.find(c => c.name.toLowerCase().includes('matéria prima')) || 
+                        expenseCats.find(c => c.code === '2.0.0') || 
+                        expenseCats[0];
+      if (defaultCat) setSelectedCategoryId(defaultCat.id);
+      
       const keys = new Set<string>();
+
       movs.forEach((m: any) => {
           if (m.nfe_key) keys.add(m.nfe_key);
       });
@@ -245,8 +263,31 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
       }
 
       setXmlData(items);
+
+      // --- Novo: Processar Cobrança e Duplicatas ---
+      const installments: any[] = [];
+      const dups = getTags(xmlDoc, "dup");
+      
+      for (const dup of dups) {
+          const nDup = getVal(dup, "nDup");
+          const dVenc = getVal(dup, "dVenc");
+          const vDup = getVal(dup, "vDup");
+          
+          installments.push({
+              id: crypto.randomUUID(),
+              number: nDup,
+              date: dVenc,
+              amount: Number(vDup)
+          });
+      }
+
+      setXmlInstallments(installments);
+      setGenerateFinancial(installments.length > 0);
+      // ---------------------------------------------
+
       setShowXmlModal(true);
       return true;
+
     } catch (err) {
       console.error("Erro no processXmlContent:", err);
       alert("Falha crítica ao processar os dados do XML.");
@@ -337,17 +378,36 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
         });
         processed++;
       }
-      
-      alert(`${processed} itens de estoque atualizados com sucesso!`);
+      // --- Novo: Gerar Contas a Pagar ---
+      if (generateFinancial && xmlInstallments.length > 0) {
+        for (const inst of xmlInstallments) {
+          await dataService.saveFinancialTransaction({
+            id: crypto.randomUUID(),
+            description: `Compra Matéria Prima - NF ${xmlInvoice} - ${xmlSupplier}`,
+            amount: inst.amount,
+            type: 'EXPENSE',
+            status: 'PENDING',
+            due_date: inst.date,
+            category_id: selectedCategoryId || null,
+            notes: `Gerado via importação de XML da Matéria Prima. NF ${xmlInvoice}, Fornecedor: ${xmlSupplier}`,
+          } as any);
+        }
+      }
+      // ----------------------------------
+
+      alert(`${processed} itens de estoque atualizados com sucesso!${generateFinancial ? ' Financeiro gerado.' : ''}`);
       setShowXmlModal(false);
       setXmlFile(null);
       setXmlData([]);
+      setXmlInstallments([]);
       setCurrentCloudKey(null);
       loadInitialData();
-    } catch (err) {
-      alert("Erro durante a importação.");
+    } catch (err: any) {
+      console.error("Erro na importação:", err);
+      alert("Erro durante a importação: " + (err.message || "Erro desconhecido"));
     }
   };
+
 
   const filteredMaterials = materials.filter(m => {
     const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -790,7 +850,144 @@ const RawMaterialStock = ({ currentUser }: RawMaterialStockProps) => {
                         ))}
                       </tbody>
                     </table>
+
+                    {/* --- Novo: Seção Financeira --- */}
+                    <div className="mt-8 pt-8 border-t border-slate-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Database className="text-indigo-600" size={20} />
+                          <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Financeiro / Contas a Pagar</h4>
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                          <button 
+                            onClick={() => setGenerateFinancial(true)}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${generateFinancial ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+                          >
+                            GERAR FINANCEIRO
+                          </button>
+                          <button 
+                            onClick={() => setGenerateFinancial(false)}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${!generateFinancial ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}
+                          >
+                            NÃO GERAR
+                          </button>
+                        </div>
+                      </div>
+
+                      {generateFinancial && (
+                        <div className="animate-in slide-in-from-top-2 duration-300 space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Categoria de Despesa</label>
+                               <select 
+                                 value={selectedCategoryId}
+                                 onChange={(e) => setSelectedCategoryId(e.target.value)}
+                                 className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                               >
+                                 <option value="">Selecione uma categoria...</option>
+                                 {expenseCategories.map(cat => (
+                                   <option key={cat.id} value={cat.id}>{cat.code} - {cat.name}</option>
+                                 ))}
+                               </select>
+                            </div>
+                            <div className="flex items-end">
+                               <button 
+                                 onClick={() => {
+                                   setXmlInstallments([...xmlInstallments, { id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], amount: 0, number: `${xmlInstallments.length + 1}` }]);
+                                 }}
+                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 font-black rounded-xl hover:bg-indigo-100 text-xs transition-all border border-indigo-100"
+                               >
+                                 <Plus size={14} /> Adicionar Parcela
+                               </button>
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                            <table className="w-full text-left">
+                              <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                <tr>
+                                  <th className="p-3"># Parcela</th>
+                                  <th className="p-3">Vencimento</th>
+                                  <th className="p-3">Valor (R$)</th>
+                                  <th className="p-3 text-right">Ação</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50 text-xs">
+                                {xmlInstallments.map((inst, idx) => (
+                                  <tr key={inst.id}>
+                                    <td className="p-2">
+                                      <input 
+                                        type="text" 
+                                        value={inst.number}
+                                        onChange={(e) => {
+                                          const newList = [...xmlInstallments];
+                                          newList[idx].number = e.target.value;
+                                          setXmlInstallments(newList);
+                                        }}
+                                        className="w-16 p-1 bg-transparent font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded"
+                                      />
+                                    </td>
+                                    <td className="p-2">
+                                      <input 
+                                        type="date" 
+                                        value={inst.date}
+                                        onChange={(e) => {
+                                          const newList = [...xmlInstallments];
+                                          newList[idx].date = e.target.value;
+                                          setXmlInstallments(newList);
+                                        }}
+                                        className="p-1 bg-transparent font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded"
+                                      />
+                                    </td>
+                                    <td className="p-2">
+                                      <input 
+                                        type="number" 
+                                        value={inst.amount}
+                                        onChange={(e) => {
+                                          const newList = [...xmlInstallments];
+                                          newList[idx].amount = Number(e.target.value);
+                                          setXmlInstallments(newList);
+                                        }}
+                                        className="w-24 p-1 bg-transparent font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded text-right"
+                                      />
+                                    </td>
+                                    <td className="p-2 text-right">
+                                      <button 
+                                        onClick={() => setXmlInstallments(xmlInstallments.filter(i => i.id !== inst.id))}
+                                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                                {xmlInstallments.length === 0 && (
+                                  <tr>
+                                    <td colSpan={4} className="p-4 text-center text-slate-400 font-bold bg-slate-50/50">
+                                      Nenhuma parcela informada. Adicione manualmente se desejar gerar o contas a pagar.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              {xmlInstallments.length > 0 && (
+                                <tfoot className="bg-slate-50 border-t border-slate-100">
+                                  <tr>
+                                    <td colSpan={2} className="p-3 text-right font-black text-slate-400 text-[9px] uppercase">Total das Parcelas:</td>
+                                    <td className="p-3 text-right font-black text-indigo-600">
+                                      {xmlInstallments.reduce((acc, cur) => acc + cur.amount, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </td>
+                                    <td></td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* ------------------------------- */}
                   </div>
+
                 )}
              </div>
              <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50 rounded-b-3xl">
