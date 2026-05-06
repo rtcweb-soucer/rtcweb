@@ -23,6 +23,7 @@ import {
   CheckSquare,
   BarChart3,
   Bot,
+  Clock,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -49,6 +50,7 @@ export const MENU_ITEMS = [
   { id: 'sales-report', label: 'Relatório de Vendas', icon: <BarChart3 size={20} className="text-indigo-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'gerente-ia', label: 'Gerente IA', icon: <Bot size={20} className="text-purple-600" />, roles: ['ADMIN', 'SELLER'] },
   { id: 'installers', label: 'Instaladores', icon: <HardHat size={20} className="text-blue-500" />, roles: ['ADMIN', 'ATTENDANT'] },
+  { id: 'ponto', label: 'Ponto Eletrônico', icon: <Clock size={20} className="text-amber-500" />, roles: ['ADMIN', 'ATTENDANT', 'PRODUCTION', 'BUYER'] },
   { id: 'nfe-management', label: 'Gerenciar NF-e', icon: <FileText size={20} className="text-blue-500" />, roles: ['ADMIN'] },
   { id: 'api-config', label: 'Configuração de APIs', icon: <SettingsIcon size={20} className="text-indigo-600" />, roles: ['ADMIN'] },
   { id: 'system-users', label: 'Cadastro de Equipe', icon: <Users2 size={20} className="text-rose-500" />, roles: ['ADMIN', 'ATTENDANT'] },

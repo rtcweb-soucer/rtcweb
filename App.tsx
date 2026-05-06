@@ -31,7 +31,7 @@ import InstallerPortal from './pages/InstallerPortal';
 import RawMaterialStock from './pages/RawMaterialStock';
 import IAManager from './pages/IAManager';
 
-import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart } from 'lucide-react';
+import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart, Clock } from 'lucide-react';
 import { dataService } from './services/dataService';
 import { googleCalendarService, GoogleCalendarEvent } from './services/googleCalendarService';
 
@@ -783,6 +783,29 @@ const App = () => {
           appointments={viewAppointments}
           currentUser={currentUser!} 
         />;
+      case 'ponto':
+        const employeeInstaller = installers.find(i => i.login === currentUser?.login);
+        if (employeeInstaller) {
+          return (
+            <InstallerPortal
+              installer={employeeInstaller}
+              orders={orders}
+              customers={customers}
+              technicalSheets={technicalSheets}
+              products={products}
+              appointments={appointments}
+              onLogout={() => setActiveTab('dashboard')}
+              onUpdateOrder={handleUpdateOrder}
+            />
+          );
+        }
+        return (
+          <div className="p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-100">
+            <Clock size={48} className="mx-auto text-slate-300 mb-4" />
+            <h3 className="text-lg font-bold text-slate-700 mb-2">Configuração Pendente</h3>
+            <p className="text-slate-500">O registro de ponto não foi configurado corretamente para o seu usuário. Por favor, contate o administrador.</p>
+          </div>
+        );
       default:
 
         return <div className="flex items-center justify-center h-full text-slate-400">Funcionalidade em desenvolvimento</div>;
