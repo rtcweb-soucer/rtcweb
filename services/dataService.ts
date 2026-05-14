@@ -91,6 +91,68 @@ export const dataService = {
         if (error) throw error;
     },
 
+    // Quick Quotes
+    async getQuickQuotes() {
+        const { data, error } = await supabase
+            .from('quick_quotes')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map(q => ({
+            ...q,
+            customerId: q.customer_id,
+            customerName: q.customer_name,
+            customerPhone: q.customer_phone,
+            sellerId: q.seller_id,
+            totalValue: q.total_value,
+            quickQuoteNumber: q.quick_quote_number,
+            createdAt: q.created_at
+        })) as QuickQuote[];
+    },
+
+    async saveQuickQuote(quote: QuickQuote) {
+        const isUUID = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+
+        const payload: any = {
+            customer_id: (quote.customerId && isUUID(quote.customerId)) ? quote.customerId : null,
+            customer_name: quote.customerName || 'Consumidor Final',
+            customer_phone: quote.customerPhone || null,
+            seller_id: (quote.sellerId && isUUID(quote.sellerId)) ? quote.sellerId : null,
+            items: quote.items,
+            total_value: quote.totalValue,
+            installments: quote.installments,
+            notes: quote.notes || null
+        };
+
+        if (quote.id) payload.id = quote.id;
+
+        const { data, error } = await supabase
+            .from('quick_quotes')
+            .upsert(payload)
+            .select()
+            .single();
+        
+        if (error) {
+            console.error("Supabase Save Quick Quote Error:", error);
+            throw error;
+        }
+        return {
+            ...data,
+            customerId: data.customer_id,
+            customerName: data.customer_name,
+            customerPhone: data.customer_phone,
+            sellerId: data.seller_id,
+            totalValue: data.total_value,
+            quickQuoteNumber: data.quick_quote_number,
+            createdAt: data.created_at
+        } as QuickQuote;
+    },
+
+    async deleteQuickQuote(id: string) {
+        const { error } = await supabase.from('quick_quotes').delete().eq('id', id);
+        if (error) throw error;
+    },
+
     // Customers
     async getCustomers() {
         try {

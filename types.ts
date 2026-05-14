@@ -449,3 +449,16 @@ export interface SalesGoal {
   goalAmount: number;
   updatedAt: string;
 }
+export interface QuickQuote {
+  id: string;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  sellerId?: string;
+  items: any[];
+  totalValue: number;
+  installments: number;
+  quickQuoteNumber?: string;
+  notes?: string;
+  createdAt: string | Date;
+}

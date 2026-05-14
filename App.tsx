@@ -611,7 +611,15 @@ const App = () => {
           onAddCustomer={handleAddCustomer}
         />;
       case 'quick-quote':
-        return <QuickQuote products={products} storageKey="main" />;
+        return (
+          <QuickQuote 
+            products={products} 
+            storageKey="main" 
+            currentUser={currentUser}
+            onAddTechnicalSheet={handleSaveTechnicalSheet}
+            onUpdateOrder={handleUpdateOrder}
+          />
+        );
       case 'sellers':
         return <Sellers
           sellers={sellers} appointments={viewAppointments} customers={viewCustomers} technicalSheets={viewTechnicalSheets}
