@@ -11,6 +11,8 @@ import { CortinaForm, ToldoForm, CoberturaForm } from '../components/ProductionF
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 import ThreeDecimalInput from '../components/ThreeDecimalInput';
 import { CORTINA_COMMAND_OPTIONS, TOLDO_COMMAND_OPTIONS } from '../constants';
+import ProductionSheetPrint from '../components/ProductionSheetPrint';
+import { Printer } from 'lucide-react';
 
 interface MeasurementFormProps {
   customers: Customer[];
@@ -127,6 +129,9 @@ const MeasurementForm = ({
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [parentItemToSplit, setParentItemToSplit] = useState<MeasurementItem | null>(null);
   const [splitSubItems, setSplitSubItems] = useState<Partial<MeasurementItem>[]>([]);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printData, setPrintData] = useState<any>(null);
+  const printRef = React.useRef<HTMLDivElement>(null);
 
 
   useEffect(() => {
@@ -494,6 +499,8 @@ const MeasurementForm = ({
     }
   };
 
+  const [isPrintingHistory, setIsPrintingHistory] = useState<string | null>(null);
+
   const toggleHistoryItemSelection = (sheetId: string, itemId: string) => {
     setHistorySelectedItems(prev => {
       const next = { ...prev };
@@ -516,6 +523,88 @@ const MeasurementForm = ({
     // Preservar a ordem original da ficha
     const orderedSelectedIds = sheet.items.filter(item => selectedIds.has(item.id)).map(item => item.id);
     onGenerateQuote(sheet, orderedSelectedIds);
+  };
+
+  const handlePrintSelectedFromHistory = async (sheet: TechnicalSheet) => {
+    const selectedIds = historySelectedItems[sheet.id];
+    if (!selectedIds || selectedIds.size === 0) {
+      alert("Por favor, selecione pelo menos um item para imprimir a ficha.");
+      return;
+    }
+
+    const customer = customers.find(c => c.id === sheet.customerId);
+    if (!customer) {
+      alert("Erro: Cliente não encontrado para esta ficha.");
+      return;
+    }
+
+    setIsPrintingHistory(sheet.id);
+    try {
+      // 1. Identificar todos os itens que devem ser incluídos (selecionados + seus acessórios)
+      // Se um item pai for selecionado, incluímos seus acessórios para manter a regra do PCP
+      const itemsToIncludeIds = new Set<string>();
+      
+      sheet.items.forEach(item => {
+        if (selectedIds.has(item.id)) {
+          itemsToIncludeIds.add(item.id);
+          // Se for um item pai, buscar seus acessórios na mesma ficha
+          sheet.items.forEach(sub => {
+            if (sub.parentItemId === item.id) {
+              itemsToIncludeIds.add(sub.id);
+            }
+          });
+        }
+        // Se um acessório foi selecionado individualmente, garantimos que ele entre (já está no set)
+      });
+
+      // 2. Buscar dados de produção para todos os itens identificados
+      const enrichedItems = await Promise.all(
+        sheet.items
+          .filter(item => itemsToIncludeIds.has(item.id))
+          .map(async (item) => {
+            const productionSheet = await dataService.getProductionInstallationSheet(item.id);
+            return {
+              ...item,
+              productionSheet: productionSheet || undefined
+            };
+          })
+      );
+
+      const data = {
+        order: {
+          id: sheet.id,
+          technicalSheetId: sheet.id,
+          createdAt: new Date(sheet.createdAt),
+          totalValue: 0 
+        },
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          type: customer.type,
+          cpfCnpj: customer.cpfCnpj || customer.document || '',
+          phone: customer.phone || '',
+          address: customer.address
+        },
+        items: enrichedItems
+      };
+
+      setPrintData(data);
+      setShowPrintModal(true);
+    } catch (error) {
+      console.error('Error fetching production sheets:', error);
+      alert('Erro ao carregar fichas de produção.');
+    } finally {
+      setIsPrintingHistory(null);
+    }
+  };
+
+  const handlePrint = () => {
+    if (printRef.current) {
+      const htmlContent = printRef.current.innerHTML;
+      import('../components/ProductionSheetPrint').then(mod => {
+        mod.printHTML(htmlContent);
+      });
+    }
   };
 
   const openProductionModal = async (itemId: string) => {
@@ -692,7 +781,7 @@ const MeasurementForm = ({
               <div className="space-y-8">
                 {historicalSheets.map(sheet => (
                   <div key={sheet.id} className="bg-slate-50/30 border border-slate-200 rounded-3xl p-6 transition-all shadow-sm">
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center justify-between sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm -mx-6 px-6 py-4 border-b border-slate-100 mb-6 rounded-t-3xl shadow-sm">
                       <div className="flex items-center gap-4">
                         <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                           <Clock size={20} className="text-blue-500" />
@@ -707,28 +796,37 @@ const MeasurementForm = ({
                       </div>
 
                       {/* Opcional: mantemos esse botão mas ele avisa sobre a global ou funciona apenas para esse sheet */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => onEditSheet?.(sheet)}
-                          className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs ring-1 ring-blue-100 hover:bg-blue-100 transition-all shadow-sm"
-                          title="Editar esta ficha"
-                        >
-                          <Edit3 size={14} /> Editar
-                        </button>
-                        <button
-                          onClick={() => onDeleteSheet?.(sheet.id)}
-                          className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-xs ring-1 ring-rose-100 hover:bg-rose-100 transition-all shadow-sm"
-                          title="Excluir ficha completa"
-                        >
-                          <Trash2 size={14} /> Excluir
-                        </button>
-                        <button
-                          onClick={() => handleGenerateQuoteFromHistory(sheet)}
-                          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-[0.98] shadow-lg ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed uppercase tracking-widest'}`}
-                        >
-                          <FileText size={16} /> Gerar Orçamento destes ({historySelectedItems[sheet.id]?.size || 0})
-                        </button>
-                      </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handlePrintSelectedFromHistory(sheet)}
+                            disabled={isPrintingHistory === sheet.id}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ring-1 ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-indigo-50 text-indigo-600 ring-indigo-200 hover:bg-indigo-100' : 'bg-slate-50 text-slate-400 ring-slate-100 cursor-not-allowed'} ${isPrintingHistory === sheet.id ? 'animate-pulse opacity-70' : ''}`}
+                            title="Imprimir Ficha de Produção dos itens selecionados"
+                          >
+                            <Printer size={14} className={isPrintingHistory === sheet.id ? 'animate-spin' : ''} /> 
+                            {isPrintingHistory === sheet.id ? 'Carregando...' : `Imprimir Ficha (${historySelectedItems[sheet.id]?.size || 0})`}
+                          </button>
+                          <button
+                            onClick={() => onEditSheet?.(sheet)}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs ring-1 ring-blue-100 hover:bg-blue-100 transition-all shadow-sm"
+                            title="Editar esta ficha"
+                          >
+                            <Edit3 size={14} /> Editar
+                          </button>
+                          <button
+                            onClick={() => onDeleteSheet?.(sheet.id)}
+                            className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-xs ring-1 ring-rose-100 hover:bg-rose-100 transition-all shadow-sm"
+                            title="Excluir ficha completa"
+                          >
+                            <Trash2 size={14} /> Excluir
+                          </button>
+                          <button
+                            onClick={() => handleGenerateQuoteFromHistory(sheet)}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-[0.98] shadow-lg ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed uppercase tracking-widest'}`}
+                          >
+                            <FileText size={16} /> Gerar Orçamento destes ({historySelectedItems[sheet.id]?.size || 0})
+                          </button>
+                        </div>
                     </div>
 
                     <div className="space-y-2">
@@ -1391,6 +1489,56 @@ const MeasurementForm = ({
                 className="px-8 py-3 rounded-xl font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-500/30 transition-all flex items-center gap-2"
               >
                 Confirmar e Adicionar Sub-itens
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE IMPRESSÃO */}
+      {showPrintModal && printData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl max-w-[950px] w-full max-h-[90vh] overflow-hidden flex flex-col border border-white/20">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+              <div>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">Visualizar Ficha de Produção</h3>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">
+                  Impressão Selecionada - {printData.customer.name}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
+                >
+                  <Printer size={20} /> Imprimir Agora
+                </button>
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="p-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 rounded-full text-slate-400 transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-8 overflow-y-auto bg-slate-50/50 flex-1 custom-scrollbar">
+              <div className="bg-white shadow-xl rounded-sm mx-auto overflow-hidden">
+                <ProductionSheetPrint ref={printRef} data={printData} products={products} />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 sticky bottom-0">
+              <button
+                onClick={() => setShowPrintModal(false)}
+                className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-2 px-8 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
+              >
+                <Printer size={20} /> Confirmar e Imprimir
               </button>
             </div>
           </div>

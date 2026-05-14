@@ -24,11 +24,13 @@ import {
   BarChart3,
   Bot,
   Clock,
+  MessageSquare,
   Settings as SettingsIcon
 } from 'lucide-react';
 
 export const MENU_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['ADMIN', 'ATTENDANT'] },
+  { id: 'crm', label: 'CRM WhatsApp', icon: <MessageSquare size={20} className="text-emerald-500" />, roles: ['ADMIN', 'SELLER', 'ATTENDANT'] },
   { id: 'quick-quote', label: 'Orçamento Rápido', icon: <Zap size={20} className="text-amber-500" />, roles: ['ADMIN', 'SELLER', 'ATTENDANT'] },
   { id: 'sellers', label: 'Equipe de Vendas', icon: <UserSquare size={20} />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'customers', label: 'Clientes', icon: <Users size={20} />, roles: ['ADMIN', 'ATTENDANT'] },

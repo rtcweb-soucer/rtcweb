@@ -44,7 +44,8 @@ import {
   SendHorizontal,
   MessageCircle,
   Copy,
-  Check
+  Check,
+  Factory
 } from 'lucide-react';
 
 interface OrdersProps {
@@ -61,6 +62,7 @@ interface OrdersProps {
 }
 
 import OrderContractPrint from '../components/OrderContractPrint';
+import ProductionSheetPrint from '../components/ProductionSheetPrint';
 
 
 const Orders = ({
@@ -87,6 +89,10 @@ const Orders = ({
   const [searchTermCustomers, setSearchTermCustomers] = useState('');
   const [showCVModal, setShowCVModal] = useState(false);
   const [cvInputs, setCvInputs] = useState<Record<string, string>>({});
+
+  const [showProductionPrintModal, setShowProductionPrintModal] = useState(false);
+  const [productionPrintData, setProductionPrintData] = useState<any>(null);
+  const productionPrintRef = useRef<HTMLDivElement>(null);
 
   const handleCopyValue = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -221,6 +227,32 @@ const Orders = ({
   const [showFilters, setShowFilters] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintProductionSheet = async (orderId: string) => {
+    try {
+      setProductionPrintData(null);
+      const data = await dataService.getOrderProductionData(orderId);
+      setProductionPrintData(data);
+      setShowProductionPrintModal(true);
+    } catch (error) {
+      console.error('Error loading production data:', error);
+      alert('Erro ao carregar dados para impressão: ' + (error as Error).message);
+    }
+  };
+
+  const handlePrintProduction = () => {
+    if (productionPrintRef.current) {
+      const htmlContent = productionPrintRef.current.innerHTML;
+      import('../components/ProductionSheetPrint').then(mod => {
+        mod.printHTML(htmlContent);
+      });
+    }
+  };
+
+  const closeProductionPrintModal = () => {
+    setShowProductionPrintModal(false);
+    setProductionPrintData(null);
+  };
 
   const sortedOrders = [...orders].sort((a, b) =>
     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -886,6 +918,9 @@ const Orders = ({
             <button onClick={() => handleGeneratePrint(true)} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
               <Printer size={18} /> Imprimir / PDF
             </button>
+            <button onClick={() => handlePrintProductionSheet(selectedOrder.id)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+              <Factory size={18} /> Ficha Produção
+            </button>
             <button 
               onClick={() => {
                 const initialInputs: Record<string, string> = {};
@@ -916,6 +951,57 @@ const Orders = ({
           onWhatsAppShare={handleWhatsAppManualShare}
           onCopyValue={handleCopyValue}
         />
+
+        {showProductionPrintModal && productionPrintData && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-[950px] w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-100">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white/50 backdrop-blur-md sticky top-0 z-10">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-50 p-2.5 rounded-2xl">
+                    <Factory className="text-emerald-600" size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Ficha de Produção e Instalação</h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Visualização Prévia</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handlePrintProduction}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                  >
+                    <Printer size={18} /> Imprimir Ficha
+                  </button>
+                  <button
+                    onClick={closeProductionPrintModal}
+                    className="p-2.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-2xl text-slate-400 transition-all border border-slate-100"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-8 overflow-y-auto bg-slate-50/30 flex-1">
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-1 overflow-x-auto">
+                  <ProductionSheetPrint ref={productionPrintRef} data={productionPrintData} products={products} />
+                </div>
+              </div>
+              <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3">
+                <button
+                  onClick={closeProductionPrintModal}
+                  className="px-6 py-2.5 bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 rounded-2xl transition-all"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={handlePrintProduction}
+                  className="px-8 py-2.5 bg-emerald-600 text-white font-bold hover:bg-emerald-700 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                >
+                  Confirmar e Imprimir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
 
 

@@ -63,7 +63,9 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
     };
 
     const getProductType = (productId: string): string => {
-        return products.find(p => p.id === productId)?.tipo || 'Outro';
+        const type = products.find(p => p.id === productId)?.tipo || 'Outro';
+        // Normalize to Title Case to match switch cases
+        return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
     };
 
     // Group items by environment and product type
@@ -74,18 +76,23 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
 
         // Link accessories to parents and organize main items into groups
         for (const item of itemsMap.values()) {
+            const env = item.environment || 'Sem Ambiente';
+            const type = getProductType(item.productId);
+
             if (item.parentItemId) {
                 const parent = itemsMap.get(item.parentItemId);
                 if (parent) {
-                    // Check to avoid duplicates if ID is somehow repeated
+                    // Link accessory to parent
                     if (!parent.accessories.some((acc: any) => acc.id === item.id)) {
                         parent.accessories.push(item);
                     }
+                } else {
+                    // Orphaned accessory: Treat as a main item so it's not hidden
+                    if (!grouped[env]) grouped[env] = {};
+                    if (!grouped[env][type]) grouped[env][type] = [];
+                    grouped[env][type].push(item);
                 }
             } else {
-                const env = item.environment || 'Sem Ambiente';
-                const type = getProductType(item.productId);
-
                 if (!grouped[env]) grouped[env] = {};
                 if (!grouped[env][type]) grouped[env][type] = [];
 

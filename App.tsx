@@ -30,6 +30,7 @@ import ApiConfig from './pages/ApiConfig';
 import InstallerPortal from './pages/InstallerPortal';
 import RawMaterialStock from './pages/RawMaterialStock';
 import IAManager from './pages/IAManager';
+import CRM from './pages/CRM';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart, Clock } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -602,8 +603,15 @@ const App = () => {
           technicalSheets={viewTechnicalSheets}
           transactions={financialTransactions}
         />;
+      case 'crm':
+        return <CRM
+          customers={viewCustomers}
+          products={products}
+          sellers={sellers}
+          onAddCustomer={handleAddCustomer}
+        />;
       case 'quick-quote':
-        return <QuickQuote products={products} />;
+        return <QuickQuote products={products} storageKey="main" />;
       case 'sellers':
         return <Sellers
           sellers={sellers} appointments={viewAppointments} customers={viewCustomers} technicalSheets={viewTechnicalSheets}
