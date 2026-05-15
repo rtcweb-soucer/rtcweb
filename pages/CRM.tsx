@@ -43,6 +43,9 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [activeUserTab, setActiveUserTab] = useState<string>(currentUser?.id || 'all');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob, url: string, base64: string } | null>(null);
+  const [isPlayingRecorded, setIsPlayingRecorded] = useState(false);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [history, setHistory] = useState<{
     orders: Order[];
     quotes: any[];
@@ -219,7 +222,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
             event: 'INSERT',
             schema: 'public',
             table: 'whatsapp_messages',
-            filter: `phone=eq.${cleanPhone}`
+            filter: `phone=in.(${activeChat.phone.replace(/\D/g, '')},55${activeChat.phone.replace(/\D/g, '')})`
           },
           (payload) => {
             loadMessages(activeChat.phone!);
@@ -305,11 +308,16 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       const cleanPhone = activeChat.phone!.replace(/\D/g, '');
       
       if (type === 'text') {
+        let phoneWithDDI = cleanPhone;
+        if (!phoneWithDDI.startsWith('55') && phoneWithDDI.length >= 10) {
+          phoneWithDDI = '55' + phoneWithDDI;
+        }
+
         await evolutionService.sendMessage(
           systemConfig.evolution_url,
           selectedInstance.apikey,
           selectedInstance.instance_name,
-          cleanPhone,
+          phoneWithDDI,
           text
         );
         
@@ -327,34 +335,40 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         if (!content) return;
         
         const mediaType = type === 'image' ? 'image' : type === 'audio' ? 'audio' : 'document';
-        const fileName = extraData || (type === 'image' ? 'imagem.jpg' : type === 'audio' ? 'audio.mp4' : 'documento.pdf');
+        const fileName = extraData || (type === 'image' ? 'imagem.jpg' : type === 'audio' ? 'audio.ogg' : 'documento.pdf');
 
-        console.log(`Enviando mídia (${type}):`, fileName);
+        let phoneWithDDI = cleanPhone;
+        if (!phoneWithDDI.startsWith('55') && phoneWithDDI.length >= 10) {
+          phoneWithDDI = '55' + phoneWithDDI;
+        }
+
+        console.log(`Enviando mídia (${type}) para ${phoneWithDDI}:`, fileName);
         await evolutionService.sendMedia(
             systemConfig.evolution_url,
             selectedInstance.apikey,
             selectedInstance.instance_name,
-            cleanPhone,
+            phoneWithDDI,
             content,
             mediaType,
-            fileName
+            fileName,
+            '' // caption vazio
         );
         console.log('Mídia enviada com sucesso para Evolution API');
 
         try {
           await dataService.saveWhatsappMessage({
               phone: cleanPhone,
-              message: content.startsWith('data:') ? content : (
-                type === 'document' ? `data:application/pdf;base64,${content};name:${fileName}` : 
-                type === 'audio' ? `data:audio/ogg;base64,${content}` :
-                `data:image/jpeg;base64,${content}`
-            ),
+              message: content.startsWith('data:') ? content : `data:audio/ogg;base64,${content}`,
               direction: 'outbound',
               instance_id: selectedInstance.id,
-              client_id: activeChat.id
+              client_id: activeChat.id,
+              media_url: null,
+              media_type: 'audio'
           });
+          // Forçar atualização da tela após salvar usando o cleanPhone consistente
+          await loadMessages(cleanPhone);
         } catch (dbError) {
-          console.error('Erro ao salvar log de mídia no banco (mas a mídia foi enviada):', dbError);
+          console.error('Erro ao salvar log no banco:', dbError);
         }
       }
       
@@ -398,9 +412,8 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       // Iniciar gravação
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream, {
-          mimeType: MediaRecorder.isTypeSupported('audio/ogg; codecs=opus') ? 'audio/ogg; codecs=opus' : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/aac')
-        });
+        // Forçar webm que é o padrão mais estável para gravação via browser
+        const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
 
@@ -411,18 +424,19 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         };
 
         mediaRecorder.onstop = async () => {
-          const audioBlob = new Blob(audioChunksRef.current, { 
-            type: mediaRecorder.mimeType 
-          });
+          const audioBlob = new Blob(audioChunksRef.current);
           const reader = new FileReader();
           reader.onloadend = async () => {
-            const base64 = (reader.result as string).split(',')[1];
-            const ext = mediaRecorder.mimeType.includes('ogg') ? 'ogg' : (mediaRecorder.mimeType.includes('webm') ? 'webm' : 'aac');
-            await sendMessage('audio', base64, `audio_${new Date().getTime()}.${ext}`);
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            setRecordedAudio({
+              blob: audioBlob,
+              url: URL.createObjectURL(audioBlob),
+              base64: base64
+            });
           };
           reader.readAsDataURL(audioBlob);
           
-          // Parar todos os tracks do stream para liberar o microfone
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -442,28 +456,43 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
     if (!activeChat) return;
     
     try {
-      // 1. Tenta achar o lead pelo ID do customer atual ou pelo telefone
-      // Como crm_leads pode vir com o objeto customer embutido pelo dataService
+      // 1. Tenta achar o lead pelo ID ou pelo telefone (limpo)
+      const cleanPhone = activeChat.phone?.replace(/\D/g, '') || '';
+      const phoneVariants = [cleanPhone];
+      if (cleanPhone.startsWith('55')) phoneVariants.push(cleanPhone.substring(2));
+      else phoneVariants.push('55' + cleanPhone);
+
       let lead = crmLeads.find(l => 
         l.customer_id === activeChat.id || 
-        (l.customer?.phone === activeChat.phone)
+        phoneVariants.includes(l.phone?.replace(/\D/g, '')) ||
+        phoneVariants.includes(l.customer?.phone?.replace(/\D/g, ''))
       );
       
+      // Se não achar o lead, vamos criar um agora para poder vincular
       if (!lead) {
-        alert("Lead não encontrado para vincular esta conversa.");
-        return;
+        console.log("Lead não encontrado, criando novo lead para vínculo...");
+        const newLead = await dataService.saveCRMLead({
+          customerId: customer.id,
+          phone: activeChat.phone,
+          stage: 'contato',
+          temperature: 'morno',
+          notes: `Lead criado automaticamente ao vincular conversa do WhatsApp.`
+        });
+        lead = { ...newLead, id: newLead.id };
+      } else {
+        // Atualiza o lead existente vinculando ao novo customer_id
+        await dataService.saveCRMLead({
+          id: lead.id,
+          customerId: customer.id,
+          stage: lead.stage,
+          productInterest: lead.productInterest,
+          assignedTo: lead.assigned_to || lead.assignedTo,
+          notes: lead.notes ? `${lead.notes}\n---\nVinculado ao cliente ${customer.name}` : `Vinculado manualmente ao cliente ${customer.name}`
+        });
       }
 
-      // 2. Atualiza o lead no banco vinculando ao novo customer_id
-      await dataService.saveCRMLead({
-        id: lead.id,
-        customerId: customer.id,
-        stage: lead.stage,
-        notes: lead.notes || `Vinculado manualmente ao cliente ${customer.name}`
-      });
-
       // 3. Atualiza interface
-      setActiveChat(customer);
+      setActiveChat({ ...customer, phone: activeChat.phone }); 
       await loadLeads();
       alert(`Conversa vinculada com sucesso ao cliente ${customer.name}`);
     } catch (error) {
@@ -834,11 +863,16 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                           key={user.id}
                           onClick={async () => {
                             try {
+                              const cleanPhone = activeChat?.phone?.replace(/\D/g, '') || '';
+                              const phoneVariants = [cleanPhone];
+                              if (cleanPhone.startsWith('55')) phoneVariants.push(cleanPhone.substring(2));
+                              else phoneVariants.push('55' + cleanPhone);
+
                               const lead = crmLeads.find(l => 
                                 l.id === activeChat?.id || 
                                 l.customer_id === activeChat?.id || 
-                                l.phone === activeChat?.phone || 
-                                l.customer?.phone === activeChat?.phone
+                                phoneVariants.includes(l.phone?.replace(/\D/g, '')) ||
+                                phoneVariants.includes(l.customer?.phone?.replace(/\D/g, ''))
                               );
                               if (lead) {
                                 await dataService.transferCRMLead(lead.id, user.id);
@@ -899,10 +933,13 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
 
                 {messages.length > 0 ? (
                     messages.map((msg, i) => {
-                      const isImage = msg.text.startsWith('data:image/') || (msg.text.length > 100 && msg.text.includes('/9j/')) || msg.mediaType === 'image';
-                      const isPDF = msg.text.startsWith('data:application/pdf') || msg.text.startsWith('JVBERi0') || msg.mediaType === 'document' || (msg.fileName && msg.fileName.endsWith('.pdf'));
-                      const isAudio = msg.text.startsWith('data:audio/') || msg.text.startsWith('GkXfo') || msg.text.startsWith('OggS') || msg.mediaType === 'audio';
-                      const mediaUrl = msg.mediaUrl || (msg.text.startsWith('data:') ? msg.text : null);
+                      const text = msg.text || '';
+                      // Detecção robusta de mídia
+                      const isImage = msg.mediaType === 'image' || text === 'Imagem' || text.startsWith('data:image/') || (text.length > 50 && text.includes('/9j/'));
+                      const isAudio = msg.mediaType === 'audio' || text === 'Áudio' || text.startsWith('data:audio/') || text.startsWith('OggS') || text.startsWith('GkXfo');
+                      const isPDF = msg.mediaType === 'document' || text.startsWith('data:application/pdf');
+                      
+                      const mediaUrl = msg.mediaUrl || (text.startsWith('data:') ? text : null);
                       
                       return (
                         <div key={i} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
@@ -912,27 +949,27 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                             {isImage ? (
                               <div className="space-y-1">
                                 <img 
-                                  src={mediaUrl || `data:image/jpeg;base64,${msg.text}`} 
+                                  src={mediaUrl || (text.startsWith('data:') ? text : `data:image/jpeg;base64,${text}`)} 
                                   alt="Mídia" 
                                   className="rounded-lg max-h-60 cursor-pointer hover:opacity-90 transition-opacity"
-                                  onClick={() => window.open(mediaUrl || `data:image/jpeg;base64,${msg.text}`)}
+                                  onClick={() => window.open(mediaUrl || (text.startsWith('data:') ? text : `data:image/jpeg;base64,${text}`))}
                                 />
                               </div>
                             ) : isAudio ? (
                               <div className="py-1 px-1 min-w-[200px]">
                                 <audio 
-                                  src={mediaUrl || `data:audio/ogg;base64,${msg.text}`} 
+                                  src={mediaUrl || (text.startsWith('data:') ? text : (text.includes('base64') ? text : (text.startsWith('GkXfo') ? `data:audio/webm;base64,${text}` : `data:audio/mp4;base64,${text}`)))} 
                                   controls 
                                   className="h-8 w-full accent-emerald-500"
+                                  preload="metadata"
                                 />
                               </div>
                             ) : isPDF ? (
                               <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors"
                                 onClick={() => {
-                                  const base64 = msg.text.includes('base64,') ? msg.text.split('base64,')[1] : msg.text;
+                                  const base64 = text.includes('base64,') ? text.split('base64,')[1] : text;
                                   const link = document.createElement('a');
                                   link.href = `data:application/pdf;base64,${base64}`;
-                                  // Tentar extrair nome do arquivo se tiver sido salvo no formato customizado ou usar padrão
                                   link.download = `documento_${msg.time.replace(':', '-')}.pdf`;
                                   link.click();
                                 }}
@@ -942,7 +979,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                                 </div>
                                 <div className="text-left overflow-hidden">
                                   <div className="font-bold text-xs text-slate-700 truncate max-w-[150px]">
-                                    {msg.text.includes('name:') ? msg.text.split('name:')[1].split(';')[0] : 'Documento PDF'}
+                                    Documento PDF
                                   </div>
                                   <div className="text-[10px] text-slate-400">Clique para baixar</div>
                                 </div>
@@ -1008,19 +1045,59 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                         </button>
                       </div>
 
-                      <textarea 
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder={dragOver ? "Solte o orçamento aqui..." : "Digite sua mensagem..."}
-                        className="flex-1 bg-slate-50/50 rounded-xl border border-slate-100 resize-none outline-none py-2 px-3 text-sm min-h-[44px] max-h-40 custom-scrollbar placeholder:text-slate-400 focus:bg-white focus:border-emerald-200 transition-all"
-                        rows={1}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            sendMessage();
-                          }
-                        }}
-                      />
+                      <div className="flex-1 flex flex-col gap-2">
+                        {recordedAudio ? (
+                          <div className="flex items-center gap-3 bg-emerald-50 p-2 rounded-xl border border-emerald-100 animate-in fade-in slide-in-from-bottom-2">
+                            <button 
+                              onClick={() => {
+                                if (audioPlayerRef.current) {
+                                  if (isPlayingRecorded) audioPlayerRef.current.pause();
+                                  else audioPlayerRef.current.play();
+                                  setIsPlayingRecorded(!isPlayingRecorded);
+                                }
+                              }}
+                              className="w-8 h-8 flex items-center justify-center bg-emerald-500 text-white rounded-full hover:bg-emerald-600 transition-colors"
+                            >
+                              {isPlayingRecorded ? <X size={16} /> : <div className="ml-0.5 border-l-[10px] border-l-white border-y-[6px] border-y-transparent" />}
+                            </button>
+                            
+                            <div className="flex-1 h-1.5 bg-emerald-200 rounded-full overflow-hidden relative">
+                              <div className={`h-full bg-emerald-500 transition-all ${isPlayingRecorded ? 'w-full duration-[10s] ease-linear' : 'w-0'}`} />
+                            </div>
+
+                            <button 
+                              onClick={() => {
+                                setRecordedAudio(null);
+                                setIsPlayingRecorded(false);
+                              }}
+                              className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors"
+                            >
+                              <X size={16} />
+                            </button>
+
+                            <audio 
+                              ref={audioPlayerRef} 
+                              src={recordedAudio.url} 
+                              className="hidden" 
+                              onEnded={() => setIsPlayingRecorded(false)}
+                            />
+                          </div>
+                        ) : (
+                          <textarea 
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            placeholder={dragOver ? "Solte o orçamento aqui..." : "Digite sua mensagem..."}
+                            className="w-full bg-slate-50/50 rounded-xl border border-slate-100 resize-none outline-none py-2 px-3 text-sm min-h-[44px] max-h-40 custom-scrollbar placeholder:text-slate-400 focus:bg-white focus:border-emerald-200 transition-all"
+                            rows={1}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                sendMessage();
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
 
                       <div className="flex flex-col gap-0.5">
                         <button 
@@ -1042,8 +1119,15 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                       </div>
 
                       <button 
-                        onClick={() => sendMessage()}
-                        disabled={!chatInput.trim() || isSending}
+                        onClick={() => {
+                          if (recordedAudio) {
+                            sendMessage('audio', recordedAudio.base64, `audio_${Date.now()}.ogg`);
+                            setRecordedAudio(null);
+                          } else {
+                            sendMessage();
+                          }
+                        }}
+                        disabled={isSending || (!chatInput.trim() && !recordedAudio)}
                         className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:bg-slate-300 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
                       >
                         {isSending ? <RefreshCw size={20} className="animate-spin" /> : <Send size={20} />}
@@ -1059,7 +1143,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                         onClick={toggleRecording}
                         className="bg-rose-600 text-white px-4 py-1.5 rounded-xl font-bold text-xs shadow-lg"
                       >
-                        PARAR E ENVIAR
+                        CONCLUIR
                       </button>
                     </div>
                   )}

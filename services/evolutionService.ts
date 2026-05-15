@@ -142,7 +142,12 @@ export const evolutionService = {
         },
         body: JSON.stringify({
           number: number,
-          text: text
+          text: text,
+          options: {
+            delay: 1200,
+            presence: "composing",
+            linkPreview: true
+          }
         })
       });
       
@@ -161,8 +166,8 @@ export const evolutionService = {
   async sendMedia(baseUrl: string, apiKey: string, instanceName: string, number: string, base64: string, mediaType: 'image' | 'video' | 'audio' | 'document', fileName: string, caption?: string) {
     const cleanUrl = this.privateCleanUrl(baseUrl);
     try {
-      // Remover o prefixo data:image/png;base64, se existir
       const base64Data = base64.includes('base64,') ? base64.split('base64,')[1] : base64;
+      const isAudio = mediaType === 'audio';
       
       const response = await fetch(`${cleanUrl}/message/sendMedia/${instanceName}`, {
         method: 'POST',
@@ -173,18 +178,18 @@ export const evolutionService = {
         body: JSON.stringify({
           number: number,
           mediatype: mediaType,
-          fileName: fileName,
           media: base64Data,
-          caption: caption
+          fileName: fileName,
+          caption: caption || '',
+          options: {
+            delay: isAudio ? 3000 : 1200,
+            presence: isAudio ? "recording" : "composing",
+            ptt: isAudio
+          }
         })
       });
-      
       const result = await response.json();
-      if (!response.ok) {
-        console.error('Evolution API Error:', result);
-        const errorMsg = result.message || result.error || JSON.stringify(result);
-        throw new Error(`Erro API Evolution: ${errorMsg}`);
-      }
+      if (!response.ok) throw new Error(result.message || 'Erro API Evolution');
       return result;
     } catch (err) {
       console.error('Error sending media:', err);

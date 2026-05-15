@@ -137,6 +137,7 @@ export const dataService = {
             product_interest: lead.productInterest,
             temperature: lead.temperature,
             notes: lead.notes,
+            assigned_to: lead.assignedTo,
             last_contact: new Date().toISOString()
         };
         if (lead.id) payload.id = lead.id;
@@ -1640,8 +1641,7 @@ export const dataService = {
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             status: m.status,
             mediaUrl: m.media_url,
-            mediaType: m.media_type,
-            fileName: m.file_name
+            mediaType: m.media_type
         }));
     },
 
@@ -1654,11 +1654,25 @@ export const dataService = {
         return data;
     },
 
-    async saveWhatsappMessage(msg: { phone: string, message: string, direction: 'inbound' | 'outbound', instance_id: string, client_id?: string }) {
+    async saveWhatsappMessage(msg: { 
+        phone: string, 
+        message: string, 
+        direction: 'inbound' | 'outbound', 
+        instance_id: string, 
+        client_id?: string,
+        media_url?: string,
+        media_type?: string
+    }) {
         const { data, error } = await supabase
             .from('whatsapp_messages')
             .insert([{
-                ...msg,
+                phone: msg.phone,
+                message: msg.message,
+                direction: msg.direction,
+                instance_id: msg.instance_id,
+                client_id: msg.client_id,
+                media_url: msg.media_url,
+                media_type: msg.media_type,
                 status: 'received'
             }])
             .select()
