@@ -1,0 +1,14 @@
+{
+  "webhook": {
+    "enabled": true,
+    "url": "https://xjryvzmejpzwzuroquur.supabase.co/functions/v1/whatsapp-webhook",
+    "byEvents": false,
+    "events": [
+      "MESSAGES_UPSERT",
+      "MESSAGES_UPDATE",
+      "MESSAGES_DELETE",
+      "SEND_MESSAGE",
+      "CONNECTION_UPDATE"
+    ]
+  }
+}

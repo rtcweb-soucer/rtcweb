@@ -1,31 +1,273 @@
-import * as React from 'react';
-import { useState, useRef } from 'react';
-import { Customer, Product, Seller } from '../types';
+import { useState, useRef, useEffect } from 'react';
+import { Customer, Product, Seller, Order, Appointment, SystemUser } from '../types';
 import QuickQuoteCRM from './QuickQuoteCRM';
 import CustomerForm from '../components/CustomerForm';
 import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
-import { Search, Phone, MessageSquare, Send, Paperclip, CheckCheck, Clock, User, PhoneCall, MoreVertical, LayoutGrid, X, Filter, Mic, Image as ImageIcon, UserPlus, Save, MapPin, CreditCard, Thermometer, ShoppingCart, Link as LinkIcon } from 'lucide-react';
+import { dataService } from '../services/dataService';
+import { Search, Phone, MessageSquare, Send, Paperclip, CheckCheck, Clock, User, PhoneCall, MoreVertical, LayoutGrid, X, Filter, Mic, Image as ImageIcon, UserPlus, Save, MapPin, CreditCard, Thermometer, ShoppingCart, Link as LinkIcon, History, FileText, Calendar, TrendingUp, RefreshCw, Smartphone } from 'lucide-react';
+import { supabase } from '../services/supabase';
+import { evolutionService } from '../services/evolutionService';
+import { suggestChatMessage } from '../services/geminiService';
+import { Sparkles } from 'lucide-react';
 
 interface CRMProps {
   customers: Customer[];
   products: Product[];
   sellers: Seller[];
   onAddCustomer: (customer: any) => Promise<void> | void;
+  currentUser: SystemUser;
 }
 
-const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
+const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMProps) => {
   const [activeChat, setActiveChat] = useState<Customer | null>(null);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<{ text: string; sender: 'me' | 'them'; time: string }[]>([
-    { text: 'Olá, gostaria de um orçamento de toldo.', sender: 'them', time: '10:30' },
-    { text: 'Claro! Pode me passar as medidas?', sender: 'me', time: '10:32' }
-  ]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [showLeadsModal, setShowLeadsModal] = useState(false);
-  const [rightPanelTab, setRightPanelTab] = useState<'quote' | 'profile'>('quote');
+  const [rightPanelTab, setRightPanelTab] = useState<'quote' | 'profile' | 'history'>('quote');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const recordingIntervalRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [instances, setInstances] = useState<any[]>([]);
+  const [selectedInstance, setSelectedInstance] = useState<any>(null);
+  const [systemConfig, setSystemConfig] = useState<any>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+
+  const [crmLeads, setCrmLeads] = useState<any[]>([]);
+  const [users, setUsers] = useState<SystemUser[]>([]);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [activeUserTab, setActiveUserTab] = useState<string>(currentUser?.id || 'all');
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [history, setHistory] = useState<{
+    orders: Order[];
+    quotes: any[];
+    appointments: Appointment[];
+  }>({ orders: [], quotes: [], appointments: [] });
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(false);
+  const [lastIdentifiedPhone, setLastIdentifiedPhone] = useState<string | null>(null);
+
+  // Carregar leads do CRM
+  const loadLeads = async () => {
+    try {
+      const leads = await dataService.getCRMLeads();
+      setCrmLeads(leads);
+    } catch (error) {
+      console.error('Erro ao carregar leads:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadLeads();
+    loadInstances();
+    loadUsers();
+
+    // Setup Realtime para a lista de leads (Kanban)
+    const leadsChannel = supabase
+      .channel('crm-leads-global')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'crm_leads'
+        },
+        () => loadLeads()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(leadsChannel);
+    };
+  }, []);
+
+  const loadUsers = async () => {
+    try {
+      const data = await dataService.getSystemUsers();
+      setUsers(data);
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error);
+    }
+  };
+
+  // Identificação automática do nome do cliente ao selecionar chat
+  useEffect(() => {
+    if (activeChat?.phone && activeChat.phone !== lastIdentifiedPhone && (activeChat.name === 'Novo Cliente WhatsApp' || !activeChat.id)) {
+      setLastIdentifiedPhone(activeChat.phone);
+      const identifyCustomer = async () => {
+        const found = await dataService.findCustomerByPhone(activeChat.phone!);
+        if (found) {
+          setActiveChat(prev => prev ? { ...prev, name: found.name, id: found.id } : null);
+          
+          // Tentar vincular o lead ao cliente definitivamente no banco
+          const lead = crmLeads.find(l => l.phone === activeChat.phone);
+          if (lead && !lead.customer_id) {
+            await dataService.saveCRMLead({
+              id: lead.id,
+              customerId: found.id,
+              stage: lead.stage
+            });
+            loadLeads();
+          }
+        } else if (messages.length > 0) {
+          // Se for cliente novo, tentar pegar o nome do WhatsApp (pushName)
+          const inboundMsg = messages.find(m => m.sender === 'them' && m.pushName);
+          if (inboundMsg?.pushName && activeChat.name === 'Novo Cliente WhatsApp') {
+            setActiveChat(prev => prev ? { ...prev, name: inboundMsg.pushName } : null);
+          }
+        }
+      };
+      identifyCustomer();
+    }
+  }, [activeChat, lastIdentifiedPhone]);
+
+  const loadInstances = async () => {
+    try {
+      const data = await dataService.getWhatsappInstances();
+      
+      // Filtrar instâncias se não for ADMIN
+      const isAdmin = currentUser.role === 'ADMIN';
+      const availableInstances = isAdmin ? data : data.filter(inst => inst.user_id === currentUser.id);
+      
+      setInstances(availableInstances);
+      
+      // Seleciona automaticamente a instância do usuário logado ou a primeira disponível
+      const myInstance = availableInstances.find(inst => inst.user_id === currentUser.id);
+      if (myInstance) {
+        setSelectedInstance(myInstance);
+      } else if (availableInstances.length > 0) {
+        setSelectedInstance(availableInstances[0]);
+      }
+      
+      const config = await dataService.getSystemConfig();
+      setSystemConfig(config);
+    } catch (error) {
+      console.error('Erro ao carregar instâncias:', error);
+    }
+  };
+
+  // Scroll inteligente: só rola para o fim se o usuário já estiver lá ou se for o carregamento inicial
+  const scrollToBottom = (force = false) => {
+    const container = document.getElementById('chat-messages');
+    if (container) {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      
+      if (force || (autoScroll && isAtBottom)) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: force ? 'auto' : 'smooth'
+        });
+      }
+    }
+  };
+
+  // Detectar se o usuário está rolando para cima
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    // Se o usuário subir mais de 150px do fundo, desligamos o autoscroll
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    
+    if (isAtBottom) {
+      setAutoScroll(true);
+    } else {
+      setAutoScroll(false);
+    }
+  };
+
+  const loadMessages = async (phone: string) => {
+    try {
+      const msgs = await dataService.getWhatsappMessages(phone);
+      // Preservar mensagens locais que ainda não foram sincronizadas (opcional, mas o ideal é o Realtime)
+      setMessages(msgs);
+      
+      // Inteligência: Tenta selecionar a última instância que interagiu com este cliente
+      if (msgs.length > 0) {
+        const lastMsg = [...msgs].reverse().find(m => m.instance_id);
+        if (lastMsg) {
+          const inst = instances.find(i => i.id === lastMsg.instance_id);
+          if (inst) setSelectedInstance(inst);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (activeChat?.phone) {
+      setMessages([]); // Limpar instantaneamente para dar feedback visual de troca
+      setAutoScroll(true);
+      setIsInitialLoad(true);
+      loadMessages(activeChat.phone);
+
+      // Setup Realtime para novas mensagens deste cliente
+      let cleanPhone = activeChat.phone.replace(/\D/g, '');
+      if (cleanPhone.length === 11 || cleanPhone.length === 10) {
+        cleanPhone = '55' + cleanPhone;
+      }
+      
+      const channel = supabase
+        .channel(`chat-${cleanPhone}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'whatsapp_messages',
+            filter: `phone=eq.${cleanPhone}`
+          },
+          (payload) => {
+            loadMessages(activeChat.phone!);
+            // Não rolamos mais automaticamente aqui para evitar teimosia
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [activeChat]);
+
+  // Efeito para forçar scroll no primeiro carregamento das mensagens
+  useEffect(() => {
+    if (messages.length > 0 && isInitialLoad) {
+      // Pequeno atraso para garantir que o DOM renderizou as mensagens
+      const timer = setTimeout(() => {
+        scrollToBottom(true);
+        setIsInitialLoad(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, isInitialLoad]);
+
+  // Carregar histórico quando mudar o chat
+  useEffect(() => {
+    if (activeChat?.id) {
+      setLoadingHistory(true);
+      dataService.getCustomerFullHistory(activeChat.id)
+        .then(data => {
+          setHistory(data as any);
+        })
+        .finally(() => setLoadingHistory(false));
+    } else {
+      setHistory({ orders: [], quotes: [], appointments: [] });
+    }
+  }, [activeChat]);
+
+  const updateLeadStage = async (leadId: string, newStage: string) => {
+    try {
+      await dataService.updateCRMLeadStage(leadId, newStage);
+      await loadLeads();
+    } catch (error) {
+      console.error('Erro ao atualizar estágio:', error);
+    }
+  };
 
   // Simular leads recentes para o Kanban
   const recentLeads = customers.slice(0, 10);
@@ -48,29 +290,206 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
     setDragOver(false);
   };
 
-  const sendMessage = (type: 'text' | 'audio' | 'image' = 'text', content?: string) => {
+  const sendMessage = async (type: 'text' | 'image' | 'audio' | 'document' = 'text', content?: string, extraData?: string) => {
+    if (isSending || !selectedInstance || !activeChat) return;
     const text = content || chatInput;
-    if (!text.trim() && type === 'text') return;
-    
-    setMessages([...messages, { 
-      text: type === 'audio' ? '🎤 Mensagem de áudio' : (type === 'image' ? '🖼️ Imagem enviada' : text), 
-      sender: 'me', 
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-    }]);
-    if (type === 'text') setChatInput('');
+    if (type === 'text' && !text.trim()) return;
+    if (type !== 'text' && !content) return;
+    if (!activeChat || !selectedInstance || !systemConfig) {
+      alert('Selecione um cliente e um canal de atendimento.');
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const cleanPhone = activeChat.phone!.replace(/\D/g, '');
+      
+      if (type === 'text') {
+        await evolutionService.sendMessage(
+          systemConfig.evolution_url,
+          selectedInstance.apikey,
+          selectedInstance.instance_name,
+          cleanPhone,
+          text
+        );
+        
+        await dataService.saveWhatsappMessage({
+          phone: cleanPhone,
+          message: text,
+          direction: 'outbound',
+          instance_id: selectedInstance.id,
+          client_id: activeChat.id
+        });
+
+        setChatInput('');
+      } else if (type === 'image' || type === 'audio' || type === 'document') {
+        // Envio de mídia via Base64 (content deve ser a string base64)
+        if (!content) return;
+        
+        const mediaType = type === 'image' ? 'image' : type === 'audio' ? 'audio' : 'document';
+        const fileName = extraData || (type === 'image' ? 'imagem.jpg' : type === 'audio' ? 'audio.mp4' : 'documento.pdf');
+
+        console.log(`Enviando mídia (${type}):`, fileName);
+        await evolutionService.sendMedia(
+            systemConfig.evolution_url,
+            selectedInstance.apikey,
+            selectedInstance.instance_name,
+            cleanPhone,
+            content,
+            mediaType,
+            fileName
+        );
+        console.log('Mídia enviada com sucesso para Evolution API');
+
+        try {
+          await dataService.saveWhatsappMessage({
+              phone: cleanPhone,
+              message: content.startsWith('data:') ? content : (
+                type === 'document' ? `data:application/pdf;base64,${content};name:${fileName}` : 
+                type === 'audio' ? `data:audio/ogg;base64,${content}` :
+                `data:image/jpeg;base64,${content}`
+            ),
+              direction: 'outbound',
+              instance_id: selectedInstance.id,
+              client_id: activeChat.id
+          });
+        } catch (dbError) {
+          console.error('Erro ao salvar log de mídia no banco (mas a mídia foi enviada):', dbError);
+        }
+      }
+      
+      // O Realtime cuidará de atualizar a lista de mensagens automaticamente
+    } catch (error: any) {
+      console.error('Erro ao enviar mensagem:', error);
+      alert(`Falha ao enviar mensagem: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  const toggleRecording = () => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'audio' | 'document') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamanho (máximo 16MB para WhatsApp)
+    if (file.size > 16 * 1024 * 1024) {
+      alert('Arquivo muito grande. O limite é 16MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      await sendMessage(type === 'image' ? 'image' : type === 'audio' ? 'audio' : 'document', base64, file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const toggleRecording = async () => {
     if (isRecording) {
+      // Parar gravação
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
       clearInterval(recordingIntervalRef.current);
       setIsRecording(false);
       setRecordingTime(0);
-      sendMessage('audio');
     } else {
-      setIsRecording(true);
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
+      // Iniciar gravação
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: MediaRecorder.isTypeSupported('audio/ogg; codecs=opus') ? 'audio/ogg; codecs=opus' : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/aac')
+        });
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { 
+            type: mediaRecorder.mimeType 
+          });
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1];
+            const ext = mediaRecorder.mimeType.includes('ogg') ? 'ogg' : (mediaRecorder.mimeType.includes('webm') ? 'webm' : 'aac');
+            await sendMessage('audio', base64, `audio_${new Date().getTime()}.${ext}`);
+          };
+          reader.readAsDataURL(audioBlob);
+          
+          // Parar todos os tracks do stream para liberar o microfone
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingTime(prev => prev + 1);
+        }, 1000);
+      } catch (err) {
+        console.error("Erro ao acessar microfone:", err);
+        alert("Não foi possível acessar o microfone. Verifique as permissões.");
+      }
+    }
+  };
+
+  const handleLinkCustomer = async (customer: Customer) => {
+    if (!activeChat) return;
+    
+    try {
+      // 1. Tenta achar o lead pelo ID do customer atual ou pelo telefone
+      // Como crm_leads pode vir com o objeto customer embutido pelo dataService
+      let lead = crmLeads.find(l => 
+        l.customer_id === activeChat.id || 
+        (l.customer?.phone === activeChat.phone)
+      );
+      
+      if (!lead) {
+        alert("Lead não encontrado para vincular esta conversa.");
+        return;
+      }
+
+      // 2. Atualiza o lead no banco vinculando ao novo customer_id
+      await dataService.saveCRMLead({
+        id: lead.id,
+        customerId: customer.id,
+        stage: lead.stage,
+        notes: lead.notes || `Vinculado manualmente ao cliente ${customer.name}`
+      });
+
+      // 3. Atualiza interface
+      setActiveChat(customer);
+      await loadLeads();
+      alert(`Conversa vinculada com sucesso ao cliente ${customer.name}`);
+    } catch (error) {
+      console.error("Erro ao vincular cliente:", error);
+      alert("Erro ao vincular cliente no banco de dados.");
+    }
+  };
+
+  const handleAiSuggestion = async () => {
+    if (!activeChat || isGeneratingAi) return;
+    
+    setIsGeneratingAi(true);
+    try {
+      const lead = crmLeads.find(l => l.phone === activeChat.phone);
+      const suggestion = await suggestChatMessage(messages, {
+        name: activeChat.name,
+        productInterest: lead?.productInterest
+      });
+      
+      if (suggestion) {
+        setChatInput(suggestion);
+      }
+    } catch (error) {
+      console.error("Erro ao gerar sugestão:", error);
+    } finally {
+      setIsGeneratingAi(false);
     }
   };
 
@@ -78,6 +497,22 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const findAndLinkCustomer = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const found = customers.find(c => {
+      const cPhone = c.phone?.replace(/\D/g, '');
+      const cPhone2 = c.phone2?.replace(/\D/g, '');
+      const cContact = c.contactPhone?.replace(/\D/g, '');
+      return cPhone === cleanPhone || cPhone2 === cleanPhone || cContact === cleanPhone;
+    });
+
+    if (found) {
+      setActiveChat(found);
+      return found;
+    }
+    return null;
   };
 
   return (
@@ -135,13 +570,25 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
             </div>
 
             <div className="flex-1 overflow-x-auto p-6 flex gap-6 custom-scrollbar">
-              {/* Colunas do Kanban Simulado */}
+              {/* Colunas do Kanban */}
               {[
-                { title: 'Novos Leads', color: 'bg-blue-500', leads: recentLeads.slice(0, 3) },
-                { title: 'Em Atendimento', color: 'bg-amber-500', leads: recentLeads.slice(3, 6) },
-                { title: 'Orçamento Enviado', color: 'bg-purple-500', leads: recentLeads.slice(6, 8) },
-                { title: 'Aguardando Medição', color: 'bg-emerald-500', leads: recentLeads.slice(8, 10) }
-              ].map(column => (
+                { title: 'Novos Leads', stage: 'NOVO', color: 'bg-blue-500' },
+                { title: 'Em Atendimento', stage: 'ATENDIMENTO', color: 'bg-amber-500' },
+                { title: 'Orçamento Enviado', stage: 'ORCAMENTO', color: 'bg-purple-500' },
+                { title: 'Aguardando Medição', stage: 'MEDICAO', color: 'bg-emerald-500' }
+              ].map(column => {
+                // Filtrar leads por estágio e permissão (se selecionada uma instância específica)
+                let columnLeads = crmLeads.filter(l => l.stage === column.stage);
+                
+                // Se não for ADMIN e houver instâncias, filtrar por elas (lógica simplificada no front)
+                // Idealmente o backend filtraria, mas aqui garantimos a visão do usuário
+                if (currentUser.role !== 'ADMIN' && instances.length > 0) {
+                  const myInstanceIds = instances.map(i => i.id);
+                  // Filtro opcional: aqui poderíamos filtrar leads que já tiveram msg com minhas instâncias
+                  // Por enquanto, mostramos os leads que o usuário "pode" ver
+                }
+
+                return (
                 <div key={column.title} className="w-80 shrink-0 flex flex-col gap-4">
                   <div className="flex items-center justify-between px-2">
                     <h4 className="font-black text-slate-800 flex items-center gap-2">
@@ -149,40 +596,59 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                       {column.title}
                     </h4>
                     <span className="text-[10px] font-black bg-white border border-slate-200 px-2 py-0.5 rounded-full text-slate-500">
-                      {column.leads.length}
+                      {columnLeads.length}
                     </span>
                   </div>
                   
-                  <div className="flex-1 bg-slate-200/40 rounded-3xl p-3 border border-slate-200/60 space-y-3 overflow-y-auto custom-scrollbar">
-                    {column.leads.map(lead => (
-                      <button
+                  <div 
+                    className="flex-1 bg-slate-200/40 rounded-3xl p-3 border border-slate-200/60 space-y-3 overflow-y-auto custom-scrollbar"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={async (e) => {
+                      const leadId = e.dataTransfer.getData('leadId');
+                      if (leadId) {
+                        await updateLeadStage(leadId, column.stage);
+                      }
+                    }}
+                  >
+                    {columnLeads.map(lead => (
+                      <div
                         key={lead.id}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('leadId', lead.id)}
                         onClick={() => {
-                          setActiveChat(lead);
+                          setActiveChat(lead.customer);
                           setShowLeadsModal(false);
                         }}
-                        className="w-full bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left group"
+                        className="w-full bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left group cursor-pointer"
                       >
                         <div className="flex justify-between items-start mb-2">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-500">Lead ID #{lead.id.slice(0,4)}</span>
-                          <Clock size={12} className="text-slate-300" />
-                        </div>
-                        <h5 className="font-bold text-slate-800 mb-1">{lead.name}</h5>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-1 mb-3"><Phone size={12}/> {lead.phone}</p>
-                        
-                        <div className="pt-3 border-t border-slate-50 flex justify-between items-center">
-                          <div className="flex -space-x-1">
-                            <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center border border-white">
-                              <User size={10} className="text-blue-600" />
-                            </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`w-1.5 h-1.5 rounded-full ${lead.temperature === 'QUENTE' ? 'bg-rose-500' : lead.temperature === 'MORNO' ? 'bg-amber-500' : 'bg-blue-400'}`} />
+                            <Clock size={12} className="text-slate-300" />
                           </div>
+                        </div>
+                        <h5 className="font-bold text-slate-800 mb-1">{lead.customer?.name || 'Cliente s/ nome'}</h5>
+                        <p className="text-[11px] text-slate-500 flex items-center gap-1 mb-2"><Phone size={12}/> {lead.customer?.phone}</p>
+                        
+                        {lead.productInterest && lead.productInterest.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {lead.productInterest.map((p: string) => (
+                              <span key={p} className="text-[8px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md">{p}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="pt-3 border-t border-slate-50 flex justify-between items-center">
+                          <span className="text-[9px] font-black text-slate-400 uppercase">{new Date(lead.lastContact).toLocaleDateString()}</span>
                           <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">ABRIR CHAT</span>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -195,7 +661,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
             <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3">
               <MessageSquare size={18} className="text-emerald-500" /> Conversas Ativas
             </h3>
-            <div className="relative">
+            <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
                 type="text" 
@@ -203,27 +669,92 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                 className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
               />
             </div>
+
+            {/* ABAS DE ATENDENTES */}
+            <div className="flex gap-1 overflow-x-auto pb-2 custom-scrollbar-hidden no-scrollbar">
+              <button
+                onClick={() => setActiveUserTab('all')}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${activeUserTab === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+              >
+                Geral
+              </button>
+              <button
+                onClick={() => setActiveUserTab(currentUser.id)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${activeUserTab === currentUser.id ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-600 border-emerald-100 hover:bg-emerald-50'}`}
+              >
+                Meus
+              </button>
+              {users.filter(u => u.id !== currentUser.id).map(user => (
+                <button
+                  key={user.id}
+                  onClick={() => setActiveUserTab(user.id)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${activeUserTab === user.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {user.name.split(' ')[0]}
+                </button>
+              ))}
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-            {recentLeads.slice(0, 5).map(lead => (
-              <button 
-                key={lead.id}
-                onClick={() => setActiveChat(lead)}
-                className={`w-full p-3 rounded-2xl flex items-center gap-3 transition-colors ${activeChat?.id === lead.id ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}
-              >
-                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-                  <User size={20} className="text-slate-500" />
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex justify-between items-center mb-1">
-                    <h4 className="font-bold text-slate-800 text-sm truncate">{lead.name}</h4>
-                    <span className="text-[10px] text-slate-400 font-bold">10:30</span>
+            {(() => {
+              const filtered = crmLeads.filter(l => {
+                if (activeUserTab === 'all') return true;
+                return l.assigned_to === activeUserTab;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center h-40 opacity-40">
+                    <MessageSquare size={32} className="text-slate-400 mb-2" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Nenhuma conversa nesta aba</p>
                   </div>
-                  <p className="text-xs text-slate-500 truncate">Pode me passar as medidas?</p>
-                </div>
-              </button>
-            ))}
+                );
+              }
+
+              return filtered.slice(0, 50).map(lead => {
+                const assignedUser = users.find(u => u.id === lead.assigned_to);
+                
+                return (
+                  <button 
+                    key={lead.id}
+                    onClick={() => {
+                      const customer = lead.customer || customers.find(c => c.id === lead.customer_id);
+                      if (customer) {
+                        setActiveChat(customer);
+                        loadMessages(customer.phone);
+                      }
+                    }}
+                    className={`w-full p-3 rounded-2xl flex items-center gap-3 transition-all border ${activeChat?.id === (lead.customer?.id || lead.customer_id) ? 'bg-emerald-50 border-emerald-100' : 'hover:bg-slate-50 border-transparent'}`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
+                      <User size={20} className="text-slate-400" />
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="flex justify-between items-center mb-0.5">
+                        <h4 className="font-bold text-slate-800 text-sm truncate">
+                          {lead.customer?.name || 'Novo Lead WhatsApp'}
+                        </h4>
+                        <span className="text-[9px] text-slate-400 font-black">
+                          {lead.lastContact ? new Date(lead.lastContact).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] text-slate-500 truncate flex-1">
+                          {lead.notes || lead.customer?.phone || 'Clique para atender'}
+                        </p>
+                        {assignedUser && activeUserTab === 'all' && (
+                          <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase tracking-tighter">
+                            {assignedUser.name.split(' ')[0]}
+                          </span>
+                        )}
+                        <div className={`w-1.5 h-1.5 rounded-full ${lead.temperature === 'QUENTE' ? 'bg-rose-500 animate-pulse' : 'bg-slate-300'}`} />
+                      </div>
+                    </div>
+                  </button>
+                );
+              });
+            })()}
           </div>
         </div>
 
@@ -231,40 +762,227 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
         <div className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col overflow-hidden relative">
           {activeChat ? (
             <>
-              {/* Chat Header */}
-              <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center z-10 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <User size={20} className="text-emerald-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm">{activeChat.name}</h3>
-                    <p className="text-[11px] text-slate-500 font-medium">{activeChat.phone}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 text-slate-400">
-                  <button className="p-2 hover:bg-slate-200 rounded-full transition-colors"><PhoneCall size={16} /></button>
-                  <button className="p-2 hover:bg-slate-200 rounded-full transition-colors"><MoreVertical size={16} /></button>
-                </div>
-              </div>
-
-              {/* Chat Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5]/20 bg-[url('https://web.whatsapp.com/img/bg-chat-tile-dark_a4be512e7195b6b733d9110b408f075d.png')] custom-scrollbar">
-                {messages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] p-2.5 rounded-xl shadow-sm relative text-sm ${msg.sender === 'me' ? 'bg-[#d9fdd3] rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
-                      <p className="text-slate-800 whitespace-pre-wrap leading-tight">{msg.text}</p>
-                      <div className="flex items-center justify-end gap-1 mt-1">
-                        <span className="text-[9px] text-slate-500 font-medium">{msg.time}</span>
-                        {msg.sender === 'me' && <CheckCheck size={12} className="text-blue-500" />}
+              {/* Chat Header Compacto */}
+                <div className="px-4 py-2 border-b border-slate-100 bg-white flex justify-between items-center z-10 shadow-sm min-h-[60px]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                      <User size={18} className="text-emerald-600" />
+                    </div>
+                    <div className="flex flex-col">
+                      <h3 className="font-bold text-slate-800 text-sm leading-tight truncate max-w-[150px]">{activeChat.name}</h3>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400 font-medium">{activeChat.phone}</span>
+                        <div className="w-1 h-1 bg-slate-300 rounded-full" />
+                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-tight">Ativo</span>
                       </div>
                     </div>
                   </div>
-                ))}
+                  
+                  <div className="flex items-center gap-2">
+                    {/* SELETOR DE CANAL COMPACTO */}
+                    <div className="hidden sm:flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                      {instances.map(inst => (
+                        <button
+                          key={inst.id}
+                          onClick={() => setSelectedInstance(inst)}
+                          className={`px-2 py-1 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 border ${selectedInstance?.id === inst.id ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-transparent text-slate-400 border-transparent hover:text-slate-600'}`}
+                          title={`Responder via ${inst.name}`}
+                        >
+                          <Smartphone size={10} />
+                          <span className="hidden md:inline">{inst.name}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <button 
+                      onClick={() => setShowTransferModal(true)}
+                      className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-black bg-slate-100 hover:bg-blue-600 text-slate-600 hover:text-white rounded-lg transition-all border border-slate-200 uppercase tracking-tighter"
+                      title="Transferir conversa"
+                    >
+                      <UserPlus size={12} />
+                      <span className="hidden lg:inline">TRANSFERIR</span>
+                    </button>
+
+                    <div className="flex items-center">
+                      <button className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full transition-colors"><Phone size={18} /></button>
+                      <button className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full transition-colors"><MoreVertical size={18} /></button>
+                    </div>
+                  </div>
+                </div>
+
+              {/* Modal de Transferência */}
+              {showTransferModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                          <UserPlus size={20} />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800">Transferir Atendimento</h3>
+                          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Selecione o novo atendente</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowTransferModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                        <X size={20} className="text-slate-400" />
+                      </button>
+                    </div>
+                    <div className="p-2 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                      {users.filter(u => u.id !== currentUser.id).map(user => (
+                        <button
+                          key={user.id}
+                          onClick={async () => {
+                            try {
+                              const lead = crmLeads.find(l => 
+                                l.id === activeChat?.id || 
+                                l.customer_id === activeChat?.id || 
+                                l.phone === activeChat?.phone || 
+                                l.customer?.phone === activeChat?.phone
+                              );
+                              if (lead) {
+                                await dataService.transferCRMLead(lead.id, user.id);
+                                alert(`Atendimento transferido para ${user.name}`);
+                                setShowTransferModal(false);
+                                loadLeads();
+                                setActiveChat(null);
+                              } else {
+                                alert('Não foi possível localizar o registro do Lead para esta conversa.');
+                              }
+                            } catch (err: any) {
+                              alert('Erro ao transferir: ' + (err.message || JSON.stringify(err)));
+                            }
+                          }}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 rounded-xl transition-all group"
+                        >
+                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center border-2 border-white shadow-sm group-hover:scale-110 transition-transform">
+                            <User size={20} className="text-slate-500" />
+                          </div>
+                          <div className="text-left">
+                            <div className="font-bold text-slate-700 group-hover:text-blue-600 transition-colors">{user.name}</div>
+                            <div className="text-[10px] text-slate-400 uppercase font-bold">{user.role}</div>
+                          </div>
+                          <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Send size={16} className="text-blue-500" />
+                          </div>
+                        </button>
+                      ))}
+                      {users.filter(u => u.id !== currentUser.id).length === 0 && (
+                        <div className="p-8 text-center text-slate-400 italic text-sm">
+                          Nenhum outro atendente disponível
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Messages Area */}
+              <div 
+                className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#e5ddd5] custom-scrollbar" 
+                id="chat-messages"
+                onScroll={handleScroll}
+              >
+                {/* Botão de Scroll para o Fim (WhatsApp Style) */}
+                {!autoScroll && (
+                  <button 
+                    onClick={() => {
+                      setAutoScroll(true);
+                      scrollToBottom(true);
+                    }}
+                    className="absolute bottom-24 right-8 bg-white p-2 rounded-full shadow-lg border border-slate-200 text-blue-500 hover:bg-slate-50 transition-all z-20 flex items-center gap-2 animate-bounce"
+                  >
+                    <TrendingUp className="rotate-180" size={16} />
+                    <span className="text-[10px] font-bold uppercase pr-1">Novas Mensagens</span>
+                  </button>
+                )}
+
+                {messages.length > 0 ? (
+                    messages.map((msg, i) => {
+                      const isImage = msg.text.startsWith('data:image/') || (msg.text.length > 100 && msg.text.includes('/9j/')) || msg.mediaType === 'image';
+                      const isPDF = msg.text.startsWith('data:application/pdf') || msg.text.startsWith('JVBERi0') || msg.mediaType === 'document' || (msg.fileName && msg.fileName.endsWith('.pdf'));
+                      const isAudio = msg.text.startsWith('data:audio/') || msg.text.startsWith('GkXfo') || msg.text.startsWith('OggS') || msg.mediaType === 'audio';
+                      const mediaUrl = msg.mediaUrl || (msg.text.startsWith('data:') ? msg.text : null);
+                      
+                      return (
+                        <div key={i} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                          <div 
+                            className={`max-w-[85%] p-2.5 rounded-xl shadow-sm relative text-sm ${msg.sender === 'me' ? 'bg-[#d9fdd3] rounded-tr-none' : 'bg-white rounded-tl-none'}`}
+                          >
+                            {isImage ? (
+                              <div className="space-y-1">
+                                <img 
+                                  src={mediaUrl || `data:image/jpeg;base64,${msg.text}`} 
+                                  alt="Mídia" 
+                                  className="rounded-lg max-h-60 cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(mediaUrl || `data:image/jpeg;base64,${msg.text}`)}
+                                />
+                              </div>
+                            ) : isAudio ? (
+                              <div className="py-1 px-1 min-w-[200px]">
+                                <audio 
+                                  src={mediaUrl || `data:audio/ogg;base64,${msg.text}`} 
+                                  controls 
+                                  className="h-8 w-full accent-emerald-500"
+                                />
+                              </div>
+                            ) : isPDF ? (
+                              <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors"
+                                onClick={() => {
+                                  const base64 = msg.text.includes('base64,') ? msg.text.split('base64,')[1] : msg.text;
+                                  const link = document.createElement('a');
+                                  link.href = `data:application/pdf;base64,${base64}`;
+                                  // Tentar extrair nome do arquivo se tiver sido salvo no formato customizado ou usar padrão
+                                  link.download = `documento_${msg.time.replace(':', '-')}.pdf`;
+                                  link.click();
+                                }}
+                              >
+                                <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
+                                  <FileText size={24} />
+                                </div>
+                                <div className="text-left overflow-hidden">
+                                  <div className="font-bold text-xs text-slate-700 truncate max-w-[150px]">
+                                    {msg.text.includes('name:') ? msg.text.split('name:')[1].split(';')[0] : 'Documento PDF'}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">Clique para baixar</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-slate-800 leading-tight" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                            )}
+                            
+                            <div className="flex items-center justify-end gap-1 mt-1">
+                              <span className="text-[9px] text-slate-500 font-medium">{msg.time}</span>
+                              {msg.sender === 'me' && <CheckCheck size={12} className={msg.status === 'READ' ? "text-blue-500" : "text-slate-400"} />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center opacity-40">
+                    <MessageSquare size={48} className="text-slate-400 mb-2" />
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nenhuma mensagem neste chat</p>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
 
               {/* Chat Input */}
               <div className="p-3 bg-slate-50 border-t border-slate-200">
+                <input 
+                  type="file" 
+                  id="file-upload" 
+                  className="hidden" 
+                  onChange={(e) => handleFileUpload(e, 'document')}
+                />
+                <input 
+                  type="file" 
+                  id="image-upload" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={(e) => handleFileUpload(e, 'image')}
+                />
                 <div 
                   className={`flex items-center gap-2 p-1.5 bg-white rounded-2xl border transition-all ${dragOver ? 'border-emerald-500 shadow-md bg-emerald-50' : 'border-slate-200'} ${isRecording ? 'border-rose-500 bg-rose-50' : ''}`}
                   onDrop={handleDrop}
@@ -273,13 +991,28 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                 >
                   {!isRecording ? (
                     <>
-                      <button className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Anexar Arquivo"><Paperclip size={18} /></button>
-                      <button className="p-2 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors" title="Enviar Imagem"><ImageIcon size={18} /></button>
+                      <div className="flex flex-col gap-0.5">
+                        <button 
+                          onClick={() => document.getElementById('file-upload')?.click()}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" 
+                          title="Anexar Arquivo"
+                        >
+                          <Paperclip size={14} />
+                        </button>
+                        <button 
+                          onClick={() => document.getElementById('image-upload')?.click()}
+                          className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors" 
+                          title="Enviar Imagem"
+                        >
+                          <ImageIcon size={14} />
+                        </button>
+                      </div>
+
                       <textarea 
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        placeholder={dragOver ? "Solte o orçamento aqui..." : "Mensagem..."}
-                        className="flex-1 bg-transparent resize-none outline-none py-2 px-1 text-sm max-h-24 custom-scrollbar placeholder:text-slate-400"
+                        placeholder={dragOver ? "Solte o orçamento aqui..." : "Digite sua mensagem..."}
+                        className="flex-1 bg-slate-50/50 rounded-xl border border-slate-100 resize-none outline-none py-2 px-3 text-sm min-h-[44px] max-h-40 custom-scrollbar placeholder:text-slate-400 focus:bg-white focus:border-emerald-200 transition-all"
                         rows={1}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
@@ -288,19 +1021,32 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                           }
                         }}
                       />
-                      <button 
-                        onMouseDown={toggleRecording}
-                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" 
-                        title="Gravar Áudio"
-                      >
-                        <Mic size={18} />
-                      </button>
+
+                      <div className="flex flex-col gap-0.5">
+                        <button 
+                          onMouseDown={toggleRecording}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" 
+                          title="Gravar Áudio"
+                        >
+                          <Mic size={14} />
+                        </button>
+                        
+                        <button 
+                          onClick={handleAiSuggestion}
+                          disabled={isGeneratingAi || !activeChat}
+                          className={`p-1.5 rounded-lg transition-all ${isGeneratingAi ? 'bg-purple-100 text-purple-600 animate-pulse' : 'text-purple-500 hover:bg-purple-50'}`}
+                          title="Sugestão de Resposta (IA)"
+                        >
+                          <Sparkles size={14} className={isGeneratingAi ? 'animate-spin' : ''} />
+                        </button>
+                      </div>
+
                       <button 
                         onClick={() => sendMessage()}
-                        disabled={!chatInput.trim()}
-                        className="p-2 bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:bg-slate-300 rounded-lg transition-colors shadow-sm"
+                        disabled={!chatInput.trim() || isSending}
+                        className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:bg-slate-300 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
                       >
-                        <Send size={18} />
+                        {isSending ? <RefreshCw size={20} className="animate-spin" /> : <Send size={20} />}
                       </button>
                     </>
                   ) : (
@@ -345,7 +1091,13 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
               onClick={() => setRightPanelTab('profile')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${rightPanelTab === 'profile' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-400 hover:bg-slate-50'}`}
             >
-              <User size={14} /> Perfil Lead
+              <User size={14} /> Perfil
+            </button>
+            <button 
+              onClick={() => setRightPanelTab('history')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${rightPanelTab === 'history' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
+            >
+              <History size={14} /> Histórico 360
             </button>
           </div>
 
@@ -356,7 +1108,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                 products={products} 
                 storageKey={activeChat ? activeChat.id : 'general'}
               />
-            ) : (
+            ) : rightPanelTab === 'profile' ? (
               /* PAINEL DE PERFIL DO CLIENTE (FORMULÁRIO OFICIAL) */
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-6">
@@ -379,7 +1131,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                       customers={customers} 
                       onSelect={(customer) => {
                         if (window.confirm(`Deseja vincular esta conversa ao cliente "${customer.name}"?`)) {
-                          setActiveChat(customer);
+                          handleLinkCustomer(customer);
                         }
                       }} 
                     />
@@ -401,20 +1153,101 @@ const CRM = ({ customers, products, sellers, onAddCustomer }: CRMProps) => {
                       }}
                     />
                   </div>
+                </div>
+              </div>
+            ) : (
+              /* PAINEL DE HISTÓRICO 360 */
+              <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-4 pb-20">
+                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
+                  <h3 className="font-black text-slate-900 uppercase text-[10px] tracking-widest flex items-center gap-2 mb-4 px-2">
+                    <History size={16} className="text-emerald-600" /> Visão 360 do Cliente
+                  </h3>
 
-                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
-                    <h4 className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Histórico Rápido</h4>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3 text-[10px] font-bold text-blue-800">
-                        <div className="w-1 h-1 rounded-full bg-blue-500" />
-                        <span>Iniciou conversa via site</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px] font-bold text-blue-800">
-                        <div className="w-1 h-1 rounded-full bg-blue-500" />
-                        <span>Solicitou orçamento de Toldo</span>
-                      </div>
+                  {loadingHistory ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400 animate-pulse">
+                      <RefreshCw className="animate-spin" size={32} />
+                      <span className="text-xs font-bold uppercase tracking-widest">Carregando Histórico...</span>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* PEDIDOS E NFE */}
+                      <section className="space-y-3">
+                        <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                          <FileText size={14} className="text-blue-500" /> Pedidos & Notas Fiscais ({history.orders.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {history.orders.length > 0 ? history.orders.map(order => (
+                            <div key={order.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl group hover:border-blue-200 transition-all">
+                              <div className="flex justify-between items-start mb-2">
+                                <span className="text-[10px] font-black text-slate-800">Pedido #{order.contractNumber || order.id.slice(0,6)}</span>
+                                <span className={`text-[8px] font-black px-2 py-0.5 rounded-full ${order.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                                  {order.status}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-end">
+                                <div>
+                                  <p className="text-[10px] text-slate-500 font-bold">{new Date(order.createdAt).toLocaleDateString()}</p>
+                                  {order.nfeNumber && (
+                                    <p className="text-[9px] text-emerald-600 font-black mt-1 flex items-center gap-1">
+                                      <CheckCheck size={10} /> NF-e: {order.nfeNumber}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className="text-xs font-black text-slate-900">R$ {order.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            </div>
+                          )) : (
+                            <p className="text-[10px] text-slate-400 italic px-2">Nenhum pedido encontrado.</p>
+                          )}
+                        </div>
+                      </section>
+
+                      {/* ORÇAMENTOS RÁPIDOS */}
+                      <section className="space-y-3">
+                        <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                          <TrendingUp size={14} className="text-purple-500" /> Orçamentos Realizados ({history.quotes.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {history.quotes.length > 0 ? history.quotes.map(quote => (
+                            <div key={quote.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl group hover:border-purple-200 transition-all">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-black text-slate-800">Orc. #{quote.quick_quote_number || quote.id.slice(0,4)}</span>
+                                <span className="text-xs font-black text-purple-600">R$ {quote.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 font-bold">{new Date(quote.created_at).toLocaleDateString()}</p>
+                            </div>
+                          )) : (
+                            <p className="text-[10px] text-slate-400 italic px-2">Nenhum orçamento encontrado.</p>
+                          )}
+                        </div>
+                      </section>
+
+                      {/* VISITAS TÉCNICAS */}
+                      <section className="space-y-3">
+                        <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                          <Calendar size={14} className="text-amber-500" /> Visitas & Agendas ({history.appointments.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {history.appointments.length > 0 ? history.appointments.map(app => (
+                            <div key={app.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-black text-slate-800 capitalize">{app.type.toLowerCase()}</span>
+                                <span className={`text-[8px] font-black px-2 py-0.5 rounded-full ${app.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                                  {app.status}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
+                                <MapPin size={12} className="text-slate-400" />
+                                <span>{new Date(app.date).toLocaleDateString()} às {app.time}</span>
+                              </div>
+                            </div>
+                          )) : (
+                            <p className="text-[10px] text-slate-400 italic px-2">Nenhum agendamento encontrado.</p>
+                          )}
+                        </div>
+                      </section>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

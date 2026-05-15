@@ -110,6 +110,102 @@ export const dataService = {
         })) as QuickQuote[];
     },
 
+    // CRM Leads
+    async getCRMLeads() {
+        const { data, error } = await supabase
+            .from('crm_leads')
+            .select('*, customer:customers(*)');
+        if (error) throw error;
+        return (data || []).map(l => ({
+            ...l,
+            customerId: l.customer_id,
+            assignedTo: l.assigned_to,
+            productInterest: l.product_interest,
+            lastContact: l.last_contact,
+            createdAt: l.created_at
+        })).sort((a, b) => {
+            const dateA = a.lastContact ? new Date(a.lastContact).getTime() : 0;
+            const dateB = b.lastContact ? new Date(b.lastContact).getTime() : 0;
+            return dateB - dateA;
+        });
+    },
+
+    async saveCRMLead(lead: any) {
+        const payload: any = {
+            customer_id: lead.customerId,
+            stage: lead.stage,
+            product_interest: lead.productInterest,
+            temperature: lead.temperature,
+            notes: lead.notes,
+            last_contact: new Date().toISOString()
+        };
+        if (lead.id) payload.id = lead.id;
+        const { data, error } = await supabase.from('crm_leads').upsert(payload).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async updateCRMLeadStage(leadId: string, stage: string) {
+        const { error } = await supabase
+            .from('crm_leads')
+            .update({ stage, last_contact: new Date().toISOString() })
+            .eq('id', leadId);
+        if (error) throw error;
+    },
+
+    async transferCRMLead(leadId: string, userId: string) {
+        const { error } = await supabase
+            .from('crm_leads')
+            .update({ 
+                assigned_to: userId,
+                last_contact: new Date().toISOString()
+            })
+            .eq('id', leadId);
+        if (error) throw error;
+    },
+
+    async findCustomerByPhone(phone: string) {
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (!cleanPhone) return null;
+
+        // Gerar variações (com e sem 55)
+        const variants = [cleanPhone];
+        if (cleanPhone.startsWith('55')) {
+            variants.push(cleanPhone.substring(2));
+        } else {
+            variants.push('55' + cleanPhone);
+        }
+
+        // Tenta achar com o número limpo e suas variações
+        const { data, error } = await supabase
+            .from('customers')
+            .select('*')
+            .or(`phone.ilike.%${variants[0]}%,phone2.ilike.%${variants[0]}%`)
+            .order('name', { ascending: true }) // Isso coloca nomes que começam com 'N' (Novo...) depois de outros se possível
+            .limit(10); // Busca alguns para filtrar
+            
+        if (error) return null;
+        
+        // Prioriza quem não tem 'Novo Cliente' no nome
+        const realCustomer = data?.find(c => !c.name.toLowerCase().includes('novo cliente'));
+        return realCustomer || data?.[0] || null;
+    },
+
+    async getCustomerFullHistory(customerId: string) {
+        // Fetch Orders, Quick Quotes, Appointments (Visits)
+        const [orders, quotes, appointments] = await Promise.all([
+            supabase.from('orders').select('*').eq('customer_id', customerId).eq('is_deleted', false).order('created_at', { ascending: false }),
+            supabase.from('quick_quotes').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }),
+            supabase.from('appointments').select('*').eq('customer_id', customerId).order('date', { ascending: false })
+        ]);
+
+        return {
+            orders: orders.data || [],
+            quotes: quotes.data || [],
+            appointments: appointments.data || []
+        };
+    },
+
     async saveQuickQuote(quote: QuickQuote) {
         const isUUID = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
 
@@ -1513,6 +1609,95 @@ export const dataService = {
             goalAmount: Number(data.goal_amount),
             updatedAt: data.updated_at
         } as SalesGoal;
+    },
+
+    // WhatsApp & CRM Integration
+    async getWhatsappMessages(phone: string) {
+        // Criar variantes do número (com e sem 55) para garantir a busca
+        const cleanPhone = phone.replace(/\D/g, '');
+        const variants = [cleanPhone];
+        if (cleanPhone.startsWith('55')) {
+            variants.push(cleanPhone.substring(2));
+        } else {
+            variants.push('55' + cleanPhone);
+        }
+
+        const { data, error } = await supabase
+            .from('whatsapp_messages')
+            .select('*')
+            .in('phone', variants)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+        if (error) throw error;
+        
+        // Inverter para manter ordem cronológica no chat (mais antigas em cima, novas embaixo)
+        const sortedData = (data || []).reverse();
+
+        return sortedData.map(m => ({
+            text: m.message || '',
+            sender: m.direction === 'outbound' ? 'me' : 'them',
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: m.status,
+            mediaUrl: m.media_url,
+            mediaType: m.media_type,
+            fileName: m.file_name
+        }));
+    },
+
+    async getWhatsappInstances() {
+        const { data, error } = await supabase
+            .from('whatsapp_instances')
+            .select('*')
+            .eq('is_active', true);
+        if (error) throw error;
+        return data;
+    },
+
+    async saveWhatsappMessage(msg: { phone: string, message: string, direction: 'inbound' | 'outbound', instance_id: string, client_id?: string }) {
+        const { data, error } = await supabase
+            .from('whatsapp_messages')
+            .insert([{
+                ...msg,
+                status: 'received'
+            }])
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    async getSystemConfig() {
+        // Buscar config básica
+        const { data: baseConfig } = await supabase
+            .from('config')
+            .select('*')
+            .limit(1)
+            .maybeSingle();
+
+        // Buscar config da Evolution API
+        const { data: evolutionApi } = await supabase
+            .from('api_settings')
+            .select('*')
+            .eq('service', 'evolution')
+            .maybeSingle();
+
+        const evolutionSettings = evolutionApi?.settings || {};
+
+        return {
+            ...baseConfig,
+            evolution_url: evolutionSettings.baseUrl,
+            evolution_apikey: evolutionSettings.apiKey
+        };
+    },
+
+    async getSystemUsers() {
+        const { data, error } = await supabase
+            .from('system_users')
+            .select('*')
+            .order('name');
+        if (error) throw error;
+        return data;
     },
 
     // Rotina de Backup Total

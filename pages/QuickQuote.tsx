@@ -565,19 +565,31 @@ const QuickQuote = ({ products, storageKey, currentUser, onAddTechnicalSheet, on
                       </span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                     <button
+                  <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Deseja iniciar um novo orçamento? Os itens atuais serão perdidos.')) {
+                            setQuoteItems([]);
+                            setSelectedCustomer(null);
+                            setQuickQuoteId(null);
+                          }
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs transition-all active:scale-95"
+                      >
+                        <Plus size={14} /> Novo
+                      </button>
+                      <button
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="flex items-center justify-center gap-1.5 px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-xl font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-xl font-bold text-xs transition-all active:scale-95 disabled:opacity-50"
                       >
-                        <Save size={18} /> {isSaving ? '...' : 'Salvar'}
+                        <Save size={14} /> {isSaving ? '...' : 'Salvar'}
                       </button>
                       <button
                         onClick={copyToWhatsapp}
-                        className="flex items-center justify-center gap-1.5 px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
+                        className="flex items-center justify-center gap-1.5 px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
                       >
-                        <MessageCircle size={18} /> WhatsApp
+                        <MessageCircle size={14} /> WhatsApp
                       </button>
                   </div>
                 </div>

@@ -1,68 +1,100 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
+import { supabase } from "./supabase";
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+let aiInstance: GoogleGenAI | null = null;
+let currentKey: string | null = null;
 
-// Fix: Robust access to Gemini API, non-blocking if key is missing
-// The previous code crashed the entire app if the key was missing at startup.
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const getApiKey = async () => {
+    // 1. Tentar variável de ambiente
+    const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (envKey) return envKey;
 
-export const getProductionInsights = async (items: any[]) => {
-  try {
-    if (!ai) {
-      console.warn("Gemini API Key not found. AI features disabled.");
-      return null;
-    }
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Analise as seguintes medições de toldos e cortinas e sugira recomendações técnicas para a produção: ${JSON.stringify(items)}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            estimatedDifficulty: { type: Type.STRING },
-            materialWasteEstimate: { type: Type.STRING }
-          },
-          required: ["suggestions", "estimatedDifficulty"]
+    // 2. Tentar banco de dados
+    try {
+        const { data, error } = await supabase
+            .from('api_settings')
+            .select('settings')
+            .eq('service', 'gemini')
+            .single();
+        
+        if (data?.settings?.apiKey) {
+            return data.settings.apiKey;
         }
-      }
-    });
-    // Fix: Using response.text property directly as it returns the string output
-    const text = response.text || "{}";
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Gemini Error:", error);
+    } catch (err) {
+        console.error("Erro ao buscar Gemini Key no banco:", err);
+    }
+
     return null;
-  }
+};
+
+const getAI = async () => {
+    const key = await getApiKey();
+    if (!key) return null;
+
+    if (key !== currentKey || !aiInstance) {
+        currentKey = key;
+        aiInstance = new GoogleGenAI(key);
+    }
+    return aiInstance;
+};
+
+export const suggestChatMessage = async (messages: any[], customerContext: any) => {
+    try {
+        const genAI = await getAI();
+        if (!genAI) return "Configure a chave do Gemini nas configurações para usar o assistente de IA.";
+
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const prompt = `
+            Você é um assistente de vendas da empresa RTC - Toldos e Cortinas.
+            Sua tarefa é sugerir uma resposta curta, profissional e amigável para o cliente no WhatsApp.
+
+            Contexto do Cliente:
+            Nome: ${customerContext.name}
+            Interesse: ${customerContext.productInterest?.join(', ') || 'Não especificado'}
+            Histórico Recente: ${JSON.stringify(messages.slice(-5))}
+
+            Instruções:
+            - Seja direto e resolutivo.
+            - Use um tom de voz que transmite confiança e excelência.
+            - Se o cliente perguntar algo que você não sabe, sugira agendar uma medição técnica.
+            - Retorne APENAS a sugestão de texto, sem comentários extras.
+        `;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Gemini Error:", error);
+        return "Desculpe, tive um erro ao processar sua sugestão. Tente novamente.";
+    }
+};
+
+// Funções legadas mantidas para compatibilidade (atualizadas para 1.5 flash)
+export const getProductionInsights = async (items: any[]) => {
+    try {
+        const genAI = await getAI();
+        if (!genAI) return null;
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        
+        const result = await model.generateContent(`Analise estas medições e sugira recomendações técnicas: ${JSON.stringify(items)}`);
+        const response = await result.response;
+        return { suggestions: [response.text()] };
+    } catch (error) {
+        return null;
+    }
 };
 
 export const suggestQuoteValue = async (items: any[]) => {
-  try {
-    if (!ai) {
-      console.warn("Gemini API Key not found. AI features disabled.");
-      return null;
+    try {
+        const genAI = await getAI();
+        if (!genAI) return null;
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        
+        const result = await model.generateContent(`Sugira um valor estimado para: ${JSON.stringify(items)}`);
+        const response = await result.response;
+        return { estimatedPrice: 0, reasoning: response.text() };
+    } catch (error) {
+        return null;
     }
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Baseado nestas medições, sugira um valor estimado de mercado (em BRL) para o orçamento total: ${JSON.stringify(items)}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            estimatedPrice: { type: Type.NUMBER },
-            reasoning: { type: Type.STRING }
-          },
-          required: ["estimatedPrice", "reasoning"]
-        }
-      }
-    });
-    // Fix: Using response.text property directly as it returns the string output
-    const text = response.text || "{}";
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    return null;
-  }
-}
+};

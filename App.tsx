@@ -609,6 +609,7 @@ const App = () => {
           products={products}
           sellers={sellers}
           onAddCustomer={handleAddCustomer}
+          currentUser={currentUser!}
         />;
       case 'quick-quote':
         return (
