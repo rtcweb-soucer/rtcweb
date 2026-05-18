@@ -5,8 +5,9 @@ import { normalizeString } from '../utils/searchUtils';
 
 interface SearchableCustomerSelectProps {
     customers: Customer[];
-    value: string;
-    onChange: (id: string) => void;
+    value?: string;
+    onChange?: (id: string) => void;
+    onSelect?: (customer: Customer) => void;
     placeholder?: string;
     className?: string;
 }
@@ -15,6 +16,7 @@ const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
     customers,
     value,
     onChange,
+    onSelect,
     placeholder = "Buscar cliente...",
     className = ""
 }) => {
@@ -99,7 +101,8 @@ const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
                                     key={c.id}
                                     type="button"
                                     onClick={() => {
-                                        onChange(c.id);
+                                        if (onChange) onChange(c.id);
+                                        if (onSelect) onSelect(c);
                                         setIsOpen(false);
                                         setSearchTerm('');
                                     }}
@@ -110,7 +113,7 @@ const SearchableCustomerSelect: React.FC<SearchableCustomerSelectProps> = ({
                                             {c.name}
                                         </p>
                                         <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase truncate">
-                                            {c.document} • {c.address.city}/{c.address.state}
+                                            {c.document} • {c.address?.city || 'Cidade'}/{c.address?.state || 'UF'}
                                         </p>
                                     </div>
                                     {value === c.id && (

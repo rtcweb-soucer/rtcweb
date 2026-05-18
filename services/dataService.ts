@@ -122,7 +122,9 @@ export const dataService = {
             assignedTo: l.assigned_to,
             productInterest: l.product_interest,
             lastContact: l.last_contact,
-            createdAt: l.created_at
+            createdAt: l.created_at,
+            // Para leads sem cliente cadastrado, usar o phone direto do lead
+            phone: l.phone || l.customer?.phone || null,
         })).sort((a, b) => {
             const dateA = a.lastContact ? new Date(a.lastContact).getTime() : 0;
             const dateB = b.lastContact ? new Date(b.lastContact).getTime() : 0;
@@ -132,7 +134,8 @@ export const dataService = {
 
     async saveCRMLead(lead: any) {
         const payload: any = {
-            customer_id: lead.customerId,
+            customer_id: lead.customerId || null,
+            phone: lead.phone ? lead.phone.replace(/\D/g, '') : null,
             stage: lead.stage,
             product_interest: lead.productInterest,
             temperature: lead.temperature,
@@ -152,6 +155,44 @@ export const dataService = {
             .update({ stage, last_contact: new Date().toISOString() })
             .eq('id', leadId);
         if (error) throw error;
+    },
+
+    async autoUpdateLeadByCustomer(customerId: string, stage: string, dealValue?: number) {
+        try {
+            // Find the lead for this customer
+            const { data: leads, error } = await supabase
+                .from('crm_leads')
+                .select('*')
+                .eq('customer_id', customerId)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (error) throw error;
+            if (!leads || leads.length === 0) return;
+
+            const lead = leads[0];
+            const updateData: any = { 
+                stage, 
+                last_contact: new Date().toISOString() 
+            };
+
+            if (dealValue !== undefined) {
+                updateData.deal_value = dealValue;
+            }
+
+            // Append to notes
+            const timestamp = new Date().toLocaleString('pt-BR');
+            const newNote = `[${timestamp}] Automação: Fase alterada para ${stage}${dealValue ? ` (Valor: R$ ${dealValue})` : ''}`;
+            updateData.notes = lead.notes ? `${lead.notes}\n${newNote}` : newNote;
+
+            await supabase
+                .from('crm_leads')
+                .update(updateData)
+                .eq('id', lead.id);
+
+        } catch (err) {
+            console.error('Erro na automação do CRM (por cliente):', err);
+        }
     },
 
     async transferCRMLead(leadId: string, userId: string) {

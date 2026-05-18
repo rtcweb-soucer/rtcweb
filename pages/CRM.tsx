@@ -10,6 +10,44 @@ import { evolutionService } from '../services/evolutionService';
 import { suggestChatMessage } from '../services/geminiService';
 import { Sparkles } from 'lucide-react';
 
+const whatsappStyles = `
+  .whatsapp-bg {
+    background-color: #efe7de;
+    background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
+    background-repeat: repeat;
+    background-size: 400px;
+    background-attachment: local;
+  }
+  .message-tail-in {
+    position: absolute;
+    left: -8px;
+    top: 0;
+    width: 8px;
+    height: 13px;
+    background-color: white;
+    clip-path: polygon(100% 0, 0 0, 100% 100%);
+  }
+  .message-tail-out {
+    position: absolute;
+    right: -8px;
+    top: 0;
+    width: 8px;
+    height: 13px;
+    background-color: #d9fdd3;
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #ced0d1;
+    border-radius: 10px;
+  }
+`;
+
 interface CRMProps {
   customers: Customer[];
   products: Product[];
@@ -19,6 +57,13 @@ interface CRMProps {
 }
 
 const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMProps) => {
+  useEffect(() => {
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = whatsappStyles;
+    document.head.appendChild(styleSheet);
+    return () => { document.head.removeChild(styleSheet); };
+  }, []);
+
   const [activeChat, setActiveChat] = useState<Customer | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
@@ -53,7 +98,48 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
   }>({ orders: [], quotes: [], appointments: [] });
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(false);
+
+  const autoUpdateLeadStage = async (stage: string, value: number = 0) => {
+    if (!activeChat) return;
+
+    try {
+      const cleanPhone = activeChat.phone?.replace(/\D/g, '') || '';
+      const phoneVariants = [cleanPhone];
+      if (cleanPhone.startsWith('55')) phoneVariants.push(cleanPhone.substring(2));
+      else phoneVariants.push('55' + cleanPhone);
+
+      const lead = crmLeads.find(l => 
+        l.customer_id === activeChat.id || 
+        phoneVariants.includes(l.phone?.replace(/\D/g, '')) ||
+        phoneVariants.includes(l.customer?.phone?.replace(/\D/g, ''))
+      );
+
+      if (lead) {
+        const updates: any = { 
+          id: lead.id, 
+          stage,
+          lastContact: new Date().toISOString()
+        };
+        
+        if (value > 0) {
+          updates.deal_value = value;
+        }
+
+        // Adicionar nota histórica
+        const timestamp = new Date().toLocaleString();
+        const valueMsg = value > 0 ? ` (Valor: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})` : '';
+        const newNote = `[${timestamp}] Automação: Fase alterada para ${stage}${valueMsg}`;
+        updates.notes = lead.notes ? `${lead.notes}\n---\n${newNote}` : newNote;
+
+        await dataService.saveCRMLead(updates);
+        await loadLeads();
+      }
+    } catch (err) {
+      console.error("Erro na automação do CRM:", err);
+    }
+  };
   const [lastIdentifiedPhone, setLastIdentifiedPhone] = useState<string | null>(null);
+  const [showRightPanel, setShowRightPanel] = useState(true);
 
   // Carregar leads do CRM
   const loadLeads = async () => {
@@ -149,10 +235,18 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       
       const config = await dataService.getSystemConfig();
       setSystemConfig(config);
+
+      // Diagnóstico: verificar se a config está completa
+      console.log('🔧 [CRM] Config carregada:', {
+        evolution_url: config?.evolution_url,
+        evolution_apikey: config?.evolution_apikey ? '✅ presente' : '❌ ausente',
+        instancias: availableInstances.map(i => ({ name: i.name, instance: i.instance_name, apikey: i.apikey ? '✅' : '❌' }))
+      });
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);
     }
   };
+
 
   // Scroll inteligente: só rola para o fim se o usuário já estiver lá ou se for o carregamento inicial
   const scrollToBottom = (force = false) => {
@@ -222,7 +316,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
             event: 'INSERT',
             schema: 'public',
             table: 'whatsapp_messages',
-            filter: `phone=in.(${activeChat.phone.replace(/\D/g, '')},55${activeChat.phone.replace(/\D/g, '')})`
+            filter: `phone=eq.${activeChat.phone.replace(/\D/g, '')}`
           },
           (payload) => {
             loadMessages(activeChat.phone!);
@@ -308,16 +402,11 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       const cleanPhone = activeChat.phone!.replace(/\D/g, '');
       
       if (type === 'text') {
-        let phoneWithDDI = cleanPhone;
-        if (!phoneWithDDI.startsWith('55') && phoneWithDDI.length >= 10) {
-          phoneWithDDI = '55' + phoneWithDDI;
-        }
-
         await evolutionService.sendMessage(
           systemConfig.evolution_url,
           selectedInstance.apikey,
           selectedInstance.instance_name,
-          phoneWithDDI,
+          cleanPhone,
           text
         );
         
@@ -335,19 +424,14 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         if (!content) return;
         
         const mediaType = type === 'image' ? 'image' : type === 'audio' ? 'audio' : 'document';
-        const fileName = extraData || (type === 'image' ? 'imagem.jpg' : type === 'audio' ? 'audio.ogg' : 'documento.pdf');
+        const fileName = extraData || (type === 'image' ? 'imagem.jpg' : type === 'audio' ? 'audio.mp3' : 'documento.pdf');
 
-        let phoneWithDDI = cleanPhone;
-        if (!phoneWithDDI.startsWith('55') && phoneWithDDI.length >= 10) {
-          phoneWithDDI = '55' + phoneWithDDI;
-        }
-
-        console.log(`Enviando mídia (${type}) para ${phoneWithDDI}:`, fileName);
+        console.log(`Enviando mídia (${type}) para ${cleanPhone}:`, fileName);
         await evolutionService.sendMedia(
             systemConfig.evolution_url,
             selectedInstance.apikey,
             selectedInstance.instance_name,
-            phoneWithDDI,
+            cleanPhone,
             content,
             mediaType,
             fileName,
@@ -358,12 +442,15 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         try {
           await dataService.saveWhatsappMessage({
               phone: cleanPhone,
-              message: content.startsWith('data:') ? content : `data:audio/ogg;base64,${content}`,
+              message: content.startsWith('data:') ? content : (
+                type === 'document' ? `data:application/pdf;base64,${content}` : 
+                `data:audio/ogg;base64,${content}`
+              ),
               direction: 'outbound',
               instance_id: selectedInstance.id,
               client_id: activeChat.id,
               media_url: null,
-              media_type: 'audio'
+              media_type: type
           });
           // Forçar atualização da tela após salvar usando o cleanPhone consistente
           await loadMessages(cleanPhone);
@@ -412,8 +499,8 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       // Iniciar gravação
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Forçar webm que é o padrão mais estável para gravação via browser
-        const mediaRecorder = new MediaRecorder(stream);
+        const mimeType = 'audio/webm; codecs=opus';
+        const mediaRecorder = new MediaRecorder(stream, { mimeType });
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
 
@@ -424,11 +511,12 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         };
 
         mediaRecorder.onstop = async () => {
-          const audioBlob = new Blob(audioChunksRef.current);
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
           const reader = new FileReader();
           reader.onloadend = async () => {
             const result = reader.result as string;
             const base64 = result.split(',')[1];
+            console.log(`🎤 Áudio gravado: ${audioBlob.size} bytes, tipo: ${mimeType}`);
             setRecordedAudio({
               blob: audioBlob,
               url: URL.createObjectURL(audioBlob),
@@ -484,10 +572,10 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         await dataService.saveCRMLead({
           id: lead.id,
           customerId: customer.id,
-          stage: lead.stage,
+          stage: 'ATENDIMENTO', // Mudar para atendimento ao vincular
           productInterest: lead.productInterest,
           assignedTo: lead.assigned_to || lead.assignedTo,
-          notes: lead.notes ? `${lead.notes}\n---\nVinculado ao cliente ${customer.name}` : `Vinculado manualmente ao cliente ${customer.name}`
+          notes: lead.notes ? `${lead.notes}\n---\nVinculado ao cliente ${customer.name} (Fase movida p/ ATENDIMENTO)` : `Vinculado manualmente ao cliente ${customer.name}`
         });
       }
 
@@ -600,11 +688,12 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
 
             <div className="flex-1 overflow-x-auto p-6 flex gap-6 custom-scrollbar">
               {/* Colunas do Kanban */}
-              {[
+               {[
                 { title: 'Novos Leads', stage: 'NOVO', color: 'bg-blue-500' },
                 { title: 'Em Atendimento', stage: 'ATENDIMENTO', color: 'bg-amber-500' },
                 { title: 'Orçamento Enviado', stage: 'ORCAMENTO', color: 'bg-purple-500' },
-                { title: 'Aguardando Medição', stage: 'MEDICAO', color: 'bg-emerald-500' }
+                { title: 'Aguardando Medição', stage: 'MEDICAO', color: 'bg-emerald-500' },
+                { title: 'Vendido (Fechado)', stage: 'FECHADO', color: 'bg-emerald-900' }
               ].map(column => {
                 // Filtrar leads por estágio e permissão (se selecionada uma instância específica)
                 let columnLeads = crmLeads.filter(l => l.stage === column.stage);
@@ -669,7 +758,12 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                         )}
 
                         <div className="pt-3 border-t border-slate-50 flex justify-between items-center">
-                          <span className="text-[9px] font-black text-slate-400 uppercase">{new Date(lead.lastContact).toLocaleDateString()}</span>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] font-black text-slate-400 uppercase">{new Date(lead.lastContact).toLocaleDateString()}</span>
+                            {lead.deal_value > 0 && (
+                              <span className="text-[10px] font-black text-emerald-600 mt-1">R$ {lead.deal_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            )}
+                          </div>
                           <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">ABRIR CHAT</span>
                         </div>
                       </div>
@@ -684,48 +778,49 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       )}
 
       <div className="flex-1 flex gap-4 min-h-0">
-        {/* COLUNA ESQUERDA: LISTA DE CHATS */}
-        <div className="w-[260px] xl:w-80 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col overflow-hidden shrink-0">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3">
-              <MessageSquare size={18} className="text-emerald-500" /> Conversas Ativas
-            </h3>
-            <div className="relative mb-3">
+        {/* COLUNA ESQUERDA: LISTA DE CHATS (WhatsApp Style) */}
+        <div className="w-[300px] xl:w-[350px] bg-white border-r border-slate-200 flex flex-col overflow-hidden shrink-0">
+          {/* Header da Sidebar */}
+          <div className="p-3 bg-[#f0f2f5] flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden border border-slate-200">
+              <User size={40} className="text-slate-500 mt-2" />
+            </div>
+            <div className="flex items-center gap-3 text-slate-500">
+              <MessageSquare size={20} className="cursor-pointer" />
+              <MoreVertical size={20} className="cursor-pointer" />
+            </div>
+          </div>
+
+          {/* Busca e Filtros */}
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative mb-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
                 type="text" 
-                placeholder="Buscar conversa..." 
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                placeholder="Pesquisar ou começar uma nova conversa" 
+                className="w-full pl-10 pr-4 py-1.5 bg-[#f0f2f5] border-none rounded-lg text-sm focus:ring-0 outline-none placeholder:text-slate-500"
               />
             </div>
 
-            {/* ABAS DE ATENDENTES */}
-            <div className="flex gap-1 overflow-x-auto pb-2 custom-scrollbar-hidden no-scrollbar">
-              <button
-                onClick={() => setActiveUserTab('all')}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${activeUserTab === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-              >
-                Geral
-              </button>
-              <button
-                onClick={() => setActiveUserTab(currentUser.id)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${activeUserTab === currentUser.id ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-600 border-emerald-100 hover:bg-emerald-50'}`}
-              >
-                Meus
-              </button>
-              {users.filter(u => u.id !== currentUser.id).map(user => (
+            <div className="flex gap-2 px-1 overflow-x-auto no-scrollbar py-1">
+              {[
+                { id: 'all', label: 'Tudo' },
+                { id: 'unread', label: 'Não lidas' },
+                { id: 'favorites', label: 'Favoritos' },
+                { id: 'groups', label: 'Transferências' }
+              ].map(filter => (
                 <button
-                  key={user.id}
-                  onClick={() => setActiveUserTab(user.id)}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${activeUserTab === user.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  key={filter.id}
+                  onClick={() => filter.id === 'all' ? setActiveUserTab('all') : null}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${activeUserTab === 'all' && filter.id === 'all' ? 'bg-[#e7fce3] text-[#06503c]' : 'bg-[#f0f2f5] text-slate-500 hover:bg-slate-200'}`}
                 >
-                  {user.name.split(' ')[0]}
+                  {filter.label}
                 </button>
               ))}
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
             {(() => {
               const filtered = crmLeads.filter(l => {
                 if (activeUserTab === 'all') return true;
@@ -736,13 +831,14 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                 return (
                   <div className="flex flex-col items-center justify-center h-40 opacity-40">
                     <MessageSquare size={32} className="text-slate-400 mb-2" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Nenhuma conversa nesta aba</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center px-4">Nenhuma conversa encontrada</p>
                   </div>
                 );
               }
 
               return filtered.slice(0, 50).map(lead => {
                 const assignedUser = users.find(u => u.id === lead.assigned_to);
+                const isActive = activeChat?.id === (lead.customer?.id || lead.customer_id);
                 
                 return (
                   <button 
@@ -754,30 +850,36 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                         loadMessages(customer.phone);
                       }
                     }}
-                    className={`w-full p-3 rounded-2xl flex items-center gap-3 transition-all border ${activeChat?.id === (lead.customer?.id || lead.customer_id) ? 'bg-emerald-50 border-emerald-100' : 'hover:bg-slate-50 border-transparent'}`}
+                    className={`w-full px-3 py-3 flex items-center gap-3 transition-all border-b border-slate-50 ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                   >
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
-                      <User size={20} className="text-slate-400" />
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 overflow-hidden">
+                      {lead.customer?.photo ? (
+                        <img src={lead.customer.photo} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <User size={24} className="text-slate-400" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 text-left">
                       <div className="flex justify-between items-center mb-0.5">
-                        <h4 className="font-bold text-slate-800 text-sm truncate">
-                          {lead.customer?.name || 'Novo Lead WhatsApp'}
+                        <h4 className="font-semibold text-slate-900 text-base truncate pr-2">
+                          {lead.customer?.name || 'Lead WhatsApp'}
                         </h4>
-                        <span className="text-[9px] text-slate-400 font-black">
+                        <span className={`text-[11px] ${lead.unreadCount > 0 ? 'text-[#25d366] font-bold' : 'text-slate-400 font-medium'}`}>
                           {lead.lastContact ? new Date(lead.lastContact).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-[11px] text-slate-500 truncate flex-1">
-                          {lead.notes || lead.customer?.phone || 'Clique para atender'}
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-sm text-slate-500 truncate flex-1">
+                          {lead.notes || lead.customer?.phone || 'Clique para conversar'}
                         </p>
-                        {assignedUser && activeUserTab === 'all' && (
-                          <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md uppercase tracking-tighter">
-                            {assignedUser.name.split(' ')[0]}
+                        {lead.unreadCount > 0 && (
+                          <span className="bg-[#25d366] text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
+                            {lead.unreadCount}
                           </span>
                         )}
-                        <div className={`w-1.5 h-1.5 rounded-full ${lead.temperature === 'QUENTE' ? 'bg-rose-500 animate-pulse' : 'bg-slate-300'}`} />
+                        {lead.temperature === 'QUENTE' && !lead.unreadCount && (
+                          <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" title="Lead Quente" />
+                        )}
                       </div>
                     </div>
                   </button>
@@ -791,51 +893,47 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         <div className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col overflow-hidden relative">
           {activeChat ? (
             <>
-              {/* Chat Header Compacto */}
-                <div className="px-4 py-2 border-b border-slate-100 bg-white flex justify-between items-center z-10 shadow-sm min-h-[60px]">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                      <User size={18} className="text-emerald-600" />
+              {/* Chat Header (WhatsApp Style) */}
+                <div className="px-4 py-2 bg-[#f0f2f5] border-b border-slate-200 flex justify-between items-center z-10 min-h-[60px]">
+                  <div className="flex items-center gap-3 cursor-pointer">
+                    <div className="w-10 h-10 rounded-full bg-slate-300 flex items-center justify-center border border-slate-200 overflow-hidden">
+                      {activeChat.photo ? (
+                        <img src={activeChat.photo} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <User size={20} className="text-slate-500" />
+                      )}
                     </div>
                     <div className="flex flex-col">
-                      <h3 className="font-bold text-slate-800 text-sm leading-tight truncate max-w-[150px]">{activeChat.name}</h3>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-400 font-medium">{activeChat.phone}</span>
-                        <div className="w-1 h-1 bg-slate-300 rounded-full" />
-                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-tight">Ativo</span>
-                      </div>
+                      <h3 className="font-semibold text-slate-900 text-base leading-tight truncate max-w-[200px]">{activeChat.name}</h3>
+                      <span className="text-xs text-slate-500">visto por último hoje às {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
-                    {/* SELETOR DE CANAL COMPACTO */}
-                    <div className="hidden sm:flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-4 text-slate-500">
+                    <Search size={20} className="cursor-pointer hover:text-slate-700" />
+                    
+                    {/* SELETOR DE CANAL (Discreto) */}
+                    <div className="flex items-center gap-1 bg-white/50 p-1 rounded-lg border border-slate-200">
                       {instances.map(inst => (
                         <button
                           key={inst.id}
                           onClick={() => setSelectedInstance(inst)}
-                          className={`px-2 py-1 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 border ${selectedInstance?.id === inst.id ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-transparent text-slate-400 border-transparent hover:text-slate-600'}`}
-                          title={`Responder via ${inst.name}`}
+                          className={`px-2 py-0.5 rounded text-[9px] font-bold transition-all border ${selectedInstance?.id === inst.id ? 'bg-[#25d366] text-white border-[#25d366]' : 'text-slate-400 border-transparent'}`}
                         >
-                          <Smartphone size={10} />
-                          <span className="hidden md:inline">{inst.name}</span>
+                          {inst.name}
                         </button>
                       ))}
                     </div>
 
                     <button 
                       onClick={() => setShowTransferModal(true)}
-                      className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-black bg-slate-100 hover:bg-blue-600 text-slate-600 hover:text-white rounded-lg transition-all border border-slate-200 uppercase tracking-tighter"
-                      title="Transferir conversa"
+                      className="p-1.5 hover:bg-slate-200 rounded-full transition-all text-slate-500"
+                      title="Transferir"
                     >
-                      <UserPlus size={12} />
-                      <span className="hidden lg:inline">TRANSFERIR</span>
+                      <UserPlus size={20} />
                     </button>
-
-                    <div className="flex items-center">
-                      <button className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full transition-colors"><Phone size={18} /></button>
-                      <button className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full transition-colors"><MoreVertical size={18} /></button>
-                    </div>
+                    
+                    <MoreVertical size={20} className="cursor-pointer hover:text-slate-700" />
                   </div>
                 </div>
 
@@ -911,9 +1009,9 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                 </div>
               )}
 
-              {/* Messages Area */}
+              {/* Messages Area (WhatsApp Wallpaper + Tails) */}
               <div 
-                className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#e5ddd5] custom-scrollbar" 
+                className="flex-1 overflow-y-auto p-6 space-y-2 whatsapp-bg custom-scrollbar" 
                 id="chat-messages"
                 onScroll={handleScroll}
               >
@@ -924,16 +1022,18 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                       setAutoScroll(true);
                       scrollToBottom(true);
                     }}
-                    className="absolute bottom-24 right-8 bg-white p-2 rounded-full shadow-lg border border-slate-200 text-blue-500 hover:bg-slate-50 transition-all z-20 flex items-center gap-2 animate-bounce"
+                    className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-md text-slate-600 hover:bg-slate-50 transition-all z-20 flex items-center gap-2 border border-slate-100"
                   >
                     <TrendingUp className="rotate-180" size={16} />
-                    <span className="text-[10px] font-bold uppercase pr-1">Novas Mensagens</span>
+                    <span className="text-xs font-semibold">Novas Mensagens</span>
                   </button>
                 )}
 
                 {messages.length > 0 ? (
                     messages.map((msg, i) => {
                       const text = msg.text || '';
+                      const isMe = msg.sender === 'me';
+                      
                       // Detecção robusta de mídia
                       const isImage = msg.mediaType === 'image' || text === 'Imagem' || text.startsWith('data:image/') || (text.length > 50 && text.includes('/9j/'));
                       const isAudio = msg.mediaType === 'audio' || text === 'Áudio' || text.startsWith('data:audio/') || text.startsWith('OggS') || text.startsWith('GkXfo');
@@ -942,30 +1042,33 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                       const mediaUrl = msg.mediaUrl || (text.startsWith('data:') ? text : null);
                       
                       return (
-                        <div key={i} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                        <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
                           <div 
-                            className={`max-w-[85%] p-2.5 rounded-xl shadow-sm relative text-sm ${msg.sender === 'me' ? 'bg-[#d9fdd3] rounded-tr-none' : 'bg-white rounded-tl-none'}`}
+                            className={`max-w-[85%] sm:max-w-[70%] px-2 py-1.5 rounded-lg shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] relative text-[14.2px] ${isMe ? 'bg-[#d9fdd3] rounded-tr-none' : 'bg-white rounded-tl-none'}`}
                           >
+                            {/* Tails */}
+                            <div className={isMe ? 'message-tail-out' : 'message-tail-in'} />
+
                             {isImage ? (
                               <div className="space-y-1">
                                 <img 
                                   src={mediaUrl || (text.startsWith('data:') ? text : `data:image/jpeg;base64,${text}`)} 
                                   alt="Mídia" 
-                                  className="rounded-lg max-h-60 cursor-pointer hover:opacity-90 transition-opacity"
+                                  className="rounded max-h-80 w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                   onClick={() => window.open(mediaUrl || (text.startsWith('data:') ? text : `data:image/jpeg;base64,${text}`))}
                                 />
                               </div>
                             ) : isAudio ? (
-                              <div className="py-1 px-1 min-w-[200px]">
+                              <div className="py-1 min-w-[240px]">
                                 <audio 
                                   src={mediaUrl || (text.startsWith('data:') ? text : (text.includes('base64') ? text : (text.startsWith('GkXfo') ? `data:audio/webm;base64,${text}` : `data:audio/mp4;base64,${text}`)))} 
                                   controls 
-                                  className="h-8 w-full accent-emerald-500"
+                                  className="h-8 w-full accent-[#25d366]"
                                   preload="metadata"
                                 />
                               </div>
                             ) : isPDF ? (
-                              <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors"
+                              <div className="flex items-center gap-3 bg-[#f0f2f5]/50 p-2 rounded border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors"
                                 onClick={() => {
                                   const base64 = text.includes('base64,') ? text.split('base64,')[1] : text;
                                   const link = document.createElement('a');
@@ -974,23 +1077,27 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                                   link.click();
                                 }}
                               >
-                                <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
+                                <div className="h-10 w-10 bg-red-100 rounded flex items-center justify-center text-red-600 shrink-0">
                                   <FileText size={24} />
                                 </div>
                                 <div className="text-left overflow-hidden">
-                                  <div className="font-bold text-xs text-slate-700 truncate max-w-[150px]">
+                                  <div className="font-semibold text-xs text-slate-700 truncate max-w-[150px]">
                                     Documento PDF
                                   </div>
-                                  <div className="text-[10px] text-slate-400">Clique para baixar</div>
+                                  <div className="text-[10px] text-slate-400 font-medium">Clique para baixar</div>
                                 </div>
                               </div>
                             ) : (
-                              <p className="text-slate-800 leading-tight" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                              <p className="text-[#111b21] leading-[1.4]" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
                             )}
                             
-                            <div className="flex items-center justify-end gap-1 mt-1">
-                              <span className="text-[9px] text-slate-500 font-medium">{msg.time}</span>
-                              {msg.sender === 'me' && <CheckCheck size={12} className={msg.status === 'READ' ? "text-blue-500" : "text-slate-400"} />}
+                            <div className="flex items-center justify-end gap-1 mt-0.5">
+                              <span className="text-[11px] text-[#667781] font-normal uppercase">{msg.time}</span>
+                              {isMe && (
+                                <span className={msg.status === 'READ' ? "text-[#53bdeb]" : "text-[#667781]"}>
+                                  <CheckCheck size={16} />
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1005,8 +1112,8 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Chat Input */}
-              <div className="p-3 bg-slate-50 border-t border-slate-200">
+              {/* Chat Input (WhatsApp Style) */}
+              <div className="px-4 py-2 bg-[#f0f2f5] border-t border-slate-200 flex items-center gap-3">
                 <input 
                   type="file" 
                   id="file-upload" 
@@ -1020,132 +1127,102 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                   className="hidden" 
                   onChange={(e) => handleFileUpload(e, 'image')}
                 />
-                <div 
-                  className={`flex items-center gap-2 p-1.5 bg-white rounded-2xl border transition-all ${dragOver ? 'border-emerald-500 shadow-md bg-emerald-50' : 'border-slate-200'} ${isRecording ? 'border-rose-500 bg-rose-50' : ''}`}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                >
-                  {!isRecording ? (
-                    <>
-                      <div className="flex flex-col gap-0.5">
-                        <button 
-                          onClick={() => document.getElementById('file-upload')?.click()}
-                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" 
-                          title="Anexar Arquivo"
-                        >
-                          <Paperclip size={14} />
-                        </button>
-                        <button 
-                          onClick={() => document.getElementById('image-upload')?.click()}
-                          className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors" 
-                          title="Enviar Imagem"
-                        >
-                          <ImageIcon size={14} />
-                        </button>
-                      </div>
+                
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                    className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-all" 
+                    title="Anexar"
+                  >
+                    <Paperclip size={22} />
+                  </button>
+                  <button 
+                    onClick={() => document.getElementById('image-upload')?.click()}
+                    className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-all" 
+                    title="Imagens"
+                  >
+                    <ImageIcon size={22} />
+                  </button>
+                </div>
 
-                      <div className="flex-1 flex flex-col gap-2">
-                        {recordedAudio ? (
-                          <div className="flex items-center gap-3 bg-emerald-50 p-2 rounded-xl border border-emerald-100 animate-in fade-in slide-in-from-bottom-2">
-                            <button 
-                              onClick={() => {
-                                if (audioPlayerRef.current) {
-                                  if (isPlayingRecorded) audioPlayerRef.current.pause();
-                                  else audioPlayerRef.current.play();
-                                  setIsPlayingRecorded(!isPlayingRecorded);
-                                }
-                              }}
-                              className="w-8 h-8 flex items-center justify-center bg-emerald-500 text-white rounded-full hover:bg-emerald-600 transition-colors"
-                            >
-                              {isPlayingRecorded ? <X size={16} /> : <div className="ml-0.5 border-l-[10px] border-l-white border-y-[6px] border-y-transparent" />}
-                            </button>
-                            
-                            <div className="flex-1 h-1.5 bg-emerald-200 rounded-full overflow-hidden relative">
-                              <div className={`h-full bg-emerald-500 transition-all ${isPlayingRecorded ? 'w-full duration-[10s] ease-linear' : 'w-0'}`} />
-                            </div>
-
-                            <button 
-                              onClick={() => {
-                                setRecordedAudio(null);
-                                setIsPlayingRecorded(false);
-                              }}
-                              className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors"
-                            >
-                              <X size={16} />
-                            </button>
-
-                            <audio 
-                              ref={audioPlayerRef} 
-                              src={recordedAudio.url} 
-                              className="hidden" 
-                              onEnded={() => setIsPlayingRecorded(false)}
-                            />
-                          </div>
-                        ) : (
-                          <textarea 
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            placeholder={dragOver ? "Solte o orçamento aqui..." : "Digite sua mensagem..."}
-                            className="w-full bg-slate-50/50 rounded-xl border border-slate-100 resize-none outline-none py-2 px-3 text-sm min-h-[44px] max-h-40 custom-scrollbar placeholder:text-slate-400 focus:bg-white focus:border-emerald-200 transition-all"
-                            rows={1}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                sendMessage();
-                              }
-                            }}
-                          />
-                        )}
-                      </div>
-
-                      <div className="flex flex-col gap-0.5">
-                        <button 
-                          onMouseDown={toggleRecording}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" 
-                          title="Gravar Áudio"
-                        >
-                          <Mic size={14} />
-                        </button>
-                        
-                        <button 
-                          onClick={handleAiSuggestion}
-                          disabled={isGeneratingAi || !activeChat}
-                          className={`p-1.5 rounded-lg transition-all ${isGeneratingAi ? 'bg-purple-100 text-purple-600 animate-pulse' : 'text-purple-500 hover:bg-purple-50'}`}
-                          title="Sugestão de Resposta (IA)"
-                        >
-                          <Sparkles size={14} className={isGeneratingAi ? 'animate-spin' : ''} />
-                        </button>
-                      </div>
-
+                <div className="flex-1 relative">
+                  {recordedAudio ? (
+                    <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
                       <button 
                         onClick={() => {
-                          if (recordedAudio) {
-                            sendMessage('audio', recordedAudio.base64, `audio_${Date.now()}.ogg`);
-                            setRecordedAudio(null);
-                          } else {
-                            sendMessage();
+                          if (audioPlayerRef.current) {
+                            if (isPlayingRecorded) audioPlayerRef.current.pause();
+                            else audioPlayerRef.current.play();
+                            setIsPlayingRecorded(!isPlayingRecorded);
                           }
                         }}
-                        disabled={isSending || (!chatInput.trim() && !recordedAudio)}
-                        className="w-12 h-12 flex items-center justify-center bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:bg-slate-300 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                        className="text-[#25d366]"
                       >
-                        {isSending ? <RefreshCw size={20} className="animate-spin" /> : <Send size={20} />}
+                        {isPlayingRecorded ? <X size={20} /> : <div className="ml-1 border-l-[14px] border-l-[#25d366] border-y-[8px] border-y-transparent" />}
                       </button>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-between px-2 py-1 animate-pulse">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping" />
-                        <span className="text-rose-600 font-bold text-sm">Gravando áudio... {formatTime(recordingTime)}</span>
+                      <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full bg-[#25d366] transition-all ${isPlayingRecorded ? 'w-full duration-[10s] ease-linear' : 'w-0'}`} />
                       </div>
-                      <button 
-                        onClick={toggleRecording}
-                        className="bg-rose-600 text-white px-4 py-1.5 rounded-xl font-bold text-xs shadow-lg"
-                      >
-                        CONCLUIR
-                      </button>
+                      <button onClick={() => setRecordedAudio(null)} className="text-rose-500"><X size={20} /></button>
+                      <audio ref={audioPlayerRef} src={recordedAudio.url} className="hidden" onEnded={() => setIsPlayingRecorded(false)} />
                     </div>
+                  ) : isRecording ? (
+                    <div className="flex-1 flex items-center justify-between bg-white px-4 py-2 rounded-full border border-rose-200 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-rose-500 rounded-full animate-ping" />
+                        <span className="text-rose-600 font-semibold text-sm">{formatTime(recordingTime)}</span>
+                      </div>
+                      <button onClick={toggleRecording} className="text-rose-600 font-bold text-xs uppercase tracking-wider">Cancelar</button>
+                    </div>
+                  ) : (
+                    <textarea 
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Digite uma mensagem"
+                      className="w-full bg-white rounded-[24px] py-[10px] px-6 text-base md:text-lg outline-none border-none shadow-sm placeholder:text-slate-500 resize-none max-h-48 min-h-[44px] leading-normal flex items-center overflow-y-auto custom-scrollbar"
+                      rows={1}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          sendMessage();
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={handleAiSuggestion}
+                    disabled={isGeneratingAi}
+                    className={`p-2 rounded-full transition-all ${isGeneratingAi ? 'text-purple-600' : 'text-slate-500 hover:bg-slate-200'}`}
+                    title="IA Sugestão"
+                  >
+                    <Sparkles size={22} />
+                  </button>
+                  
+                  {(!chatInput.trim() && !recordedAudio && !isRecording) ? (
+                    <button 
+                      onMouseDown={toggleRecording}
+                      className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-all"
+                    >
+                      <Mic size={22} />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => {
+                        if (recordedAudio) {
+                          sendMessage('audio', recordedAudio.base64, `audio_${Date.now()}.mp3`);
+                          setRecordedAudio(null);
+                        } else {
+                          sendMessage();
+                        }
+                      }}
+                      disabled={isSending}
+                      className="p-2 text-[#25d366] hover:bg-slate-200 rounded-full transition-all"
+                    >
+                      {isSending ? <RefreshCw size={22} className="animate-spin" /> : <Send size={22} />}
+                    </button>
                   )}
                 </div>
               </div>
@@ -1159,10 +1236,30 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
               <p className="text-xs font-medium mt-1">Selecione um lead para começar.</p>
             </div>
           )}
+
+          {/* BOTÃO VERTICAL PARA OCULTAR/MOSTRAR PAINEL DIREITO */}
+          <button 
+            onClick={() => setShowRightPanel(!showRightPanel)}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-30 bg-white border border-slate-200 border-r-0 rounded-l-xl p-1 shadow-md text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all h-20 flex items-center justify-center group"
+            title={showRightPanel ? "Ocultar Painel" : "Mostrar Painel"}
+          >
+            <div className="flex flex-col items-center gap-1">
+              {showRightPanel ? (
+                <div className="flex flex-col items-center">
+                  <span className="w-1 h-1 bg-slate-300 rounded-full mb-1 group-hover:bg-blue-400" />
+                  <span className="w-1 h-1 bg-slate-300 rounded-full mb-1 group-hover:bg-blue-400" />
+                  <span className="w-1 h-1 bg-slate-300 rounded-full group-hover:bg-blue-400" />
+                </div>
+              ) : (
+                <ShoppingCart size={16} className="text-blue-500 animate-pulse" />
+              )}
+            </div>
+          </button>
         </div>
 
         {/* COLUNA DIREITA: PAINEL DE GESTÃO (TABS) */}
-        <div className="w-[380px] xl:w-[450px] flex flex-col bg-slate-50 rounded-3xl border border-slate-200 overflow-hidden shadow-inner">
+        {showRightPanel && (
+          <div className="w-[380px] xl:w-[450px] flex flex-col bg-slate-50 rounded-3xl border border-slate-200 overflow-hidden shadow-inner animate-in slide-in-from-right-4 duration-300 shrink-0">
           {/* SELETOR DE ABAS */}
           <div className="flex p-2 bg-white border-b border-slate-200 gap-2">
             <button 
@@ -1191,6 +1288,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                 key={activeChat?.id || 'general'} 
                 products={products} 
                 storageKey={activeChat ? activeChat.id : 'general'}
+                onSave={(value) => autoUpdateLeadStage('ORCAMENTO', value)}
               />
             ) : rightPanelTab === 'profile' ? (
               /* PAINEL DE PERFIL DO CLIENTE (FORMULÁRIO OFICIAL) */
@@ -1233,9 +1331,31 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                       }}
                       onSave={async (data) => {
                         await onAddCustomer(data);
+                        // Ao salvar um novo cliente no perfil, movemos para atendimento se for um lead
+                        await autoUpdateLeadStage('ATENDIMENTO');
                         alert('Cliente salvo com sucesso na base de dados!');
                       }}
                     />
+                  </div>
+
+                  <div className="px-2 pb-2">
+                    <button 
+                      onClick={() => {
+                        // Abrir modal de agendamento ou avisar
+                        if (!activeChat?.id) {
+                          alert("Salve ou vincule o cliente antes de agendar uma visita.");
+                          return;
+                        }
+                        // Podemos adicionar uma flag para abrir o modal de agendamento do App.tsx 
+                        // ou integrar aqui. Por enquanto vamos simular a mudança de fase se o usuário "agendar".
+                        if (window.confirm("Deseja agendar uma visita técnica para este cliente? (Moverá para Medição)")) {
+                          autoUpdateLeadStage('MEDICAO');
+                        }
+                      }}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                    >
+                      <Calendar size={14} /> Agendar Visita / Medição
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1337,9 +1457,10 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
-  );
+  </div>
+);
 };
 
 export default CRM;

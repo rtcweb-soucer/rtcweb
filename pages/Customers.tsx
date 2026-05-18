@@ -380,7 +380,7 @@ const Customers = ({
                   <td className="px-6 py-4 text-sm text-slate-500">
                     <div className="flex items-center gap-1">
                       <MapPin size={12} className="text-slate-400" />
-                      {customer.address?.city || 'N/A'}/{customer.address?.state || 'N/A'}
+                      {customer.address?.city || 'Cidade'}/{customer.address?.state || 'UF'}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -476,12 +476,12 @@ const Customers = ({
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Endereço</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    {selectedCustomer.address?.street}, {selectedCustomer.address?.number}
-                    {selectedCustomer.address?.complement && <span> • {selectedCustomer.address?.complement}</span>}
+                    {selectedCustomer.address?.street || 'Endereço não informado'}, {selectedCustomer.address?.number || ''}
+                    {selectedCustomer.address?.complement && <span> • {selectedCustomer.address.complement}</span>}
                     <br />
                     {selectedCustomer.address?.neighborhood}<br />
-                    {selectedCustomer.address?.city} - {selectedCustomer.address?.state}<br />
-                    <span className="text-[10px] font-bold text-slate-400">CEP: {selectedCustomer.address?.cep}</span>
+                    {selectedCustomer.address?.city} {selectedCustomer.address?.state ? `- ${selectedCustomer.address.state}` : ''}<br />
+                    <span className="text-[10px] font-bold text-slate-400">CEP: {selectedCustomer.address?.cep || 'Não informado'}</span>
                   </p>
                 </div>
               </div>
@@ -577,8 +577,8 @@ const Customers = ({
                       {customerAppointments.map((app: Appointment) => (
                         <div key={app.id} className="flex items-center gap-4 p-4 border-b border-slate-50">
                           <div className="w-12 h-12 flex flex-col items-center justify-center bg-slate-50 rounded-xl text-slate-500 font-bold border border-slate-100">
-                            <span className="text-[10px] uppercase">{app.date ? formatDisplayDate(app.date).split('/')[1] : '--'}</span>
-                            <span className="text-lg leading-none">{app.date ? app.date.split('-')[2] : '--'}</span>
+                            <span className="text-[10px] uppercase">{formatDisplayDate(app.date).split('/')[1]}</span>
+                            <span className="text-lg leading-none">{app.date.split('-')[2]}</span>
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-bold text-slate-900">Medição Técnica</p>

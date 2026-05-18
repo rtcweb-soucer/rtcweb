@@ -431,6 +431,10 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
 
       const savedOrder = await dataService.saveOrder(order);
       onUpdateOrder(savedOrder);
+
+      // --- CRM Automation: Move to ORCAMENTO ---
+      await dataService.autoUpdateLeadByCustomer(savedOrder.customerId, 'ORCAMENTO', savedOrder.totalValue);
+
       setShowAddEditModal(false);
       alert(modalMode === 'add' ? "Orçamento criado com sucesso!" : "Orçamento atualizado!");
     } catch (err: any) {

@@ -60,7 +60,7 @@ export const notificationService = {
         message += `\n🔗 *Link para Pagamento:* ${charge.url}`;
       }
 
-      await evolutionService.sendMessage(order.customerPhone, message);
+      await evolutionService.sendMessageAuto(order.customerPhone, message);
       console.log(`✅ Cobrança automática enviada via WhatsApp.`);
 
     } catch (err) {

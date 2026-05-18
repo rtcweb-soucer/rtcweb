@@ -197,6 +197,6 @@ export const aiManagerService = {
     async sendReminder(sellerPhone: string, message: string) {
         if (!sellerPhone) throw new Error('Telefone do vendedor não cadastrado');
         const cleanNumber = sellerPhone.replace(/\D/g, '');
-        return await evolutionService.sendMessage(cleanNumber, message);
+        return await evolutionService.sendMessageAuto(cleanNumber, message);
     }
 };

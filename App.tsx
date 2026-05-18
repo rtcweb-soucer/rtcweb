@@ -328,6 +328,13 @@ const App = () => {
         }
         return [...prev, saved];
       });
+
+      // --- CRM Automation: Move to FECHADO ---
+      const closedStatuses = [OrderStatus.CONTRACT_SIGNED, OrderStatus.COMPLETED, OrderStatus.IN_PRODUCTION];
+      if (closedStatuses.includes(saved.status as OrderStatus)) {
+        await dataService.autoUpdateLeadByCustomer(saved.customerId, 'FECHADO', saved.totalValue);
+      }
+
       loadData(true);
     } catch (err: any) {
       alert("Erro ao salvar/atualizar pedido: " + (err.message || err));

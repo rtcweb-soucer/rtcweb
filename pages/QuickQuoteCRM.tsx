@@ -20,6 +20,7 @@ import {
 interface QuickQuoteCRMProps {
   products: Product[];
   storageKey?: string;
+  onSave?: (total: number) => void;
 }
 
 interface QuoteItem {
@@ -32,7 +33,7 @@ interface QuoteItem {
   overrideTotal?: number;
 }
 
-const QuickQuoteCRM = ({ products, storageKey }: QuickQuoteCRMProps) => {
+const QuickQuoteCRM = ({ products, storageKey, onSave }: QuickQuoteCRMProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [quoteItems, setQuoteItems] = useState<QuoteItem[]>(() => {
     if (storageKey) {
@@ -249,8 +250,8 @@ const QuickQuoteCRM = ({ products, storageKey }: QuickQuoteCRMProps) => {
         {/* Footer Compacto */}
         {quoteItems.length > 0 && (
           <div className="bg-slate-900 text-white p-4 rounded-t-[30px] shadow-2xl flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1">
                 <p className="text-[7px] font-bold text-blue-400 uppercase tracking-widest mb-0.5">Total Estimado</p>
                 <div className="flex items-baseline gap-1">
                   <span className="text-xs font-medium text-blue-200">R$</span>
@@ -259,12 +260,25 @@ const QuickQuoteCRM = ({ products, storageKey }: QuickQuoteCRMProps) => {
                   </span>
                 </div>
               </div>
-              <button
-                onClick={copyToWhatsapp}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-[10px] transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
-              >
-                <MessageCircle size={14} /> Copiar
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    copyToWhatsapp();
+                    if (onSave) onSave(totalQuote);
+                  }}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-[9px] transition-all shadow-xl shadow-emerald-500/20 active:scale-95 uppercase"
+                >
+                  <MessageCircle size={12} /> Copiar & Mover
+                </button>
+                {onSave && (
+                  <button
+                    onClick={() => onSave(totalQuote)}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-black text-[9px] transition-all shadow-xl shadow-blue-500/20 active:scale-95 uppercase"
+                  >
+                    <CheckCircle2 size={12} /> Confirmar
+                  </button>
+                )}
+              </div>
             </div>
 
             <div 
