@@ -16,6 +16,8 @@ const saveSyncQueue = (queue: any[]) => {
     localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
 };
 
+const isUUID = (uuid: any): boolean => typeof uuid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+
 export const dataService = {
     // Sincronização
     async processSyncQueue() {
@@ -249,8 +251,6 @@ export const dataService = {
     },
 
     async saveQuickQuote(quote: QuickQuote) {
-        const isUUID = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
-
         const payload: any = {
             customer_id: (quote.customerId && isUUID(quote.customerId)) ? quote.customerId : null,
             customer_name: quote.customerName || 'Consumidor Final',
@@ -488,8 +488,8 @@ export const dataService = {
         const { items, ...sheetData } = sheet;
         const payload = {
             id: sheetData.id,
-            customer_id: sheetData.customerId,
-            seller_id: sheetData.sellerId,
+            customer_id: isUUID(sheetData.customerId) ? sheetData.customerId : null,
+            seller_id: isUUID(sheetData.sellerId) ? sheetData.sellerId : null,
             // created_at is handled by DB default
         };
 
@@ -501,7 +501,7 @@ export const dataService = {
                 id: item.id,
                 technical_sheet_id: data.id,
                 product_id: item.productId,
-                parent_item_id: item.parentItemId,
+                parent_item_id: isUUID(item.parentItemId) ? item.parentItemId : null,
                 width: item.width,
                 height: item.height,
                 environment: item.environment,
@@ -647,9 +647,9 @@ export const dataService = {
     async saveOrder(order: Order, force = false) {
         const payload = {
             id: order.id,
-            customer_id: order.customerId,
-            technical_sheet_id: order.technicalSheetId || null,
-            seller_id: order.sellerId,
+            customer_id: isUUID(order.customerId) ? order.customerId : null,
+            technical_sheet_id: isUUID(order.technicalSheetId) ? order.technicalSheetId : null,
+            seller_id: isUUID(order.sellerId) ? order.sellerId : null,
             item_ids: order.itemIds,
             status: order.status,
             total_value: order.totalValue,
@@ -1245,6 +1245,43 @@ export const dataService = {
         }
 
 
+        // --- FILTRO DE ITENS FECHADOS NO PEDIDO ---
+        // Garante que a impressão tenha apenas os itens que o cliente comprou e suas subdivisões
+        let finalItemIds = new Set<string>();
+        let hasOrderFilter = false;
+
+        if (orderData.item_ids && orderData.item_ids.length > 0) {
+            hasOrderFilter = true;
+            orderData.item_ids.forEach((id: string) => finalItemIds.add(id));
+        } else if (orderData.items_snapshot && orderData.items_snapshot.length > 0) {
+            hasOrderFilter = true;
+            const snapshot = typeof orderData.items_snapshot === 'string'
+                ? JSON.parse(orderData.items_snapshot)
+                : orderData.items_snapshot;
+            snapshot.forEach((it: any) => finalItemIds.add(it.id));
+        }
+
+        if (hasOrderFilter) {
+            // Se temos um filtro de itens do pedido, precisamos resgatar também
+            // os "splits" ou acessórios (filhos) onde o pai foi comprado.
+            let addedNewChildren = true;
+            
+            // Loop while adding children to handle multiple levels of splits (recursive)
+            while (addedNewChildren) {
+                addedNewChildren = false;
+                for (const item of itemsData) {
+                    if (item.parent_item_id && finalItemIds.has(item.parent_item_id) && !finalItemIds.has(item.id)) {
+                        finalItemIds.add(item.id);
+                        addedNewChildren = true;
+                    }
+                }
+            }
+
+            // Aplica o filtro removendo itens que não foram comprados e não são filhos de comprados
+            itemsData = itemsData.filter((item: any) => finalItemIds.has(item.id));
+        }
+        // ------------------------------------------
+
         // Get production sheets for all items
         const itemIds = itemsData.map((item: any) => item.id);
         const { data: productionSheets, error: prodError } = await supabase
@@ -1746,14 +1783,6 @@ export const dataService = {
         };
     },
 
-    async getSystemUsers() {
-        const { data, error } = await supabase
-            .from('system_users')
-            .select('*')
-            .order('name');
-        if (error) throw error;
-        return data;
-    },
 
     // Rotina de Backup Total
     async generateSystemBackup() {

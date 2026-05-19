@@ -74,6 +74,7 @@ const App = () => {
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
   const [lastGeneratedQuoteId, setLastGeneratedQuoteId] = useState<string | null>(null);
   const [selectedOrderIdForTab, setSelectedOrderIdForTab] = useState<string | null>(null);
+  const [quickQuoteToConvert, setQuickQuoteToConvert] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -630,6 +631,14 @@ const App = () => {
             currentUser={currentUser}
             onAddTechnicalSheet={handleSaveTechnicalSheet}
             onUpdateOrder={handleUpdateOrder}
+            onNavigateToQuotes={(orderId, convertData) => {
+              if (convertData) {
+                setQuickQuoteToConvert(convertData);
+              } else {
+                setLastGeneratedQuoteId(orderId);
+              }
+              setActiveTab('quotes');
+            }}
           />
         );
       case 'sellers':
@@ -687,6 +696,8 @@ const App = () => {
           onAddAppointment={handleAddAppointment}
           onAddTechnicalSheet={handleSaveTechnicalSheet}
           onDeleteOrder={handleDeleteOrder}
+          initialQuickQuote={quickQuoteToConvert}
+          onClearQuickQuote={() => setQuickQuoteToConvert(null)}
         />;
       case 'agenda':
         return <Agenda
@@ -891,7 +902,10 @@ const App = () => {
             setPreselectedCustomerId(null);
             setEditingSheet(null);
           }
-          if (tab !== 'quotes') setLastGeneratedQuoteId(null);
+          if (tab !== 'quotes') {
+            setLastGeneratedQuoteId(null);
+            setQuickQuoteToConvert(null);
+          }
         }}
         menuItems={filteredMenu}
         isOpen={isMobileMenuOpen}

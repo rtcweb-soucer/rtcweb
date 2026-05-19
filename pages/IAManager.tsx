@@ -31,7 +31,8 @@ import { Order, OrderStatus, Seller, Customer, SystemUser, Appointment, SalesGoa
 import { aiManagerService, SellerPerformance } from '../services/aiManagerService';
 import { dataService } from '../services/dataService';
 import { useEffect } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, Plus, Trash2, Phone, ToggleLeft, ToggleRight, UserCheck } from 'lucide-react';
+import { supabase } from '../services/supabase';
 
 interface IAManagerProps {
   orders: Order[];
@@ -49,9 +50,24 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedSellerReminders, setSelectedSellerReminders] = useState<{ sellerId: string, message: string } | null>(null);
   const [timeRange, setTimeRange] = useState<'7d' | 'month'>('7d');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings' | 'notifications'>('dashboard');
   const [salesGoals, setSalesGoals] = useState<SalesGoal[]>([]);
   const [isLoadingGoals, setIsLoadingGoals] = useState(true);
+  const [selectedSellerFilter, setSelectedSellerFilter] = useState<string>('ALL');
+
+  // --- Team Notifications States ---
+  interface TeamNotification {
+    id: string;
+    name: string;
+    phone: string;
+    stage_trigger: string;
+    active: boolean;
+  }
+  const [teamNotifications, setTeamNotifications] = useState<TeamNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [newNotifName, setNewNotifName] = useState('');
+  const [newNotifPhone, setNewNotifPhone] = useState('');
+  const [newNotifStage, setNewNotifStage] = useState('Novos Pedidos');
 
   // --- Fetch Goals ---
   const fetchGoals = async () => {
@@ -66,9 +82,87 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
     }
   };
 
+  const fetchNotifications = async () => {
+    try {
+      setLoadingNotifications(true);
+      const { data, error } = await supabase
+        .from('team_notifications')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setTeamNotifications(data || []);
+    } catch (err) {
+      console.error('Error fetching team notifications:', err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
   useEffect(() => {
     fetchGoals();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      fetchNotifications();
+    }
+  }, [activeTab]);
+
+  const handleAddNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNotifName || !newNotifPhone) {
+      alert('Preencha o nome e o celular!');
+      return;
+    }
+    let cleanedPhone = newNotifPhone.replace(/\D/g, '');
+    if (cleanedPhone.length > 0 && !cleanedPhone.startsWith('55')) {
+      cleanedPhone = '55' + cleanedPhone;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('team_notifications')
+        .insert([{
+          name: newNotifName,
+          phone: cleanedPhone,
+          stage_trigger: newNotifStage,
+          active: true
+        }]);
+      if (error) throw error;
+      setNewNotifName('');
+      setNewNotifPhone('');
+      await fetchNotifications();
+    } catch (err: any) {
+      alert(`Erro ao salvar contato: ${err.message}`);
+    }
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('team_notifications')
+        .update({ active: !currentStatus })
+        .eq('id', id);
+      if (error) throw error;
+      await fetchNotifications();
+    } catch (err: any) {
+      alert(`Erro ao atualizar status: ${err.message}`);
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    if (!confirm('Deseja realmente remover este contato de notificação?')) return;
+    try {
+      const { error } = await supabase
+        .from('team_notifications')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      await fetchNotifications();
+    } catch (err: any) {
+      alert(`Erro ao excluir: ${err.message}`);
+    }
+  };
 
   const handleSaveGoal = async (sellerId: string | null, amount: number) => {
     try {
@@ -285,6 +379,12 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
              >
                 <Settings size={14} className="inline mr-1" /> Configurações
              </button>
+             <button 
+               onClick={() => setActiveTab('notifications')}
+               className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'notifications' ? 'bg-white shadow-sm text-purple-600' : 'text-slate-500'}`}
+             >
+                <Users size={14} className="inline mr-1" /> Notificações da Equipe
+             </button>
           </div>
         )}
         <div className="flex p-1 bg-slate-100 rounded-2xl">
@@ -386,7 +486,137 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
               </div>
            </div>
         </div>
-      ) : (
+      ) : activeTab === 'notifications' ? (
+         <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+            {/* Form to add notification contact */}
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
+               <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl">
+                     <Users size={24} />
+                  </div>
+                  <div>
+                     <h3 className="text-xl font-black text-slate-900">Novo Contato de Notificação</h3>
+                     <p className="text-sm text-slate-500 font-medium">Cadastre contatos da equipe para receberem avisos automáticos via WhatsApp quando os pedidos entrarem em determinadas etapas de produção.</p>
+                  </div>
+               </div>
+
+               <form onSubmit={handleAddNotification} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Contato</label>
+                     <input 
+                       type="text"
+                       placeholder="Ex: Aline (PCP)"
+                       required
+                       value={newNotifName}
+                       onChange={(e) => setNewNotifName(e.target.value)}
+                       className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 focus:ring-2 ring-purple-500 text-sm"
+                     />
+                  </div>
+
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp/Celular</label>
+                     <input 
+                       type="text"
+                       placeholder="Ex: 21999999999"
+                       required
+                       value={newNotifPhone}
+                       onChange={(e) => setNewNotifPhone(e.target.value)}
+                       className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 focus:ring-2 ring-purple-500 text-sm"
+                     />
+                  </div>
+
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Etapa de Produção</label>
+                     <select 
+                       value={newNotifStage}
+                       onChange={(e) => setNewNotifStage(e.target.value)}
+                       className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 focus:ring-2 ring-purple-500 text-sm appearance-none"
+                     >
+                        <option value="Novos Pedidos">Novos Pedidos (Aline PCP)</option>
+                        <option value="Em Preparação">Em Preparação (Diretor)</option>
+                        <option value="Provisionamento">Provisionamento (Wellington Compras)</option>
+                        <option value="Cortes ou Soldas">Cortes ou Soldas</option>
+                        <option value="Montagem">Montagem</option>
+                        <option value="Instalações">Instalações</option>
+                        <option value="Finalizado">Finalizado</option>
+                     </select>
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="py-4 bg-purple-600 text-white rounded-2xl font-black text-sm hover:bg-purple-700 transition-all shadow-lg shadow-purple-500/20 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                     <Plus size={16} /> Cadastrar Contato
+                  </button>
+               </form>
+            </div>
+
+            {/* List notifications rules */}
+            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+               <div className="p-8 border-b border-slate-100">
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Contatos e Gatilhos de Notificação Ativos</h3>
+               </div>
+               
+               {loadingNotifications ? (
+                  <div className="p-8 text-center text-slate-400">Carregando contatos...</div>
+               ) : teamNotifications.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 font-medium">Nenhum contato cadastrado ainda.</div>
+               ) : (
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-left">
+                        <thead>
+                           <tr className="bg-slate-50">
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase">Nome</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase">WhatsApp</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase">Etapa de Disparo</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase text-center">Status</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase text-right">Ações</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                           {teamNotifications.map((notif) => (
+                              <tr key={notif.id} className="hover:bg-slate-50/50 transition-colors">
+                                 <td className="px-8 py-4 font-bold text-slate-900">{notif.name}</td>
+                                 <td className="px-8 py-4 text-sm text-slate-500 font-medium flex items-center gap-2">
+                                    <Phone size={14} className="text-slate-400" />
+                                    {notif.phone}
+                                 </td>
+                                 <td className="px-8 py-4">
+                                    <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-xs font-bold">
+                                       {notif.stage_trigger}
+                                    </span>
+                                 </td>
+                                 <td className="px-8 py-4 text-center">
+                                    <button 
+                                      onClick={() => handleToggleActive(notif.id, notif.active)}
+                                      className="focus:outline-none"
+                                      type="button"
+                                    >
+                                       {notif.active ? (
+                                          <ToggleRight size={28} className="text-purple-600" />
+                                       ) : (
+                                          <ToggleLeft size={28} className="text-slate-300" />
+                                       )}
+                                    </button>
+                                 </td>
+                                 <td className="px-8 py-4 text-right">
+                                    <button 
+                                      onClick={() => handleDeleteNotification(notif.id)}
+                                      className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-all"
+                                      type="button"
+                                    >
+                                       <Trash2 size={16} />
+                                    </button>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+               )}
+            </div>
+         </div>
+       ) : (
       <>
 
       {/* Meta de Faturamento Progress Bar */}
@@ -615,6 +845,113 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
           </div>
         )}
       </div>
+
+      {/* List of Open Quotes */}
+      <div className="space-y-8 bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <Briefcase size={20} className="text-purple-600" /> Detalhamento de Orçamentos em Aberto
+            </h3>
+            <p className="text-sm font-medium text-slate-500">Monitoramento agressivo de pipeline de vendas.</p>
+          </div>
+          <div>
+            <select 
+              value={selectedSellerFilter}
+              onChange={(e) => setSelectedSellerFilter(e.target.value)}
+              className="px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
+            >
+              <option value="ALL">Todos os Vendedores</option>
+              {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Current Month Grid */}
+        <div>
+          <h4 className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <TrendingUp size={14} /> Mês Vigente
+          </h4>
+          <div className="overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-2xl">
+            <table className="w-full text-left">
+               <thead>
+                  <tr className="bg-slate-50 sticky top-0">
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Data</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Cliente</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Vendedor</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase text-right">Valor</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {orders
+                    .filter(o => o.status === OrderStatus.QUOTE_SENT)
+                    .filter(o => selectedSellerFilter === 'ALL' || o.sellerId === selectedSellerFilter)
+                    .filter(o => {
+                        const d = new Date(o.createdAt);
+                        const now = new Date();
+                        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                    })
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .map(quote => {
+                      const customer = customers.find(c => c.id === quote.customerId);
+                      const seller = sellers.find(s => s.id === quote.sellerId);
+                      return (
+                        <tr key={quote.id} className="hover:bg-slate-50 transition-colors">
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{new Date(quote.createdAt).toLocaleDateString('pt-BR')}</td>
+                           <td className="px-6 py-4 text-sm font-bold text-slate-900">{customer?.name || 'Desconhecido'}</td>
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{seller?.name || 'Não Informado'}</td>
+                           <td className="px-6 py-4 text-sm font-black text-purple-600 text-right">R$ {quote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      );
+                    })}
+               </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Retroactive Grid */}
+        <div>
+          <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Clock size={14} /> Pendentes Retroativos (Meses Anteriores)
+          </h4>
+          <div className="overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-2xl">
+            <table className="w-full text-left">
+               <thead>
+                  <tr className="bg-rose-50/50 sticky top-0">
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Data</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Cliente</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Vendedor</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase text-right">Valor</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {orders
+                    .filter(o => o.status === OrderStatus.QUOTE_SENT)
+                    .filter(o => selectedSellerFilter === 'ALL' || o.sellerId === selectedSellerFilter)
+                    .filter(o => {
+                        const d = new Date(o.createdAt);
+                        const now = new Date();
+                        return !(d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear());
+                    })
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .map(quote => {
+                      const customer = customers.find(c => c.id === quote.customerId);
+                      const seller = sellers.find(s => s.id === quote.sellerId);
+                      return (
+                        <tr key={quote.id} className="hover:bg-rose-50/30 transition-colors">
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{new Date(quote.createdAt).toLocaleDateString('pt-BR')}</td>
+                           <td className="px-6 py-4 text-sm font-bold text-slate-900">{customer?.name || 'Desconhecido'}</td>
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{seller?.name || 'Não Informado'}</td>
+                           <td className="px-6 py-4 text-sm font-black text-rose-600 text-right">R$ {quote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      );
+                    })}
+               </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
 
       {/* Preview Modal */}
       {selectedSellerReminders && (

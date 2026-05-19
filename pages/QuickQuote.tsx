@@ -32,6 +32,7 @@ interface QuickQuoteProps {
   currentUser: SystemUser | null;
   onAddTechnicalSheet: (sheet: TechnicalSheet) => Promise<void>;
   onUpdateOrder: (order: Order) => Promise<void>;
+  onNavigateToQuotes?: (orderId: string, convertData?: any) => void;
 }
 
 interface QuoteItem {
@@ -44,7 +45,7 @@ interface QuoteItem {
   overrideTotal?: number;
 }
 
-const QuickQuote = ({ products, storageKey, currentUser, onAddTechnicalSheet, onUpdateOrder }: QuickQuoteProps) => {
+const QuickQuote = ({ products, storageKey, currentUser, onAddTechnicalSheet, onUpdateOrder, onNavigateToQuotes }: QuickQuoteProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [quoteItems, setQuoteItems] = useState<QuoteItem[]>(() => {
     if (storageKey) {
@@ -210,52 +211,19 @@ const QuickQuote = ({ products, storageKey, currentUser, onAddTechnicalSheet, on
   const handleConvertToOfficial = async (quote: QuickQuoteType) => {
     if (!window.confirm("Deseja transformar este orçamento rápido em um orçamento oficial?")) return;
     
-    try {
-      // 1. Criar Ficha Técnica
-      const sheetId = crypto.randomUUID();
-      const technicalSheet: TechnicalSheet = {
-        id: sheetId,
-        customerId: '', // Precisará ser vinculado depois na tela de orçamentos
-        sellerId: quote.sellerId || '',
-        items: quote.items.map((it: any) => ({
-          id: crypto.randomUUID(),
-          environment: it.environment || 'Ambiente não definido',
-          productId: it.product.id,
-          productType: it.product.tipo,
-          width: it.width,
-          height: it.height,
-          quantity: it.qty,
-          notes: ''
-        } as MeasurementItem)),
-        createdAt: new Date()
-      };
+    // Envia os dados para a tela de orçamentos para abrir o modal de novo orçamento
+    const convertData = {
+      sellerId: quote.sellerId || '',
+      customerName: quote.customerName || '',
+      customerPhone: quote.customerPhone || '',
+      items: quote.items,
+      quickQuoteNumber: quote.quickQuoteNumber
+    };
 
-      await onAddTechnicalSheet(technicalSheet);
-
-      // 2. Criar Orçamento (Order)
-      const orderId = `ORC-${Math.floor(Date.now() / 1000)}`;
-      const newOrder: Order = {
-        id: orderId,
-        customerId: '', // Vincular depois
-        technicalSheetId: sheetId,
-        sellerId: quote.sellerId || '',
-        itemIds: technicalSheet.items.map(it => it.id),
-        status: OrderStatus.QUOTE_SENT,
-        totalValue: quote.totalValue,
-        createdAt: new Date(),
-        itemPrices: technicalSheet.items.reduce((acc: any, it: any, idx: number) => {
-          const originalItem = quote.items[idx];
-          acc[it.id] = calculateItemTotal(originalItem);
-          return acc;
-        }, {}),
-        contractObservations: `Convertido de Orçamento Rápido ${quote.quickQuoteNumber}`
-      };
-
-      await onUpdateOrder(newOrder);
-      alert("Orçamento oficial gerado! Vá para a aba 'Orçamentos' para vincular o cliente e finalizar.");
-      setShowHistory(false);
-    } catch (err) {
-      alert("Erro ao converter orçamento");
+    alert("Redirecionando para a aba de Orçamentos...");
+    setShowHistory(false);
+    if (onNavigateToQuotes) {
+      onNavigateToQuotes('', convertData);
     }
   };
 

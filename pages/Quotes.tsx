@@ -69,9 +69,29 @@ interface QuotesProps {
   onAddAppointment?: (a: Appointment) => Promise<void>;
   onAddTechnicalSheet?: (s: TechnicalSheet) => Promise<void>;
   onDeleteOrder?: (id: string) => Promise<void>;
+  initialQuickQuote?: any;
+  onClearQuickQuote?: () => void;
 }
 
-const Quotes = ({ orders, customers, technicalSheets, products, sellers, installers, onUpdateOrder, currentUser, initialSelectedId, onClearSelection, onNavigateToOrders, onAddCustomer, onAddAppointment, onAddTechnicalSheet, onDeleteOrder }: QuotesProps) => {
+const Quotes = ({
+  orders,
+  customers,
+  technicalSheets,
+  products,
+  sellers,
+  installers,
+  onUpdateOrder,
+  currentUser,
+  initialSelectedId,
+  onClearSelection,
+  onNavigateToOrders,
+  onAddCustomer,
+  onAddAppointment,
+  onAddTechnicalSheet,
+  onDeleteOrder,
+  initialQuickQuote,
+  onClearQuickQuote
+}: QuotesProps) => {
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(initialSelectedId || null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -354,6 +374,81 @@ const Quotes = ({ orders, customers, technicalSheets, products, sellers, install
     const maxInstallments = Math.max(1, Math.min(10, Math.floor(total / 300)));
     return `Cartão de Crédito ${maxInstallments}x sem juros (Parcela mínima R$ 300,00)`;
   };
+
+  useEffect(() => {
+    if (initialQuickQuote) {
+      // 1. Procurar cliente correspondente se houver
+      let matchedCustomerId = '';
+      if (initialQuickQuote.customerPhone) {
+        const phoneDigits = initialQuickQuote.customerPhone.replace(/\D/g, '');
+        if (phoneDigits) {
+          const found = customers.find(c => c.phone && c.phone.replace(/\D/g, '') === phoneDigits);
+          if (found) matchedCustomerId = found.id;
+        }
+      }
+      if (!matchedCustomerId && initialQuickQuote.customerName) {
+        const found = customers.find(c => c.name.toLowerCase().trim() === initialQuickQuote.customerName.toLowerCase().trim());
+        if (found) matchedCustomerId = found.id;
+      }
+
+      // 2. Procurar vendedor correspondente
+      const matchedSellerId = sellers.find(s => s.id === initialQuickQuote.sellerId)?.id || currentUser?.sellerId || '';
+
+      // 3. Converter itens
+      const convertedItems = (initialQuickQuote.items || []).map((it: any) => {
+        // Obter o preço do item (sobrescrito ou calculado)
+        const itemPrice = it.overrideTotal !== undefined && it.overrideTotal !== null
+          ? it.overrideTotal
+          : calculateProductPrice(it.product, {
+              width: it.width || 0,
+              height: it.height || 0,
+              qty: it.qty || 1
+            });
+
+        return {
+          id: crypto.randomUUID(),
+          environment: it.environment || 'Ambiente não definido',
+          productId: it.product.id,
+          productType: it.product.tipo,
+          color: '',
+          width: it.width || 0,
+          height: it.height || 0,
+          quantity: it.qty || 1,
+          price: itemPrice
+        };
+      });
+
+      const total = convertedItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
+
+      // 4. Configurar os dados do formulário
+      setQuoteFormData({
+        customerId: matchedCustomerId,
+        sellerId: matchedSellerId,
+        items: convertedItems,
+        syncToSheet: true,
+        contractObservations: `Convertido de Orçamento Rápido ${initialQuickQuote.quickQuoteNumber || ''}`,
+        paymentConditions: calculateSuggestedPayment(total)
+      });
+
+      // Configurar busca do cliente
+      if (matchedCustomerId) {
+        const cust = customers.find(c => c.id === matchedCustomerId);
+        if (cust) {
+          setCustomerSearch(cust.name);
+        }
+      } else if (initialQuickQuote.customerName) {
+        setCustomerSearch(initialQuickQuote.customerName);
+      }
+
+      setModalMode('add');
+      setShowAddEditModal(true);
+
+      // Limpar o estado para não repetir
+      if (onClearQuickQuote) {
+        onClearQuickQuote();
+      }
+    }
+  }, [initialQuickQuote, customers, sellers, currentUser, onClearQuickQuote]);
 
   const handleSaveQuote = async () => {
     if (!quoteFormData.customerId) return alert("Selecione um cliente");
