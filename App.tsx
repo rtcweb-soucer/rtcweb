@@ -412,6 +412,10 @@ const App = () => {
     try {
       const saved = await dataService.saveAppointment(a);
       setAppointments([...appointments, saved]);
+      
+      // --- CRM Automation: Move to MEDICAO ---
+      await dataService.autoUpdateLeadByCustomer(saved.customerId, 'MEDICAO');
+      
       loadData(true);
 
       // --- Auto Google Calendar Sync ---

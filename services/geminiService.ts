@@ -1,7 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "./supabase";
 
-let aiInstance: GoogleGenAI | null = null;
+let aiInstance: GoogleGenerativeAI | null = null;
 let currentKey: string | null = null;
 
 const getApiKey = async () => {
@@ -33,7 +33,7 @@ const getAI = async () => {
 
     if (key !== currentKey || !aiInstance) {
         currentKey = key;
-        aiInstance = new GoogleGenAI(key);
+        aiInstance = new GoogleGenerativeAI(key);
     }
     return aiInstance;
 };

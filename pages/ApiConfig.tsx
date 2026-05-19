@@ -33,7 +33,13 @@ const ApiConfig = () => {
   });
 
   const [geminiForm, setGeminiForm] = useState({
-    apiKey: ''
+    apiKey: '',
+    managerEnabled: false,
+    quoteGraceSeller: 24,
+    quoteGraceDirector: 48,
+    promiseGraceSeller: 4,
+    promiseGraceDirector: 8,
+    directorPhone: ''
   });
 
   const [whatsappInstances, setWhatsappInstances] = useState<any[]>([]);
@@ -617,6 +623,88 @@ const ApiConfig = () => {
                     <p className="font-medium">O modelo <b>Gemini 1.5 Flash</b> será usado para gerar sugestões de respostas rápidas e inteligentes diretamente no seu chat.</p>
                   </div>
                 </div>
+
+                <div className="pt-6 border-t border-slate-200 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-slate-900 uppercase tracking-tighter text-sm">Gerente IA (Fofoqueiro)</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Monitoramento automático de Vendas e WhatsApp</p>
+                    </div>
+                    <button
+                      onClick={() => setGeminiForm({ ...geminiForm, managerEnabled: !geminiForm.managerEnabled })}
+                      className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                        geminiForm.managerEnabled 
+                        ? 'bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200' 
+                        : 'bg-slate-200 text-slate-500'
+                      }`}
+                    >
+                      {geminiForm.managerEnabled ? 'Serviço em Execução' : 'Serviço Pausado'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-100 transition-opacity">
+                    <div className="space-y-4 p-5 bg-white border border-slate-200 rounded-3xl">
+                       <h5 className="font-black text-slate-900 text-xs uppercase tracking-widest border-b border-slate-100 pb-3">Cobrança de Orçamentos</h5>
+                       
+                       <div className="space-y-2">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Carência Vendedor (Horas após visita)</label>
+                         <input
+                           type="number"
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none"
+                           value={geminiForm.quoteGraceSeller}
+                           onChange={e => setGeminiForm({ ...geminiForm, quoteGraceSeller: Number(e.target.value) })}
+                         />
+                       </div>
+
+                       <div className="space-y-2">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Escalonamento Diretor (Horas após visita)</label>
+                         <input
+                           type="number"
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none"
+                           value={geminiForm.quoteGraceDirector}
+                           onChange={e => setGeminiForm({ ...geminiForm, quoteGraceDirector: Number(e.target.value) })}
+                         />
+                       </div>
+                    </div>
+
+                    <div className="space-y-4 p-5 bg-white border border-slate-200 rounded-3xl">
+                       <h5 className="font-black text-slate-900 text-xs uppercase tracking-widest border-b border-slate-100 pb-3">Cobrança de Promessas (WhatsApp)</h5>
+                       
+                       <div className="space-y-2">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Carência Vendedor (Horas úteis)</label>
+                         <input
+                           type="number"
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none"
+                           value={geminiForm.promiseGraceSeller}
+                           onChange={e => setGeminiForm({ ...geminiForm, promiseGraceSeller: Number(e.target.value) })}
+                         />
+                       </div>
+
+                       <div className="space-y-2">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Escalonamento Diretor (Horas úteis)</label>
+                         <input
+                           type="number"
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none"
+                           value={geminiForm.promiseGraceDirector}
+                           onChange={e => setGeminiForm({ ...geminiForm, promiseGraceDirector: Number(e.target.value) })}
+                         />
+                       </div>
+                    </div>
+
+                    <div className="lg:col-span-2 space-y-2 p-5 bg-blue-50 border border-blue-100 rounded-3xl">
+                      <label className="text-[10px] font-black text-blue-800 uppercase tracking-widest ml-1">WhatsApp do Diretor (Escalonamento)</label>
+                      <p className="text-[10px] text-blue-600 font-medium mb-3">Este número receberá os alertas quando um vendedor não cumprir os prazos de carência acima.</p>
+                      <input
+                        type="text"
+                        className="w-full px-4 py-3 bg-white border border-blue-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Ex: 5511999999999"
+                        value={geminiForm.directorPhone}
+                        onChange={e => setGeminiForm({ ...geminiForm, directorPhone: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <a 
