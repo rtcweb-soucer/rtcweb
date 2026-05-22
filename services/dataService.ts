@@ -640,6 +640,9 @@ export const dataService = {
                 isAnticipated: o.is_anticipated,
                 anticipationRate: o.anticipation_rate,
                 paymentLink: o.payment_link,
+                isRework: o.is_rework,
+                reworkReason: o.rework_reason,
+                finalizedAt: o.finalized_at,
                 createdAt: new Date(o.created_at)
             };
         }) as unknown as Order[];
@@ -674,6 +677,9 @@ export const dataService = {
             anticipation_rate: order.anticipationRate,
             payment_link: order.paymentLink,
             card_installments: order.cardInstallments,
+            is_rework: order.isRework,
+            rework_reason: order.reworkReason,
+            finalized_at: order.finalizedAt,
             created_at: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
         };
         console.log('💾 Saving order payload:', payload);
@@ -703,8 +709,8 @@ export const dataService = {
                 paymentConditions: data.payment_conditions,
                 installationDate: data.installation_date,
                 installationTime: data.installation_time,
-                productionStage: data.production_stage || order.productionStage,
-                productionHistory: data.production_history || order.productionHistory,
+                productionStage: order.productionStage || data.production_stage,
+                productionHistory: order.productionHistory || data.production_history,
                 itemPrices: data.item_prices || {},
                 contractObservations: data.contract_observations,
                 itemsSnapshot: data.items_snapshot,
@@ -717,6 +723,9 @@ export const dataService = {
                 isAnticipated: data.is_anticipated,
                 anticipationRate: data.anticipation_rate,
                 paymentLink: data.payment_link,
+                isRework: data.is_rework,
+                reworkReason: data.rework_reason,
+                finalizedAt: data.finalized_at,
                 createdAt: new Date(data.created_at)
             } as unknown as Order;
         } catch (error) {
@@ -758,7 +767,10 @@ export const dataService = {
                 createdAt: new Date(o.created_at),
                 // Merge tracking info
                 productionStage: tracking?.stage,
-                productionHistory: tracking?.history
+                productionHistory: tracking?.history,
+                isRework: o.is_rework,
+                reworkReason: o.rework_reason,
+                finalizedAt: o.finalized_at
             } as Order;
         });
     },
@@ -777,14 +789,30 @@ export const dataService = {
     },
 
     async updateProductionStage(orderId: string, stage: string, history: any[]) {
-        const { error } = await supabase.from('production_tracking').update({
+        // Tenta atualizar primeiro
+        const { data, error } = await supabase.from('production_tracking').update({
             stage: stage,
             history: history,
             updated_at: new Date().toISOString()
-        }).eq('order_id', orderId);
+        }).eq('order_id', orderId).select();
+
         if (error) {
             console.error('❌ Supabase error updating production stage:', error);
             throw error;
+        }
+
+        // Se não atualizou nada, significa que não existia, então cria
+        if (!data || data.length === 0) {
+            const { error: insertError } = await supabase.from('production_tracking').insert({
+                order_id: orderId,
+                stage: stage,
+                history: history,
+                updated_at: new Date().toISOString()
+            });
+            if (insertError) {
+                console.error('❌ Supabase error inserting production stage:', insertError);
+                throw insertError;
+            }
         }
     },
 
@@ -1691,6 +1719,22 @@ export const dataService = {
     },
 
     // WhatsApp & CRM Integration
+    async markChatAsRead(phone: string) {
+        if (!phone) return;
+        const cleanPhone = phone.replace(/\D/g, '');
+        const variants = [cleanPhone];
+        if (cleanPhone.startsWith('55')) variants.push(cleanPhone.substring(2));
+        else variants.push('55' + cleanPhone);
+
+        // Atualiza as mensagens para read
+        await supabase
+            .from('whatsapp_messages')
+            .update({ status: 'read' })
+            .in('phone', variants)
+            .eq('direction', 'inbound')
+            .neq('status', 'read');
+    },
+
     async getWhatsappMessages(phone: string) {
         // Criar variantes do número (com e sem 55) para garantir a busca
         const cleanPhone = phone.replace(/\D/g, '');

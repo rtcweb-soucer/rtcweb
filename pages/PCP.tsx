@@ -508,6 +508,11 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
                             <span className={`text-[9px] font-black ${deadlineStatus.isDark ? 'text-white bg-white/20' : 'text-blue-600 bg-white/60'} px-2 py-0.5 rounded-full w-fit mb-1`}>
                               {order.contractNumber || order.quoteNumber || order.id}
                             </span>
+                            {order.isRework && (
+                              <span className="text-[9px] font-black bg-rose-600 text-white px-2 py-0.5 rounded-full w-fit mb-1 animate-pulse">
+                                RETRABALHO: {order.reworkReason?.toUpperCase() || 'SIM'}
+                              </span>
+                            )}
                             <p className={`text-sm font-black ${deadlineStatus.isDark ? 'text-white' : 'text-slate-900'} leading-tight`}>Pedido de Produção</p>
                           </div>
                           <div className="h-8 w-8 rounded-full bg-white/40 backdrop-blur-sm flex items-center justify-center text-current">

@@ -82,18 +82,8 @@ export const evolutionService = {
         });
       }
 
-      // SEMPRE garantir Webhook e Persistência Local
+      // SEMPRE garantir Webhook
       await this.setWebhook(baseUrl, apiKey, instanceName);
-
-      if (displayName) {
-        await supabase.from('whatsapp_instances').upsert({
-          name: displayName,
-          instance_name: instanceName,
-          apikey: apiKey,
-          is_active: true,
-          user_id: (await supabase.auth.getUser()).data.user?.id // Tenta pegar o ID do usuário se logado
-        }, { onConflict: 'instance_name' });
-      }
 
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (err) {

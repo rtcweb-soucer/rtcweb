@@ -64,14 +64,15 @@ const InstallerPortal = ({
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Instalações de hoje para este instalador
+  // Instalações de hoje para este instalador (excluindo já finalizadas)
   const todaysInstallations = appointments
     .filter(app => app.date === today && app.installerIds?.includes(installer.id) && app.type === 'INSTALLATION')
     .map(app => {
       const order = orders.find(o => o.id === app.orderId);
       const customer = customers.find(c => c.id === app.customerId);
       return { app, order, customer };
-    });
+    })
+    .filter(({ order }) => !order || (order.productionStage !== ProductionStage.READY && order.productionStage !== ProductionStage.NEW_ORDER && order.productionStage !== ProductionStage.ASSEMBLY));
 
   const hasInstallationsToday = todaysInstallations.length > 0;
 
@@ -146,25 +147,36 @@ const InstallerPortal = ({
 
     setIsLoading(true);
     try {
+      const now = new Date().toISOString();
+      const todayDate = now.split('T')[0];
+      const newHistory = [
+        ...(order.productionHistory || []),
+        { stage: ProductionStage.READY, timestamp: now, notes: 'Finalizado pelo instalador' }
+      ];
       const updatedOrder = {
         ...order,
-        productionStage: ProductionStage.READY, // Finalizado
+        productionStage: ProductionStage.READY,
+        productionHistory: newHistory,
+        finalizedAt: todayDate,
         status: 'DELIVERED' as any
       };
       
       await dataService.saveOrder(updatedOrder);
+      await dataService.updateProductionStage(order.id, ProductionStage.READY, newHistory);
       onUpdateOrder(updatedOrder);
 
       // Notificar Financeiro
-      await notificationService.notifyFinanceAboutInstallation(updatedOrder);
+      try {
+        await notificationService.notifyFinanceAboutInstallation(updatedOrder);
+        notificationService.sendAutomatedPaymentNotification(updatedOrder, 2);
+      } catch (notifErr) {
+        console.warn('Aviso: erro ao notificar financeiro (instalação foi finalizada mesmo assim)', notifErr);
+      }
 
-      // Trigger automated payment notification for the second installment (2/X)
-      notificationService.sendAutomatedPaymentNotification(updatedOrder, 2);
-
-      alert("Instalação finalizada e financeiro notificado!");
+      alert("Instalação finalizada com sucesso!");
     } catch (err) {
       console.error(err);
-      alert("Erro ao finalizar instalação.");
+      alert("Erro ao finalizar instalação. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
@@ -187,34 +199,52 @@ const InstallerPortal = ({
 
   const handleSendRework = async () => {
     if (!showReworkModal) return;
+    if (!reworkNotes.trim()) {
+      alert("Por favor, descreva o motivo do retrabalho.");
+      return;
+    }
 
     setIsLoading(true);
     try {
-      await dataService.saveRework({
-        orderId: showReworkModal,
-        reason: reworkReason,
-        description: reworkNotes,
-        createdBy: installer.id
-      });
+      // Tentar salvar no banco de reworks (pode falhar se tabela não existir)
+      try {
+        await dataService.saveRework({
+          orderId: showReworkModal,
+          reason: reworkReason,
+          description: reworkNotes,
+          createdBy: installer.id
+        });
+      } catch (reworkErr) {
+        console.warn('Aviso: tabela reworks pode não existir, continuando com atualização do pedido...', reworkErr);
+      }
 
-      // Opcional: Voltar o estágio do pedido se necessário
       const order = orders.find(o => o.id === showReworkModal);
       if (order) {
+        const targetStage = reworkReason === 'novo produto' ? ProductionStage.NEW_ORDER : ProductionStage.ASSEMBLY;
+        const newHistory = [
+          ...(order.productionHistory || []),
+          { stage: targetStage, timestamp: new Date().toISOString(), notes: `[RETRABALHO]: ${reworkReason} - ${reworkNotes}` }
+        ];
+
         const updatedOrder = {
           ...order,
-          productionStage: ProductionStage.ASSEMBLY, // Volta para montagem ou revisão
+          productionStage: targetStage,
+          productionHistory: newHistory,
+          isRework: true,
+          reworkReason: reworkReason,
           contractObservations: `${order.contractObservations || ''}\n[RETRABALHO]: ${reworkReason} - ${reworkNotes}`
         };
         await dataService.saveOrder(updatedOrder);
+        await dataService.updateProductionStage(order.id, targetStage, newHistory);
         onUpdateOrder(updatedOrder);
       }
 
-      alert("Retrabalho registrado com sucesso!");
+      alert("Retrabalho registrado com sucesso! Pedido enviado ao PCP.");
       setShowReworkModal(null);
       setReworkNotes('');
     } catch (err) {
-      console.error(err);
-      alert("Erro ao registrar retrabalho.");
+      console.error('Erro ao registrar retrabalho:', err);
+      alert("Erro ao registrar retrabalho. Verifique sua conexão e tente novamente.");
     } finally {
       setIsLoading(false);
     }

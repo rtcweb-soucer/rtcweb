@@ -302,11 +302,6 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       setAutoScroll(true);
       setIsInitialLoad(true);
       loadMessages(activeChat.phone);
-      
-      // Marca como lido
-      dataService.markChatAsRead(activeChat.phone).then(() => {
-        setCrmLeads(prev => prev.map(l => (l.phone === activeChat.phone || l.customer?.phone === activeChat.phone) ? { ...l, unreadCount: 0 } : l));
-      });
 
       // Setup Realtime para novas mensagens deste cliente
       let cleanPhone = activeChat.phone.replace(/\D/g, '');
@@ -586,7 +581,6 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
         await dataService.saveCRMLead({
           id: lead.id,
           customerId: customer.id,
-          phone: lead.phone || activeChat.phone,
           stage: 'ATENDIMENTO', // Mudar para atendimento ao vincular
           productInterest: lead.productInterest,
           assignedTo: lead.assigned_to || lead.assignedTo,
@@ -839,8 +833,8 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             {(() => {
               const filtered = crmLeads.filter(l => {
-                const cName = (l.customer?.name || l.pushName || '').toLowerCase();
-                const cPhone = (l.phone || '').toLowerCase();
+                const cName = (l.customer?.name || '').toLowerCase();
+                const cPhone = (l.customer?.phone || '').toLowerCase();
                 const matchSearch = !searchTerm || cName.includes(searchTerm.toLowerCase()) || cPhone.includes(searchTerm);
                 if (!matchSearch) return false;
 
@@ -861,33 +855,17 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
 
               return filtered.slice(0, 50).map(lead => {
                 const assignedUser = users.find(u => u.id === lead.assigned_to);
-                const isActive = activeChat?.id === (lead.customer?.id || lead.customer_id || lead.id);
+                const isActive = activeChat?.id === (lead.customer?.id || lead.customer_id);
                 
                 return (
                   <button 
                     key={lead.id}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log("CLICKED LEAD:", lead);
-                      let cust = lead.customer;
-                      if (!cust && lead.customer_id) {
-                         cust = customers.find(c => c.id === lead.customer_id);
+                    onClick={() => {
+                      const customer = lead.customer || customers.find(c => c.id === lead.customer_id);
+                      if (customer) {
+                        setActiveChat(customer);
+                        loadMessages(customer.phone);
                       }
-                      if (!cust) {
-                         cust = {
-                           id: lead.customer_id || lead.id,
-                           name: 'Lead WhatsApp',
-                           phone: lead.phone || '',
-                           document: '',
-                           address: '',
-                           created_at: new Date().toISOString()
-                         };
-                      } else {
-                         // PRESERVE LEAD PHONE! Se o telefone original do WhatsApp for diferente do cadastro
-                         // (ou se o cadastro não tem), priorizamos o do WhatsApp para carregar o histórico correto!
-                         cust = { ...cust, phone: lead.phone || cust.phone };
-                      }
-                      setActiveChat(cust);
                     }}
                     className={`w-full px-3 py-3 flex items-center gap-3 transition-all border-b border-slate-50 ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                   >
@@ -901,7 +879,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                     <div className="flex-1 min-w-0 text-left">
                       <div className="flex justify-between items-center mb-0.5">
                         <h4 className="font-semibold text-slate-900 text-base truncate pr-2">
-                          {lead.customer?.name || lead.pushName || 'Lead WhatsApp'}
+                          {lead.customer?.name || 'Lead WhatsApp'}
                         </h4>
                         <span className={`text-[11px] ${lead.unreadCount > 0 ? 'text-[#25d366] font-bold' : 'text-slate-400 font-medium'}`}>
                           {lead.lastContact ? new Date(lead.lastContact).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -1090,24 +1068,12 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
 
                             {isImage ? (
                               <div className="space-y-1">
-                                {(() => {
-                                   let imgSrc = msg.mediaUrl;
-                                   if (!imgSrc && msg.base64) imgSrc = msg.base64.startsWith('data:') ? msg.base64 : `data:image/jpeg;base64,${msg.base64}`;
-                                   if (!imgSrc && text.startsWith('http')) imgSrc = text;
-                                   if (!imgSrc && text.startsWith('data:')) imgSrc = text;
-                                   if (!imgSrc && text.length > 200 && !text.includes(' ')) imgSrc = `data:image/jpeg;base64,${text.replace('base64,', '')}`;
-                                   
-                                   if (!imgSrc) return <p className="text-[10px] italic text-slate-400">🖼️ Imagem indisponível</p>;
-                                   
-                                   return (
-                                     <img 
-                                       src={imgSrc} 
-                                       alt="Mídia" 
-                                       className="rounded max-h-80 w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                       onClick={() => window.open(imgSrc)}
-                                     />
-                                   );
-                                })()}
+                                <img 
+                                  src={mediaUrl || (text.startsWith('data:') ? text : `data:image/jpeg;base64,${text}`)} 
+                                  alt="Mídia" 
+                                  className="rounded max-h-80 w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(mediaUrl || (text.startsWith('data:') ? text : `data:image/jpeg;base64,${text}`))}
+                                />
                               </div>
                             ) : isAudio ? (
                               <div className="py-1 min-w-[240px]">
@@ -1139,9 +1105,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                                 </div>
                               </div>
                             ) : (
-                              <p className="text-[#111b21] leading-[1.4]" style={{ whiteSpace: 'pre-wrap' }}>
-                                  {text.length > 200 && !text.includes(' ') ? <span className="italic text-slate-400 text-[10px] break-all max-w-[200px] overflow-hidden line-clamp-2">Mídia processada</span> : msg.text}
-                                </p>
+                              <p className="text-[#111b21] leading-[1.4]" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
                             )}
                             
                             <div className="flex items-center justify-end gap-1 mt-0.5">

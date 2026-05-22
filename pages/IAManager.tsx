@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { 
   Bot, 
   TrendingUp, 
@@ -17,7 +17,7 @@ import {
   Target,
   BarChart3,
   Timer
-} from 'lucide-react';
+, Flame, MessageCircle, MessageSquareDashed, BellRing, History } from 'lucide-react';
 import { 
   BarChart, 
   Bar, 
@@ -27,11 +27,13 @@ import {
   Tooltip, 
   ResponsiveContainer, 
 } from 'recharts';
-import { Order, OrderStatus, Seller, Customer, SystemUser, Appointment, SalesGoal } from '../types';
+import { Order, OrderStatus, Seller, Customer, SystemUser, Appointment, SalesGoal, Product, TechnicalSheet } from '../types';
 import { aiManagerService, SellerPerformance } from '../services/aiManagerService';
+import { evolutionService } from '../services/evolutionService';
 import { dataService } from '../services/dataService';
-import { useEffect } from 'react';
-import { Settings, Plus, Trash2, Phone, ToggleLeft, ToggleRight, UserCheck } from 'lucide-react';
+
+import { Settings, Plus, Trash2, Phone, ToggleLeft, ToggleRight, UserCheck, FileText, Link, X } from 'lucide-react';
+import OrderContractPrint from '../components/OrderContractPrint';
 import { supabase } from '../services/supabase';
 
 interface IAManagerProps {
@@ -40,11 +42,13 @@ interface IAManagerProps {
   customers: Customer[];
   appointments: Appointment[];
   currentUser: SystemUser;
+  products: Product[];
+  technicalSheets: TechnicalSheet[];
 }
 
 const COLORS = ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe'];
 
-const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IAManagerProps) => {
+const IAManager = ({ orders, sellers, customers, appointments, currentUser, products, technicalSheets }: IAManagerProps) => {
   const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE' || currentUser.role === 'MASTER';
   const [isSending, setIsSending] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -68,6 +72,214 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
   const [newNotifName, setNewNotifName] = useState('');
   const [newNotifPhone, setNewNotifPhone] = useState('');
   const [newNotifStage, setNewNotifStage] = useState('Novos Pedidos');
+
+  const [isRevisingText, setIsRevisingText] = useState(false);
+  const [whatsappMessageModal, setWhatsappMessageModal] = useState<{
+    isOpen: boolean;
+    type: 'promo' | 'tranquil';
+    phone: string;
+    name: string;
+    quoteId: string;
+    quoteValue: number;
+    discount: number;
+    paymentMethod: string;
+    installments: number;
+    scarcityDate: string;
+    message: string;
+  } | null>(null);
+
+  const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
+  const [activeHtmlQuote, setActiveHtmlQuote] = useState<Order | null>(null);
+
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<{ base64?: string, code?: string, message?: string } | null>(null);
+
+  const [customerPrefs, setCustomerPrefs] = useState<Record<string, any>>({});
+  const [interestedCustomers, setInterestedCustomers] = useState<any[]>([]);
+  const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  
+  const [lastMessageCount, setLastMessageCount] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    // Inicializa o áudio
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+  }, []);
+
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyMessages, setHistoryMessages] = useState<any[]>([]);
+  const [activeHistoryQuote, setActiveHistoryQuote] = useState<Order | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  
+  // Polling para ler mensagens do banco
+  useEffect(() => {
+    const fetchHistoryAndPrefs = async () => {
+      try {
+        // Busca preferências
+        const { data: prefsData } = await supabase.from('customer_whatsapp_preferences').select('*');
+        if (prefsData) {
+          const prefsMap: Record<string, any> = {};
+          prefsData.forEach(p => prefsMap[p.customer_phone] = p);
+          setCustomerPrefs(prefsMap);
+        }
+
+        // Verifica mensagens recentes inbound (últimas 24h)
+        const yesterday = new Date();
+        yesterday.setHours(yesterday.getHours() - 24);
+        
+        const { data: recentMsgs } = await supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .gte('created_at', yesterday.toISOString())
+          .order('created_at', { ascending: false });
+
+        if (recentMsgs && recentMsgs.length > 0) {
+          const interested: any[] = [];
+          
+          const byPhone: Record<string, any[]> = {};
+          recentMsgs.forEach(m => {
+             if (!byPhone[m.phone]) byPhone[m.phone] = [];
+             byPhone[m.phone].push(m);
+          });
+          
+          for (const phone in byPhone) {
+            const msgs = byPhone[phone];
+            const lastMsg = msgs[0];
+            const lastInbound = msgs.find(m => m.direction === 'inbound');
+            
+            if (!lastInbound) continue;
+            
+            const text = (lastInbound.message || '').toLowerCase();
+            
+            // Check opt out
+            if (text.includes('não mande') || text.includes('parar') || text.includes('sair') || text.includes('não quero')) {
+               if (!customerPrefs[phone] || !customerPrefs[phone].opt_out) {
+                 await supabase.from('customer_whatsapp_preferences').upsert({
+                   customer_phone: phone,
+                   opt_out: true,
+                   last_intent: 'opt_out'
+                 }, { onConflict: 'customer_phone' });
+               }
+               continue;
+            }
+
+            // Check interest
+            if (text.includes('quero') || text.includes('sim') || text.includes('interesse') || text.includes('como') || text.includes('pagar')) {
+               const cust = customers.find(c => {
+                  const p1 = (c.phone || '').replace(/\D/g, '');
+                  const p2 = (c.phone2 || '').replace(/\D/g, '');
+                  return phone.includes(p1) || phone.includes(p2);
+               });
+               
+               if (cust && !interested.find(i => i.phone === phone)) {
+                  const hoursSinceInbound = (new Date().getTime() - new Date(lastInbound.created_at).getTime()) / (1000 * 60 * 60);
+                  const isPendingClose = orders.some(o => o.customerId === cust.id && o.status === OrderStatus.QUOTE_SENT);
+                  
+                  if (hoursSinceInbound >= 2 && isPendingClose) {
+                     interested.push({
+                        id: cust.id,
+                        name: cust.name,
+                        phone: phone,
+                        message: lastInbound.message,
+                        escalated: true,
+                        escalation_type: lastMsg.direction === 'outbound' ? 'PARADA' : 'IGNORADA',
+                        in_progress: false,
+                        time: new Date(lastInbound.created_at).toLocaleTimeString()
+                     });
+                  } else {
+                     if (lastMsg.direction === 'outbound') {
+                        interested.push({
+                           id: cust.id,
+                           name: cust.name,
+                           phone: phone,
+                           message: lastInbound.message,
+                           escalated: false,
+                           in_progress: true,
+                           time: new Date(lastInbound.created_at).toLocaleTimeString()
+                        });
+                     } else {
+                        interested.push({
+                           id: cust.id,
+                           name: cust.name,
+                           phone: phone,
+                           message: lastInbound.message,
+                           escalated: false,
+                           in_progress: false,
+                           time: new Date(lastInbound.created_at).toLocaleTimeString()
+                        });
+                     }
+                  }
+               }
+            }
+          }
+          
+          setInterestedCustomers(interested);
+          
+          if (interested.length > lastMessageCount) {
+             // Toca o sininho se o número de mensagens aumentou!
+             if (audioRef.current) {
+                audioRef.current.play().catch(e => console.log('Audio play blocked:', e));
+             }
+          }
+          setLastMessageCount(interested.length);
+
+        }
+      } catch (err) {
+         console.error('Polling error', err);
+      }
+    };
+    
+    fetchHistoryAndPrefs();
+    const interval = setInterval(fetchHistoryAndPrefs, 30000); // 30s
+    return () => clearInterval(interval);
+  }, [customers]);
+
+  
+  const generateAIAnalysis = (msgs: any[]) => {
+    if (!msgs || msgs.length === 0) return "Nenhuma conversa registrada ainda. O cliente está frio.";
+    const inboundMsgs = msgs.filter(m => m.direction === 'inbound');
+    
+    if (inboundMsgs.length === 0) return "O vendedor enviou mensagens, mas o cliente ainda não respondeu. Pode ser necessário um follow-up mais incisivo.";
+    
+    const lastInbound = inboundMsgs[inboundMsgs.length - 1]?.message?.toLowerCase() || '';
+    
+    if (lastInbound.includes('não') || lastInbound.includes('parar') || lastInbound.includes('caro')) {
+       return "O cliente demonstrou objeções recentemente (possível bloqueio por preço ou falta de interesse). Sugiro não insistir muito agora ou oferecer uma alternativa mais barata.";
+    }
+    
+    if (lastInbound.includes('quero') || lastInbound.includes('sim') || lastInbound.includes('pagar') || lastInbound.includes('parcela')) {
+       return "O cliente está muito quente! As respostas indicam alta intenção de fechamento. Recomendo ser direto e conduzir para a conclusão da venda.";
+    }
+    
+    return "O cliente está engajado na conversa. Mantenha o relacionamento e tente conduzi-lo para o fechamento ressaltando os benefícios do produto.";
+  };
+
+  const handleOpenHistory = async (quote: Order, customerPhone?: string) => {
+    if (!customerPhone) return alert('Cliente sem telefone');
+    setActiveHistoryQuote(quote);
+    setIsHistoryModalOpen(true);
+    setIsLoadingHistory(true);
+    try {
+       const cleanNumber = customerPhone.replace(/\D/g, '');
+       const { data } = await supabase
+         .from('whatsapp_messages')
+         .select('*')
+         .like('phone', `%${cleanNumber}%`)
+         .order('created_at', { ascending: true });
+         
+       if (data) {
+         setHistoryMessages(data);
+       } else {
+         setHistoryMessages([]);
+       }
+    } catch (err) {
+       console.error(err);
+    } finally {
+       setIsLoadingHistory(false);
+    }
+  };
+  
+  const [isFetchingQr, setIsFetchingQr] = useState(false);
+  const [evolutionApiSettings, setEvolutionApiSettings] = useState<any>(null);
 
   // --- Fetch Goals ---
   const fetchGoals = async () => {
@@ -238,6 +450,83 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
     return null;
   }, [isAdmin, performanceData, sellerData, timeRange]);
 
+  
+  
+  const handleOpenMessageModal = (type: 'promo' | 'tranquil', phone?: string, name?: string, quoteId?: string, quoteValue?: number) => {
+    if (!phone) {
+      alert('Cliente sem telefone cadastrado.');
+      return;
+    }
+    
+    const discount = type === 'promo' ? 10 : 0;
+    const paymentMethod = 'Cartão de Crédito';
+    const installments = 4;
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const scarcityDate = tomorrow.toISOString().split('T')[0];
+    const dateStr = tomorrow.toLocaleDateString('pt-BR');
+    
+    const value = quoteValue || 0;
+    const discountedValue = value - (value * (discount / 100));
+    const installmentValue = installments > 0 ? (discountedValue / installments) : discountedValue;
+    
+    const msg = type === 'promo' 
+      ? `Olá *${name || 'Cliente'}*, tudo bem? Vi que seu orçamento está em aberto. Fechando até ${dateStr} consigo fazer por R$ ${discountedValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} em ${installments}x de R$ ${installmentValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} no ${paymentMethod}! Vamos aproveitar?`
+      : `Olá *${name || 'Cliente'}*, tudo bem? Passando apenas para saber se você conseguiu analisar o nosso orçamento e se ficou com alguma dúvida. Lembrando que fechando até ${dateStr} consigo fazer por R$ ${discountedValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} em ${installments}x de R$ ${installmentValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} no ${paymentMethod}. Estou à disposição para ajudar!`;
+      
+    setWhatsappMessageModal({
+      isOpen: true,
+      type,
+      phone,
+      name: name || 'Cliente',
+      quoteId: quoteId || '',
+      quoteValue: value,
+      discount,
+      paymentMethod,
+      installments,
+      scarcityDate,
+      message: msg
+    });
+  };
+
+  
+  const handleReviseText = async () => {
+    if (!whatsappMessageModal) return;
+    setIsRevisingText(true);
+    
+    // Simulando tempo de resposta da IA
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    let msg = whatsappMessageModal.message;
+    
+    // Melhorias simuladas (Heurísticas que dariam a impressão de IA real)
+    if (whatsappMessageModal.type === 'promo') {
+      msg = msg.replace('Olá', 'Olá! Espero que esteja tendo um ótimo dia,');
+      msg = msg.replace('tudo bem?', '');
+      msg = msg.replace('Vamos aproveitar?', 'Essa é uma condição super especial e exclusiva. Podemos seguir com o projeto e garantir sua vaga?');
+    } else {
+      msg = msg.replace('Olá', 'Oi');
+      msg = msg.replace('Estou à disposição para ajudar!', 'Sigo totalmente à sua disposição. Me avise se precisar de algo, ok?');
+    }
+    
+
+    
+    setWhatsappMessageModal({...whatsappMessageModal, message: msg.replace(/\s+/g, ' ')});
+    setIsRevisingText(false);
+  };
+  
+  const handleSendCustomWhatsApp = async () => {
+    if (!whatsappMessageModal) return;
+    try {
+      await evolutionService.sendMessageAuto(whatsappMessageModal.phone, whatsappMessageModal.message);
+      alert('Mensagem enviada com sucesso!');
+      setWhatsappMessageModal(null);
+    } catch (err: any) {
+      alert(`Erro ao enviar mensagem: ${err.message}`);
+    }
+  };
+
   const handleSendReminder = async (seller: Seller, quotes: Order[]) => {
     const message = aiManagerService.generateReminders(seller.name, quotes, managerStats.totalValue);
     setIsSending(seller.id);
@@ -259,6 +548,467 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
     const message = aiManagerService.generateReminders(seller.name, quotes, managerStats.totalValue);
     setSelectedSellerReminders({ sellerId: seller.id, message });
   };
+
+
+  const renderOpenQuotesGrid = (sellerMode: boolean = false) => {
+    const targetSellerFilter = sellerMode ? (currentUser?.sellerId || "") : selectedSellerFilter;
+    return (
+
+      <div className="space-y-8 bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <Briefcase size={20} className="text-purple-600" /> Detalhamento de Orçamentos em Aberto
+            </h3>
+            <p className="text-sm font-medium text-slate-500">Monitoramento agressivo de pipeline de vendas.</p>
+          </div>
+          {!sellerMode && (<div>
+            <select 
+              value={selectedSellerFilter}
+              onChange={(e) => setSelectedSellerFilter(e.target.value)}
+              className="px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
+            >
+              <option value="ALL">Todos os Vendedores</option>
+              {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          )}
+        </div>
+
+        {/* Current Month Grid */}
+        <div>
+          <h4 className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <TrendingUp size={14} /> Mês Vigente
+          </h4>
+          <div className="overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-2xl">
+            <table className="w-full text-left">
+               <thead>
+                  <tr className="bg-slate-50 sticky top-0">
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Data</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Cliente</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Vendedor</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase text-right">Valor</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase text-center">Ação</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {orders
+                    .filter(o => o.status === OrderStatus.QUOTE_SENT)
+                    .filter(o => targetSellerFilter === 'ALL' || o.sellerId === targetSellerFilter)
+                    .filter(o => {
+                        const d = new Date(o.createdAt);
+                        const now = new Date();
+                        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                    })
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .map(quote => {
+                      const customer = customers.find(c => c.id === quote.customerId);
+                      const seller = sellers.find(s => s.id === quote.sellerId);
+                      
+                      const aiInteraction = interestedCustomers.find(i => i.phone && customer?.phone && (i.phone.replace(/\D/g, '').includes(customer.phone.replace(/\D/g, '')) || customer.phone.replace(/\D/g, '').includes(i.phone.replace(/\D/g, ''))));
+                      
+                      return (
+                        <React.Fragment key={quote.id}>
+                        <tr className="hover:bg-slate-50 transition-colors">
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{new Date(quote.createdAt).toLocaleDateString('pt-BR')}</td>
+                           <td className="px-6 py-4 text-sm font-bold text-slate-900">{customer?.name || 'Desconhecido'}</td>
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{seller?.name || 'Não Informado'}</td>
+                           <td className="px-6 py-4 text-sm font-black text-purple-600 text-right">R$ {quote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                           <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
+                             <button onClick={() => { setActiveHtmlQuote(quote); setIsHtmlModalOpen(true); }} className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-xl transition-all inline-flex" title="Visualizar Contrato">
+                               <FileText size={16} />
+                             </button>
+                             <button onClick={() => handleOpenHistory(quote, customer?.phone)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all inline-flex" title="Histórico de Conversas">
+                               <History size={16} />
+                             </button>
+                             {sellerMode && (
+                               <>
+                                 <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
+                                   <Flame size={16} />
+                                 </button>
+                                 <button onClick={() => handleOpenMessageModal('tranquil', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Tranquila (Acompanhamento)'}>
+                                   <MessageCircle size={16} />
+                                 </button>
+                                 {customer?.phone && (
+                                   <a href={`https://wa.me/${customer.phone}`} target="_blank" rel="noopener noreferrer" className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all inline-flex" title="Abrir WhatsApp">
+                                     <MessageSquareDashed size={16} />
+                                   </a>
+                                 )}
+                                 {customer?.phone && (
+                                   <a href={`tel:${customer.phone}`} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all inline-flex" title="Ligar para Cliente">
+                                     <Phone size={16} />
+                                   </a>
+                                 )}
+                               </>
+                             )}
+                           </td>
+
+                        </tr>
+                        {aiInteraction && (
+                           <tr className={`${aiInteraction.escalated ? 'bg-rose-50/80 border-rose-200 animate-pulse' : aiInteraction.in_progress ? 'bg-amber-50/20 border-amber-100' : 'bg-purple-50/60 border-purple-100 animate-pulse'} border-b`}>
+                             <td colSpan={5} className="px-6 py-2">
+                               {aiInteraction.in_progress ? (
+                                  <div className="flex items-center justify-end gap-2 opacity-80">
+                                     <Timer size={12} className="text-amber-500 animate-pulse shrink-0" />
+                                     <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Em Fechamento (Atendido)</span>
+                                  </div>
+                               ) : (
+                                  <div className="flex items-start gap-2">
+                                    <Zap size={14} className={aiInteraction.escalated ? "text-rose-600 mt-0.5 shrink-0 animate-pulse" : "text-purple-600 mt-0.5 shrink-0 animate-pulse"} />
+                                    <div>
+                                      <p className={`text-[9px] font-black uppercase tracking-widest mb-0.5 ${aiInteraction.escalated ? 'text-rose-800' : 'text-purple-800'}`}>
+                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? '🚨 ALERTA DIRETORIA: Cliente Ignorado há 2+ Horas!' : '⚠️ ATENÇÃO DIRETOR: Venda Parada há 2+ Horas') : 'Nova Mensagem do Cliente'}
+                                      </p>
+                                      <p className="text-[11px] text-slate-800 font-medium italic mb-0.5 leading-tight">"{aiInteraction.message}"</p>
+                                      <p className={`text-[10px] leading-tight ${aiInteraction.escalated ? 'text-rose-700 font-bold' : 'text-purple-700'}`}>
+                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? 'O cliente demonstrou interesse, mas o VENDEDOR NÃO RESPONDEU.' : 'O vendedor interagiu, mas a venda não foi convertida após o interesse do cliente.') : generateAIAnalysis([{ direction: 'inbound', message: aiInteraction.message }])}
+                                      </p>
+                                    </div>
+                                  </div>
+                               )}
+                             </td>
+                           </tr>
+                        )}
+                        </React.Fragment>
+                      );
+
+                    })}
+               </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Retroactive Grid */}
+        <div>
+          <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Clock size={14} /> Pendentes Retroativos (Meses Anteriores)
+          </h4>
+          <div className="overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-2xl">
+            <table className="w-full text-left">
+               <thead>
+                  <tr className="bg-rose-50/50 sticky top-0">
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Data</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Cliente</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Vendedor</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase text-right">Valor</th>
+                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase text-center">Ação</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {orders
+                    .filter(o => o.status === OrderStatus.QUOTE_SENT)
+                    .filter(o => targetSellerFilter === 'ALL' || o.sellerId === targetSellerFilter)
+                    .filter(o => {
+                        const d = new Date(o.createdAt);
+                        const now = new Date();
+                        return !(d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear());
+                    })
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .map(quote => {
+                      const customer = customers.find(c => c.id === quote.customerId);
+                      const seller = sellers.find(s => s.id === quote.sellerId);
+                      
+                      const aiInteraction = interestedCustomers.find(i => i.phone && customer?.phone && (i.phone.replace(/\D/g, '').includes(customer.phone.replace(/\D/g, '')) || customer.phone.replace(/\D/g, '').includes(i.phone.replace(/\D/g, ''))));
+                      
+                      return (
+                        <React.Fragment key={quote.id}>
+                        <tr className="hover:bg-rose-50/30 transition-colors">
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{new Date(quote.createdAt).toLocaleDateString('pt-BR')}</td>
+                           <td className="px-6 py-4 text-sm font-bold text-slate-900">{customer?.name || 'Desconhecido'}</td>
+                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{seller?.name || 'Não Informado'}</td>
+                           <td className="px-6 py-4 text-sm font-black text-rose-600 text-right">R$ {quote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                           <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
+                             <button onClick={() => { setActiveHtmlQuote(quote); setIsHtmlModalOpen(true); }} className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-xl transition-all inline-flex" title="Visualizar Contrato">
+                               <FileText size={16} />
+                             </button>
+                             <button onClick={() => handleOpenHistory(quote, customer?.phone)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all inline-flex" title="Histórico de Conversas">
+                               <History size={16} />
+                             </button>
+                             {sellerMode && (
+                               <>
+                                 <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
+                                   <Flame size={16} />
+                                 </button>
+                                 <button onClick={() => handleOpenMessageModal('tranquil', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Tranquila (Acompanhamento)'}>
+                                   <MessageCircle size={16} />
+                                 </button>
+                                 {customer?.phone && (
+                                   <a href={`https://wa.me/${customer.phone}`} target="_blank" rel="noopener noreferrer" className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all inline-flex" title="Abrir WhatsApp">
+                                     <MessageSquareDashed size={16} />
+                                   </a>
+                                 )}
+                                 {customer?.phone && (
+                                   <a href={`tel:${customer.phone}`} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all inline-flex" title="Ligar para Cliente">
+                                     <Phone size={16} />
+                                   </a>
+                                 )}
+                               </>
+                             )}
+                           </td>
+
+                        </tr>
+                        {aiInteraction && (
+                           <tr className={`${aiInteraction.escalated ? 'bg-rose-50/80 border-rose-200 animate-pulse' : aiInteraction.in_progress ? 'bg-amber-50/20 border-amber-100' : 'bg-purple-50/60 border-purple-100 animate-pulse'} border-b`}>
+                             <td colSpan={5} className="px-6 py-2">
+                               {aiInteraction.in_progress ? (
+                                  <div className="flex items-center justify-end gap-2 opacity-80">
+                                     <Timer size={12} className="text-amber-500 animate-pulse shrink-0" />
+                                     <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Em Fechamento (Atendido)</span>
+                                  </div>
+                               ) : (
+                                  <div className="flex items-start gap-2">
+                                    <Zap size={14} className={aiInteraction.escalated ? "text-rose-600 mt-0.5 shrink-0 animate-pulse" : "text-purple-600 mt-0.5 shrink-0 animate-pulse"} />
+                                    <div>
+                                      <p className={`text-[9px] font-black uppercase tracking-widest mb-0.5 ${aiInteraction.escalated ? 'text-rose-800' : 'text-purple-800'}`}>
+                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? '🚨 ALERTA DIRETORIA: Cliente Ignorado há 2+ Horas!' : '⚠️ ATENÇÃO DIRETOR: Venda Parada há 2+ Horas') : 'Nova Mensagem do Cliente'}
+                                      </p>
+                                      <p className="text-[11px] text-slate-800 font-medium italic mb-0.5 leading-tight">"{aiInteraction.message}"</p>
+                                      <p className={`text-[10px] leading-tight ${aiInteraction.escalated ? 'text-rose-700 font-bold' : 'text-purple-700'}`}>
+                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? 'O cliente demonstrou interesse, mas o VENDEDOR NÃO RESPONDEU.' : 'O vendedor interagiu, mas a venda não foi convertida após o interesse do cliente.') : generateAIAnalysis([{ direction: 'inbound', message: aiInteraction.message }])}
+                                      </p>
+                                    </div>
+                                  </div>
+                               )}
+                             </td>
+                           </tr>
+                        )}
+                        </React.Fragment>
+                      );
+
+                    })}
+               </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderModals = () => (
+    <>
+
+      {isHistoryModalOpen && activeHistoryQuote && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col h-[80vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <History size={18} className="text-purple-600" />
+                  Histórico de Conversas (WhatsApp)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Orçamento #{activeHistoryQuote.number}</p>
+              </div>
+              <button 
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 bg-[#e5ddd5] flex flex-col gap-3">
+              {!isLoadingHistory && historyMessages.length > 0 && (
+                <div className="bg-gradient-to-r from-purple-100 to-blue-50 border border-purple-200 rounded-xl p-4 mb-4 shadow-sm relative overflow-hidden flex-shrink-0">
+                  <div className="absolute -right-4 -top-4 opacity-10">
+                    <Bot size={64} />
+                  </div>
+                  <h4 className="text-xs font-black text-purple-800 uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <Zap size={14} className="text-purple-600" />
+                    Análise Silenciosa da IA
+                  </h4>
+                  <p className="text-sm text-slate-700 font-medium leading-relaxed">
+                    {generateAIAnalysis(historyMessages)}
+                  </p>
+                </div>
+              )}
+              {isLoadingHistory ? (
+                <div className="flex justify-center items-center h-full">
+                  <Timer size={24} className="animate-spin text-purple-600" />
+                </div>
+              ) : historyMessages.length === 0 ? (
+                <div className="flex justify-center items-center h-full text-slate-500 bg-white/50 py-2 px-4 rounded-xl self-center text-sm shadow-sm">
+                  Nenhuma conversa encontrada no banco de dados para este telefone.
+                </div>
+              ) : (
+                historyMessages.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.direction === 'inbound' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm relative ${msg.direction === 'inbound' ? 'bg-white text-slate-800 rounded-tl-none' : 'bg-[#dcf8c6] text-slate-800 rounded-tr-none'}`}>
+                      <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      <span className="text-[10px] text-slate-500 float-right mt-1 ml-3">
+                        {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Message Modal */}
+      {whatsappMessageModal && whatsappMessageModal.isOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-300">
+            <div className={`p-6 border-b border-slate-100 flex items-center justify-between ${whatsappMessageModal.type === 'promo' ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-2xl text-white ${whatsappMessageModal.type === 'promo' ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                  {whatsappMessageModal.type === 'promo' ? <Flame size={24} /> : <MessageCircle size={24} />}
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">
+                    {whatsappMessageModal.type === 'promo' ? 'Ação Agressiva (Promoção)' : 'Ação Tranquila (Acompanhamento)'}
+                  </h3>
+                  <p className="text-sm font-medium text-slate-500">Supervisão e edição de mensagem para {whatsappMessageModal.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setWhatsappMessageModal(null)} className="w-10 h-10 rounded-2xl bg-white/50 flex items-center justify-center"><X size={20} /></button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Desconto (%)</label>
+                   <input 
+                      type="number" 
+                      value={whatsappMessageModal.discount}
+                      onChange={(e) => {
+                         const v = Number(e.target.value);
+                         setWhatsappMessageModal({...whatsappMessageModal, discount: v});
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
+                   />
+                </div>
+                <div>
+                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Data Limite (Escassez)</label>
+                   <input 
+                      type="date" 
+                      value={whatsappMessageModal.scarcityDate}
+                      onChange={(e) => {
+                         const v = e.target.value;
+                         setWhatsappMessageModal({...whatsappMessageModal, scarcityDate: v});
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
+                   />
+                </div>
+                <div>
+                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Parcelas (Qtd)</label>
+                   <input 
+                      type="number" 
+                      value={whatsappMessageModal.installments}
+                      onChange={(e) => {
+                         const v = Number(e.target.value);
+                         setWhatsappMessageModal({...whatsappMessageModal, installments: v});
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
+                   />
+                </div>
+                <div>
+                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Forma de Pagamento</label>
+                   <input 
+                      type="text" 
+                      value={whatsappMessageModal.paymentMethod}
+                      onChange={(e) => {
+                         const v = e.target.value;
+                         setWhatsappMessageModal({...whatsappMessageModal, paymentMethod: v});
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
+                   />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Texto da Mensagem (Sugerido pela IA)</label>
+                   <div className="flex gap-2">
+                     <button 
+                       onClick={handleReviseText}
+                       disabled={isRevisingText}
+                       className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 flex items-center gap-1 transition-all"
+                     >
+                       {isRevisingText ? <Timer size={12} className="animate-spin" /> : <Bot size={12} />}
+                       {isRevisingText ? 'Revisando...' : 'Revisar com IA Gemini'}
+                     </button>
+                     <button 
+                     onClick={() => {
+                        const dateObj = new Date(whatsappMessageModal.scarcityDate);
+                        dateObj.setDate(dateObj.getDate() + 1); // fix offset timezone
+                        const dateStr = dateObj.toLocaleDateString('pt-BR');
+                        const value = whatsappMessageModal.quoteValue;
+                        const discountedValue = value - (value * (whatsappMessageModal.discount / 100));
+                        const installmentValue = whatsappMessageModal.installments > 0 ? (discountedValue / whatsappMessageModal.installments) : discountedValue;
+                        
+                        const newMsg = whatsappMessageModal.type === 'promo'
+                          ? `Olá *${whatsappMessageModal.name}*, tudo bem? Vi que seu orçamento está em aberto. Fechando até ${dateStr} consigo fazer por R$ ${discountedValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} em ${whatsappMessageModal.installments}x de R$ ${installmentValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} no ${whatsappMessageModal.paymentMethod}! Vamos aproveitar?`
+                          : `Olá *${whatsappMessageModal.name}*, tudo bem? Passando apenas para saber se você conseguiu analisar o nosso orçamento e se ficou com alguma dúvida. Lembrando que fechando até ${dateStr} consigo fazer por R$ ${discountedValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} em ${whatsappMessageModal.installments}x de R$ ${installmentValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} no ${whatsappMessageModal.paymentMethod}. Estou à disposição para ajudar!`;
+                        setWhatsappMessageModal({...whatsappMessageModal, message: newMsg});
+                     }}
+                     className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded hover:bg-purple-100"
+                   >
+                     Atualizar Texto
+                   </button>
+                   </div>
+                </div>
+                <textarea 
+                   rows={5}
+                   value={whatsappMessageModal.message}
+                   onChange={(e) => setWhatsappMessageModal({...whatsappMessageModal, message: e.target.value})}
+                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-medium text-slate-700 focus:ring-2 ring-purple-500 resize-none"
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button 
+                 onClick={() => setWhatsappMessageModal(null)}
+                 className="flex-1 py-4 bg-white text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-100 transition-all border border-slate-200"
+              >
+                 Cancelar
+              </button>
+              <button 
+                 onClick={handleSendCustomWhatsApp}
+                 className={`flex-1 py-4 text-white rounded-2xl font-black text-sm transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${whatsappMessageModal.type === 'promo' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'}`}
+              >
+                 <Send size={18} /> Enviar Mensagem
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HTML View Modal */}
+      {isHtmlModalOpen && activeHtmlQuote && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-300">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl"><FileText size={24} /></div>
+                <div><h3 className="text-xl font-black text-slate-900">Visualização de Contrato</h3></div>
+              </div>
+              <button onClick={() => { setIsHtmlModalOpen(false); setActiveHtmlQuote(null); }} className="w-10 h-10 rounded-2xl bg-slate-200 flex items-center justify-center"><X size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-200">
+              <OrderContractPrint order={activeHtmlQuote} customers={customers} sellers={sellers} products={products} technicalSheets={technicalSheets} isPrintMode={false} />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* QR Code Modal */}
+      {isQrModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl"><Phone size={24} /></div>
+                <div><h3 className="text-xl font-black text-slate-900">Conectar WhatsApp</h3></div>
+              </div>
+              <button onClick={() => { setIsQrModalOpen(false); setQrCodeData(null); }} className="p-2"><X size={20} /></button>
+            </div>
+            <div className="p-8 flex flex-col items-center justify-center min-h-[300px]">
+              {isFetchingQr ? <p>Gerando QR Code...</p> : qrCodeData?.base64 ? <img src={qrCodeData.base64} className="w-64 h-64" /> : qrCodeData?.code ? <p className="text-3xl font-black">{qrCodeData.code}</p> : <p>{qrCodeData?.message}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   // --- RENDER SELLER VIEW ---
   if (!isAdmin) {
@@ -348,6 +1098,8 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
              )}
           </div>
         </div>
+        {renderOpenQuotesGrid(true)}
+        {renderModals()}
       </div>
     );
   }
@@ -846,111 +1598,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
         )}
       </div>
 
-      {/* List of Open Quotes */}
-      <div className="space-y-8 bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm mt-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
-          <div>
-            <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Briefcase size={20} className="text-purple-600" /> Detalhamento de Orçamentos em Aberto
-            </h3>
-            <p className="text-sm font-medium text-slate-500">Monitoramento agressivo de pipeline de vendas.</p>
-          </div>
-          <div>
-            <select 
-              value={selectedSellerFilter}
-              onChange={(e) => setSelectedSellerFilter(e.target.value)}
-              className="px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 ring-purple-500"
-            >
-              <option value="ALL">Todos os Vendedores</option>
-              {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* Current Month Grid */}
-        <div>
-          <h4 className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <TrendingUp size={14} /> Mês Vigente
-          </h4>
-          <div className="overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-2xl">
-            <table className="w-full text-left">
-               <thead>
-                  <tr className="bg-slate-50 sticky top-0">
-                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Data</th>
-                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Cliente</th>
-                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase">Vendedor</th>
-                     <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase text-right">Valor</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {orders
-                    .filter(o => o.status === OrderStatus.QUOTE_SENT)
-                    .filter(o => selectedSellerFilter === 'ALL' || o.sellerId === selectedSellerFilter)
-                    .filter(o => {
-                        const d = new Date(o.createdAt);
-                        const now = new Date();
-                        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                    })
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                    .map(quote => {
-                      const customer = customers.find(c => c.id === quote.customerId);
-                      const seller = sellers.find(s => s.id === quote.sellerId);
-                      return (
-                        <tr key={quote.id} className="hover:bg-slate-50 transition-colors">
-                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{new Date(quote.createdAt).toLocaleDateString('pt-BR')}</td>
-                           <td className="px-6 py-4 text-sm font-bold text-slate-900">{customer?.name || 'Desconhecido'}</td>
-                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{seller?.name || 'Não Informado'}</td>
-                           <td className="px-6 py-4 text-sm font-black text-purple-600 text-right">R$ {quote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      );
-                    })}
-               </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Retroactive Grid */}
-        <div>
-          <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Clock size={14} /> Pendentes Retroativos (Meses Anteriores)
-          </h4>
-          <div className="overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-2xl">
-            <table className="w-full text-left">
-               <thead>
-                  <tr className="bg-rose-50/50 sticky top-0">
-                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Data</th>
-                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Cliente</th>
-                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase">Vendedor</th>
-                     <th className="px-6 py-3 text-[10px] font-black text-rose-400 uppercase text-right">Valor</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {orders
-                    .filter(o => o.status === OrderStatus.QUOTE_SENT)
-                    .filter(o => selectedSellerFilter === 'ALL' || o.sellerId === selectedSellerFilter)
-                    .filter(o => {
-                        const d = new Date(o.createdAt);
-                        const now = new Date();
-                        return !(d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear());
-                    })
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                    .map(quote => {
-                      const customer = customers.find(c => c.id === quote.customerId);
-                      const seller = sellers.find(s => s.id === quote.sellerId);
-                      return (
-                        <tr key={quote.id} className="hover:bg-rose-50/30 transition-colors">
-                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{new Date(quote.createdAt).toLocaleDateString('pt-BR')}</td>
-                           <td className="px-6 py-4 text-sm font-bold text-slate-900">{customer?.name || 'Desconhecido'}</td>
-                           <td className="px-6 py-4 text-xs font-medium text-slate-500">{seller?.name || 'Não Informado'}</td>
-                           <td className="px-6 py-4 text-sm font-black text-rose-600 text-right">R$ {quote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      );
-                    })}
-               </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      {renderOpenQuotesGrid(false)}
 
 
       {/* Preview Modal */}
@@ -1006,6 +1654,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser }: IA
           <span className="font-bold">{successMessage}</span>
         </div>
       )}
+      {renderModals()}
       </>
       )}
     </div>

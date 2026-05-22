@@ -48,7 +48,7 @@ BEGIN
         
         -- Chamar a Edge Function de forma assíncrona
         PERFORM net.http_post(
-            url := 'https://xjryvzmejpzwzuroquur.supabase.co/functions/v1/send-team-notification',
+            url := 'https://xjryvzmejpzwzuroquur.supabase.co/functions/v1/send-team-notification'::text,
             headers := '{"Content-Type": "application/json", "Authorization": "Bearer sb_publishable_rePhtWah5rIxTqmC2DIFLQ_Bcm_5pN_"}'::jsonb,
             body := payload
         );
@@ -63,3 +63,35 @@ CREATE TRIGGER on_production_stage_change
     AFTER INSERT OR UPDATE ON public.production_tracking
     FOR EACH ROW
     EXECUTE FUNCTION public.trg_notify_production_stage_change();
+
+-- Função e Trigger na tabela purchase_requests para notificação de compra
+CREATE OR REPLACE FUNCTION public.trg_notify_purchase_request_created()
+RETURNS TRIGGER AS $$
+DECLARE
+    payload json;
+BEGIN
+    payload := json_build_object(
+        'type', 'purchase_request',
+        'order_id', NEW.order_id,
+        'requester_name', NEW.requester_name,
+        'notes', NEW.notes,
+        'items', NEW.items_requested
+    );
+
+    PERFORM net.http_post(
+        url := 'https://xjryvzmejpzwzuroquur.supabase.co/functions/v1/send-team-notification'::text,
+        headers := '{"Content-Type": "application/json", "Authorization": "Bearer sb_publishable_rePhtWah5rIxTqmC2DIFLQ_Bcm_5pN_"}'::jsonb,
+        body := payload::jsonb
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Criar a trigger na tabela purchase_requests
+DROP TRIGGER IF EXISTS on_purchase_request_created ON public.purchase_requests;
+CREATE TRIGGER on_purchase_request_created
+    AFTER INSERT ON public.purchase_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION public.trg_notify_purchase_request_created();
+

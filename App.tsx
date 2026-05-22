@@ -821,6 +821,8 @@ const App = () => {
           customers={customers} 
           appointments={viewAppointments}
           currentUser={currentUser!} 
+          products={products}
+          technicalSheets={technicalSheets}
         />;
       case 'ponto':
         const employeeInstaller = installers.find(i => i.login === currentUser?.login);

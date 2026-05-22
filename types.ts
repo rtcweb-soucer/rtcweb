@@ -47,6 +47,7 @@ export interface Seller {
   phone: string;
   login?: string;
   password?: string;
+  evolutionInstanceId?: string;
 }
 
 export interface Installer {
@@ -276,6 +277,9 @@ export interface Order {
   anticipationRate?: number; // New: Taxa de antecipação (x%)
   paymentLink?: string; // New: Link de pagamento InfinitePay
   cardInstallments?: number; // Novo: Qtd de parcelas no cartão para este pedido
+  isRework?: boolean;
+  reworkReason?: string;
+  finalizedAt?: string;
   createdAt: Date;
 }
 

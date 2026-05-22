@@ -183,7 +183,7 @@ const ApiConfig = () => {
         instance_name: evolutionForm.instanceName,
         apikey: evolutionForm.apiKey,
         user_id: evolutionForm.userId || null,
-        is_active: true
+        is_active: false // Agora cria desativado por padrão até a pessoa ler o QR Code
       }).select().single();
 
       if (insError) throw insError;
@@ -207,6 +207,45 @@ const ApiConfig = () => {
       loadWhatsappData();
     } catch (err: any) {
       alert("Erro ao remover: " + err.message);
+    }
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('whatsapp_instances')
+        .update({ is_active: !currentStatus })
+        .eq('id', id);
+      
+      if (error) throw error;
+      loadWhatsappData();
+    } catch (err: any) {
+      alert("Erro ao atualizar status: " + err.message);
+    }
+  };
+
+  const handleForceLogout = async () => {
+    if (!activeInstance) return;
+    try {
+      setConnectionStatus('CONNECTING');
+      setError(null);
+      const baseUrl = evolutionForm.baseUrl.replace(/\/$/, '');
+      try {
+        await evolutionService.logout(baseUrl, evolutionForm.apiKey, activeInstance.instance_name);
+      } catch (logoutErr) {
+        console.warn("Ignorando erro ao deslogar (conexão já devia estar fechada):", logoutErr);
+      }
+      // Depois de fazer logout, tenta conectar novamente para gerar o QR Code
+      const data = await evolutionService.getQRCode(baseUrl, evolutionForm.apiKey, activeInstance.instance_name, activeInstance.name);
+      if (data.base64) {
+        setQrCode(data.base64);
+        setConnectionStatus('DISCONNECTED');
+      } else {
+        throw new Error("Não recebemos o QR Code após o reset. Tente novamente.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Erro ao resetar conexão.");
+      setConnectionStatus('DISCONNECTED');
     }
   };
 
@@ -500,6 +539,16 @@ const ApiConfig = () => {
 
                          <div className="flex items-center justify-between gap-2 mt-4">
                             <span className="text-[9px] font-mono text-slate-400">ID: {instance.instance_name}</span>
+                            <button
+                               onClick={() => handleToggleActive(instance.id, instance.is_active)}
+                               className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                                 instance.is_active
+                                 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                 : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                               }`}
+                             >
+                               {instance.is_active ? 'Envios Ativos' : 'Ativar Envios'}
+                             </button>
                             <button 
                               onClick={() => handleConnectInstance(instance)}
                               className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
@@ -553,17 +602,41 @@ const ApiConfig = () => {
               </div>
 
               {/* Área do QR Code Modal/Overlay */}
-              {activeInstance && (connectionStatus === 'CONNECTING' || qrCode) && (
+              {activeInstance && (connectionStatus === 'CONNECTING' || connectionStatus === 'CONNECTED' || qrCode || error) && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                    <div className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl text-center space-y-6 animate-in zoom-in-95 duration-300">
                       <div className="flex justify-between items-center mb-2">
                          <h5 className="font-black text-slate-900 uppercase tracking-tighter text-xl">Conectar {activeInstance.name}</h5>
-                         <button onClick={() => {setQrCode(null); setActiveInstance(null);}} className="text-slate-400 hover:text-slate-600">
+                         <button onClick={() => {setQrCode(null); setActiveInstance(null); setError(null);}} className="text-slate-400 hover:text-slate-600">
                             <LogOut size={20} />
                          </button>
                       </div>
 
-                      {qrCode ? (
+                      {connectionStatus === 'CONNECTED' && !qrCode ? (
+                        <div className="space-y-6">
+                           <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
+                             <CheckCircle2 size={32} />
+                           </div>
+                           <div className="space-y-2">
+                              <p className="text-sm font-bold text-slate-900">Sua instância está marcada como ativa no servidor!</p>
+                              <p className="text-[10px] text-slate-500 font-medium">Se você não estiver conseguindo enviar mensagens, a sessão do WhatsApp no celular pode ter expirado.</p>
+                           </div>
+                           <div className="flex flex-col gap-2">
+                              <button
+                                onClick={handleForceLogout}
+                                className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all w-full"
+                              >
+                                Resetar Sessão (Gerar Novo QR)
+                              </button>
+                              <button
+                                onClick={() => {setQrCode(null); setActiveInstance(null); setError(null);}}
+                                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all w-full"
+                              >
+                                Fechar
+                              </button>
+                           </div>
+                        </div>
+                      ) : qrCode ? (
                         <div className="space-y-6">
                            <div className="p-4 bg-white rounded-3xl shadow-xl border border-slate-100 inline-block">
                               <img src={qrCode} alt="QR Code" className="w-64 h-64 mx-auto" />
@@ -575,14 +648,22 @@ const ApiConfig = () => {
                               </p>
                            </div>
                         </div>
+                      ) : error ? (
+                        <div className="space-y-6">
+                           <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl border border-red-100">{error}</p>
+                           <button
+                             onClick={handleForceLogout}
+                             className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all w-full"
+                           >
+                             Tentar Resetar / Forçar Novo QR
+                           </button>
+                        </div>
                       ) : (
                         <div className="py-20 flex flex-col items-center gap-4">
                            <RefreshCw size={48} className="animate-spin text-blue-500" />
                            <p className="font-black text-[10px] uppercase tracking-widest text-slate-400">Gerando sessão segura...</p>
                         </div>
                       )}
-
-                      {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl border border-red-100">{error}</p>}
                    </div>
                 </div>
               )}
