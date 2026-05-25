@@ -217,7 +217,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
           if (interested.length > lastMessageCount) {
              // Toca o sininho se o número de mensagens aumentou!
              if (audioRef.current) {
-                audioRef.current.play().catch(e => console.log('Audio play blocked:', e));
+                // audioRef.current.play().catch(e => console.log('Audio play blocked:', e)); // Desativado a pedido do usuário
              }
           }
           setLastMessageCount(interested.length);
