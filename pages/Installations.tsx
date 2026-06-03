@@ -189,7 +189,8 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
 
   const handlePrintRomaneio = () => {
     if (selectedOrders.length === 0) return;
-    const selectedOrdersData = orders.filter(o => selectedOrders.includes(o.id));
+    const allOrdersToFilter = [...orders, ...standaloneOrders];
+    const selectedOrdersData = allOrdersToFilter.filter(o => selectedOrders.includes(o.id));
     setPrintOrdersList(selectedOrdersData);
     setTimeout(() => {
       if (printRef.current) {
@@ -572,7 +573,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                   isSelected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'
                 } shadow-sm hover:shadow-xl transition-all group overflow-hidden relative`}
               >
-                {activeTab === 'pending' && !(order as any).isStandalone && (
+                {activeTab === 'pending' && (
                   <div className="absolute top-3 left-3 z-10">
                     <input
                       type="checkbox"
@@ -677,17 +678,15 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                 {activeTab === 'pending' ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
-                      {!(order as any).isStandalone && (
-                        <button
-                          onClick={() => handlePrintFicha(order)}
-                          className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
-                        >
-                          <Printer size={14} /> Ficha
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handlePrintFicha(order)}
+                        className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
+                      >
+                        <Printer size={14} /> Ficha
+                      </button>
                       <button
                         onClick={() => setSelectedOrderForSchedule(order)}
-                        className={`flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 ${ (order as any).isStandalone ? 'col-span-2' : ''}`}
+                        className={`flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20`}
                       >
                         <Calendar size={14} /> {isScheduled ? 'Reagendar' : 'Agendar'}
                       </button>
@@ -1163,12 +1162,22 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                         ? sheet?.items.filter(i => printOrder.itemIds?.includes(i.id))
                         : sheet?.items;
 
+                      if (!items || items.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={4} className="border border-slate-300 p-4 text-sm font-bold text-center text-slate-500">
+                              {(printOrder as any)?.isStandalone ? 'Instalação Avulsa - Nenhum item vinculado' : 'Nenhum item encontrado'}
+                            </td>
+                          </tr>
+                        );
+                      }
+
                       return items?.map(item => (
                         <tr key={item.id}>
-                          <td className="border border-slate-300 p-2 text-sm font-bold">{item.environment}</td>
-                          <td className="border border-slate-300 p-2 text-sm">{products.find(p => p.id === item.productId)?.nome}</td>
+                          <td className="border border-slate-300 p-2 text-sm font-bold">{item.environment || '-'}</td>
+                          <td className="border border-slate-300 p-2 text-sm">{products.find(p => p.id === item.productId)?.nome || 'Item'}</td>
                           <td className="border border-slate-300 p-2 text-sm text-center font-bold uppercase">{item.color || '-'}</td>
-                          <td className="border border-slate-300 p-2 text-sm text-center font-mono font-black">{item.width.toFixed(3)}m x {item.height.toFixed(3)}m</td>
+                          <td className="border border-slate-300 p-2 text-sm text-center font-mono font-black">{(item.width || 0).toFixed(3)}m x {(item.height || 0).toFixed(3)}m</td>
                         </tr>
                       ));
                     })()}

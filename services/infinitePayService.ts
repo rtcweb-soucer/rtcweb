@@ -49,10 +49,14 @@ export const infinitePayService = {
 
       if (customerData) {
         payload.customer = {
-          name: customerData.name,
-          email: customerData.email,
-          phone_number: cleanPhone
+          name: customerData.name || 'Cliente'
         };
+        if (customerData.email && customerData.email.includes('@')) {
+          payload.customer.email = customerData.email;
+        }
+        if (cleanPhone && cleanPhone.length >= 10) {
+          payload.customer.phone_number = cleanPhone;
+        }
       }
 
       // 3. Chamada Direta (CUIDADO: Se houver apiKey, ela será exposta no console de rede)
@@ -135,10 +139,14 @@ export const infinitePayService = {
 
       if (customerData) {
         payload.customer = {
-          name: customerData.name,
-          email: customerData.email,
-          phone_number: cleanPhone
+          name: customerData.name || 'Cliente'
         };
+        if (customerData.email && customerData.email.includes('@')) {
+          payload.customer.email = customerData.email;
+        }
+        if (cleanPhone && cleanPhone.length >= 10) {
+          payload.customer.phone_number = cleanPhone;
+        }
       }
 
       console.log('PAYLOAD DA ÚLTIMA TENTATIVA DE LINK: ', JSON.stringify(payload, null, 2));
@@ -153,7 +161,7 @@ export const infinitePayService = {
       let result: any = {};
       try { result = text ? JSON.parse(text) : {}; } catch (e) { throw new Error('Resposta inválida do gateway'); }
 
-      if (!response.ok) throw new Error(result.message || result.error || 'Erro ao gerar cobrança unificada');
+      if (!response.ok) throw new Error(`${result.message || result.error || 'Erro ao gerar cobrança unificada'} - Pay: ${JSON.stringify(payload)}`);
 
       const url = result.url || result.checkout_url || '';
       let paymentId = result.slug || result.id || result.invoice_slug || result.invoice_id;

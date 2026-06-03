@@ -205,18 +205,33 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                         <CreditCard size={12} className="text-blue-500" /> Condições de Pagamento
                       </h4>
                       {showActions && onGenerateMasterPayment && order.installments?.some(i => i.status !== 'PAID' && i.paymentMethod?.toUpperCase().includes('CARTÃO')) && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onGenerateMasterPayment(); }}
-                          disabled={isGenerating === `master-${order.id}`}
-                          className="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded font-black hover:bg-blue-100 transition-colors disabled:opacity-50 no-print text-[9px]"
-                        >
-                          {isGenerating === `master-${order.id}` ? (
-                            <RefreshCw size={12} className="animate-spin" />
-                          ) : (
-                            <CreditCard size={12} />
+                        <div className="flex gap-2 items-center">
+                          {order.installments?.some(i => i.paymentLink && i.paymentMethod?.toUpperCase().includes('CARTÃO')) && onCopyValue && (
+                            <button
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                const link = order.installments?.find(i => i.paymentLink && i.paymentMethod?.toUpperCase().includes('CARTÃO'))?.paymentLink;
+                                if (link) onCopyValue(link); 
+                              }}
+                              className="flex items-center gap-1 px-3 py-1 bg-slate-50 text-slate-600 border border-slate-200 rounded font-black hover:bg-slate-100 transition-colors no-print text-[9px]"
+                            >
+                              <Copy size={12} />
+                              COPIAR LINK
+                            </button>
                           )}
-                          GERAR LINK CARTÃO
-                        </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onGenerateMasterPayment(); }}
+                            disabled={isGenerating === `master-${order.id}`}
+                            className="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded font-black hover:bg-blue-100 transition-colors disabled:opacity-50 no-print text-[9px]"
+                          >
+                            {isGenerating === `master-${order.id}` ? (
+                              <RefreshCw size={12} className="animate-spin" />
+                            ) : (
+                              <CreditCard size={12} />
+                            )}
+                            GERAR LINK CARTÃO
+                          </button>
+                        </div>
                       )}
                     </div>
 
