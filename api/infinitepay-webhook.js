@@ -35,7 +35,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'NSU inválido ou não referenciado' });
     }
 
-    const [orderId, installmentId] = order_nsu.split('_');
+    const parts = order_nsu.split('_');
+    const orderId = parts[0];
+    const installmentId = parts[1];
 
     // 1. Buscar o pedido no Supabase
     const { data: order, error: fetchError } = await supabase
@@ -51,7 +53,7 @@ export default async function handler(req, res) {
 
     // 2. Localizar as parcelas alvos
     let targetInstallments = [];
-    const isMasterPayment = !installmentId;
+    const isMasterPayment = !installmentId || installmentId === 'master';
 
     (order.installments || []).forEach(inst => {
       if (inst.status !== 'PAID' && (isMasterPayment || inst.id === installmentId)) {

@@ -947,8 +947,9 @@ const Orders = ({
           technicalSheets={technicalSheets}
           showActions={true}
           isGenerating={isGenerating}
-          onGeneratePayment={handleGeneratePaymentForInstallment}
-          onWhatsAppShare={handleWhatsAppManualShare}
+          onGeneratePayment={(inst) => handleGeneratePaymentForInstallment(inst, selectedOrder)}
+          onGenerateMasterPayment={() => handleGenerateMasterPayment(selectedOrder)}
+          onWhatsAppShare={(inst) => handleWhatsAppManualShare(inst, selectedOrder)}
           onCopyValue={handleCopyValue}
         />
 

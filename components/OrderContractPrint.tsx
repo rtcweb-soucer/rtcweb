@@ -3,7 +3,10 @@ import { Order, Customer, Product, Seller, TechnicalSheet, MeasurementItem } fro
 import { 
   Layers, 
   CreditCard, 
-  Info 
+  Info,
+  MessageCircle,
+  Copy,
+  RefreshCw
 } from 'lucide-react';
 
 interface OrderContractPrintProps {
@@ -201,6 +204,20 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                       <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <CreditCard size={12} className="text-blue-500" /> Condições de Pagamento
                       </h4>
+                      {showActions && onGenerateMasterPayment && order.installments?.some(i => i.status !== 'PAID' && i.paymentMethod?.toUpperCase().includes('CARTÃO')) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onGenerateMasterPayment(); }}
+                          disabled={isGenerating === `master-${order.id}`}
+                          className="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded font-black hover:bg-blue-100 transition-colors disabled:opacity-50 no-print text-[9px]"
+                        >
+                          {isGenerating === `master-${order.id}` ? (
+                            <RefreshCw size={12} className="animate-spin" />
+                          ) : (
+                            <CreditCard size={12} />
+                          )}
+                          GERAR LINK CARTÃO
+                        </button>
+                      )}
                     </div>
 
                     {order.installments && order.installments.length > 0 && (
@@ -238,11 +255,11 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                                   <div className="flex items-center gap-1.5 mt-1 no-print">
                                     {(inst.paymentLink || inst.pixCopyPaste) ? (
                                       <>
-                                        {inst.pixCopyPaste && onCopyValue && (
+                                        {(inst.pixCopyPaste || inst.paymentLink) && onCopyValue && (
                                           <button 
-                                            onClick={(e) => { e.stopPropagation(); onCopyValue(inst.pixCopyPaste!); }}
+                                            onClick={(e) => { e.stopPropagation(); onCopyValue((inst.pixCopyPaste || inst.paymentLink)!); }}
                                             className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
-                                            title="Copiar Código PIX"
+                                            title={inst.pixCopyPaste ? "Copiar Código PIX" : "Copiar Link de Pagamento"}
                                           >
                                             <Copy size={12} />
                                           </button>

@@ -40,9 +40,12 @@ interface InstallationsProps {
   onUpdateOrder: (order: Order) => void;
   onAddAppointment: (appointment: Appointment) => void;
   installers: Installer[];
+  appointments?: Appointment[];
+  currentUser: any; // SystemUser
+  sellers: Seller[];
 }
 
-const Installations = ({ orders, customers, technicalSheets, products, onUpdateOrder, onAddAppointment, installers }: InstallationsProps) => {
+const Installations = ({ orders, customers, technicalSheets, products, onUpdateOrder, onAddAppointment, installers, appointments = [], currentUser, sellers }: InstallationsProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderForSchedule, setSelectedOrderForSchedule] = useState<Order | null>(null);
   const [scheduleData, setScheduleData] = useState<{ date: string; time: string; installerIds: string[] }>({
@@ -89,18 +92,37 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
     installerIds: []
   });
 
+  // Standalone Appointments
+  const standaloneAppointments = appointments.filter(a => a.type === 'INSTALLATION' && !a.orderId);
+  const standaloneOrders: Order[] = standaloneAppointments.map(app => ({
+    id: app.id,
+    customerId: app.customerId,
+    sellerId: app.sellerId,
+    status: app.status === 'COMPLETED' ? OrderStatus.DELIVERED : OrderStatus.PENDING_MEASUREMENT,
+    productionStage: app.status === 'COMPLETED' ? ProductionStage.READY : ProductionStage.INSTALLATION,
+    totalValue: 0,
+    installationDate: app.date,
+    installationTime: app.time,
+    installerIds: app.installerIds,
+    createdAt: new Date(),
+    isStandalone: true
+  } as Order & { isStandalone: boolean }));
+
   // Pedidos prontos para instalar (INSTALLATION no PCP e ainda não finalizados)
-  const pendingOrders = orders.filter(o =>
-    o.productionStage === ProductionStage.INSTALLATION
-  ).filter(o => {
+  const pendingOrders = [
+    ...orders.filter(o => o.productionStage === ProductionStage.INSTALLATION),
+    ...standaloneOrders.filter(o => o.productionStage !== ProductionStage.READY)
+  ].filter(o => {
     const customer = customers.find(c => c.id === o.customerId);
     return customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || o.id.includes(searchTerm);
   });
 
   // Pedidos finalizados (READY no PCP)
-  const historyOrders = orders.filter(o =>
-    o.productionStage === ProductionStage.READY
-  ).filter(o => {
+  const historyOrders = [
+    ...orders.filter(o => o.productionStage === ProductionStage.READY),
+    ...standaloneOrders.filter(o => o.productionStage === ProductionStage.READY)
+  ].sort((a: any, b: any) => new Date(b.finalizedAt || 0).getTime() - new Date(a.finalizedAt || 0).getTime())
+  .filter(o => {
     const customer = customers.find(c => c.id === o.customerId);
     return customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) || o.id.includes(searchTerm);
   });
@@ -540,6 +562,8 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
             const customer = customers.find(c => c.id === order.customerId);
             const isScheduled = !!order.installationDate;
             const isSelected = selectedOrders.includes(order.id);
+            const orderAppointment = appointments?.find(a => a.orderId === order.id && a.type === 'INSTALLATION');
+            const activeInstallerIds = order.installerIds?.length ? order.installerIds : (orderAppointment?.installerIds || []);
 
             return (
               <div
@@ -548,7 +572,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                   isSelected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'
                 } shadow-sm hover:shadow-xl transition-all group overflow-hidden relative`}
               >
-                {activeTab === 'pending' && (
+                {activeTab === 'pending' && !(order as any).isStandalone && (
                   <div className="absolute top-3 left-3 z-10">
                     <input
                       type="checkbox"
@@ -572,7 +596,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                 }`}>
                   {order.productionStage === ProductionStage.READY
                     ? 'Finalizado'
-                    : isScheduled ? 'Agendado' : 'Aguardando'}
+                    : (order as any).isStandalone ? 'Avulso' : isScheduled ? 'Agendado' : 'Aguardando'}
                 </div>
 
                 <div className={`flex items-center gap-3 mb-6 ${activeTab === 'pending' ? 'pl-6' : ''}`}>
@@ -612,8 +636,8 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <HardHat size={12} className="text-slate-400 shrink-0" />
                           <span className="truncate">
-                            {order.installerIds && order.installerIds.length > 0
-                              ? order.installerIds.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ')
+                            {activeInstallerIds.length > 0
+                              ? activeInstallerIds.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ')
                               : 'Equipe não definida'}
                           </span>
                         </div>
@@ -641,8 +665,8 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                       <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
                         <HardHat size={11} className="shrink-0" />
                         <span className="truncate">
-                          {order.installerIds && order.installerIds.length > 0
-                            ? order.installerIds.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ')
+                          {activeInstallerIds.length > 0
+                            ? activeInstallerIds.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ')
                             : 'Equipe não definida'}
                         </span>
                       </div>
@@ -653,71 +677,79 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                 {activeTab === 'pending' ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
-                      <button
-                        onClick={() => handlePrintFicha(order)}
-                        className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
-                      >
-                        <Printer size={14} /> Ficha
-                      </button>
+                      {!(order as any).isStandalone && (
+                        <button
+                          onClick={() => handlePrintFicha(order)}
+                          className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
+                        >
+                          <Printer size={14} /> Ficha
+                        </button>
+                      )}
                       <button
                         onClick={() => setSelectedOrderForSchedule(order)}
-                        className="flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                        className={`flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 ${ (order as any).isStandalone ? 'col-span-2' : ''}`}
                       >
                         <Calendar size={14} /> {isScheduled ? 'Reagendar' : 'Agendar'}
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <button
-                        onClick={() => {
-                          setFinalizingOrder(order);
-                          setFinalizationDate(new Date().toISOString().split('T')[0]);
-                        }}
-                        className="flex items-center justify-center gap-2 py-2 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-colors"
-                      >
-                        <CheckCircle2 size={14} /> Finalizar
-                      </button>
-                      <button
-                        onClick={() => {
-                          setReworkOrder(order);
-                          setReworkReason('ajuste');
-                          setReworkNotes('');
-                        }}
-                        className="flex items-center justify-center gap-2 py-2 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors"
-                      >
-                        <RotateCcw size={14} /> Retrabalho
-                      </button>
-                    </div>
+                    {!(order as any).isStandalone && (
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button
+                          onClick={() => {
+                            setFinalizingOrder(order);
+                            setFinalizationDate(new Date().toISOString().split('T')[0]);
+                          }}
+                          className="flex items-center justify-center gap-2 py-2 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-colors"
+                        >
+                          <CheckCircle2 size={14} /> Finalizar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setReworkOrder(order);
+                            setReworkReason('ajuste');
+                            setReworkNotes('');
+                          }}
+                          className="flex items-center justify-center gap-2 py-2 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors"
+                        >
+                          <RotateCcw size={14} /> Retrabalho
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2 pt-4 border-t border-slate-100">
                     <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => handlePrintFicha(order)}
-                        className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
-                      >
-                        <Printer size={14} /> Ficha
-                      </button>
+                      {!(order as any).isStandalone && (
+                        <button
+                          onClick={() => handlePrintFicha(order)}
+                          className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
+                        >
+                          <Printer size={14} /> Ficha
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setEditingFinalizedOrder(order);
                           setEditFinalDate(order.finalizedAt || new Date().toISOString().split('T')[0]);
                         }}
-                        className="flex items-center justify-center gap-2 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg"
+                        className={`flex items-center justify-center gap-2 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg ${(order as any).isStandalone ? 'col-span-2' : ''}`}
                       >
                         <Edit2 size={14} /> Editar Data
                       </button>
                     </div>
-                    <button
-                      onClick={() => {
-                        setWarrantyOrder(order);
-                        setWarrantyReason('ajuste');
-                        setWarrantyNotes('');
-                      }}
-                      className="w-full flex items-center justify-center gap-2 py-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl text-xs font-bold hover:bg-amber-100 transition-colors"
-                    >
-                      <RotateCcw size={14} /> Garantia
-                    </button>
+                    {!(order as any).isStandalone && (
+                      <button
+                        onClick={() => {
+                          setWarrantyOrder(order);
+                          setWarrantyReason('ajuste');
+                          setWarrantyNotes('');
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl text-xs font-bold hover:bg-amber-100 transition-colors"
+                      >
+                        <RotateCcw size={14} /> Garantia
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1106,7 +1138,8 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                     <p className="text-sm font-bold">Data: <span className="font-black">{printOrder?.installationDate ? formatDisplayDate(printOrder.installationDate) : 'A DEFINIR'}</span></p>
                     <p className="text-sm font-bold mt-1">Horário: <span className="font-black">{printOrder?.installationTime || '--:--'}</span></p>
                     <p className="text-sm font-bold mt-1">Equipe: <span className="font-black">
-                      {printOrder?.installerIds?.map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ') || 'A DEFINIR'}
+                      {(printOrder?.installerIds?.length ? printOrder.installerIds : (appointments?.find(a => a.orderId === printOrder?.id && a.type === 'INSTALLATION')?.installerIds || []))
+                        .map((id: string) => installers.find((i: Installer) => i.id === id)?.name).filter(Boolean).join(', ') || 'A DEFINIR'}
                     </span></p>
                   </div>
                 </div>
@@ -1280,8 +1313,8 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                   const newApp: Appointment = {
                     id: crypto.randomUUID(),
                     customerId: manualSelection.customerId,
-                    orderId: manualSelection.orderId || undefined,
-                    sellerId: selectedOrder?.sellerId || 'legacy-rtc', // Fallback
+                    orderId: manualSelection.orderId ? manualSelection.orderId : undefined,
+                    sellerId: selectedOrder?.sellerId || currentUser?.sellerId || sellers?.[0]?.id,
                     installerIds: scheduleData.installerIds,
                     date: scheduleData.date,
                     time: scheduleData.time,
@@ -1294,6 +1327,7 @@ const Installations = ({ orders, customers, technicalSheets, products, onUpdateO
                   if (selectedOrder) {
                     onUpdateOrder({
                       ...selectedOrder,
+                      productionStage: ProductionStage.INSTALLATION,
                       installationDate: scheduleData.date,
                       installationTime: scheduleData.time,
                       installerIds: scheduleData.installerIds

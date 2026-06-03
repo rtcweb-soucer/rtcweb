@@ -27,7 +27,8 @@ export const infinitePayService = {
       const amount = Math.round(installment.value * 100); // Em centavos
       const isPix = installment.paymentMethod?.toUpperCase().includes('PIX');
       
-      let cleanPhone = (customerData?.phone || '').replace(/\D/g, '');
+      let cleanPhone = (customerData?.phone || '').split('/')[0].replace(/\D/g, '');
+      if (cleanPhone.length > 11) cleanPhone = cleanPhone.slice(0, 11);
       if (cleanPhone && !cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
       if (cleanPhone) cleanPhone = '+' + cleanPhone;
 
@@ -109,7 +110,8 @@ export const infinitePayService = {
       const totalAmount = pendingInstallments.reduce((acc, inst) => acc + inst.value, 0);
       const amount = Math.round(totalAmount * 100);
       
-      let cleanPhone = (customerData?.phone || '').replace(/\D/g, '');
+      let cleanPhone = (customerData?.phone || '').split('/')[0].replace(/\D/g, '');
+      if (cleanPhone.length > 11) cleanPhone = cleanPhone.slice(0, 11);
       if (cleanPhone && !cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
       if (cleanPhone) cleanPhone = '+' + cleanPhone;
 
@@ -122,18 +124,14 @@ export const infinitePayService = {
             description: `RTC - Pagamento Pedido ${order.contractNumber || order.id.slice(0, 8)}`
           }
         ],
-        // NSU Pai (Sem _idParcela)
-        order_nsu: order.id,
+        // NSU Pai unico para não conflitar com tentativas anteriores
+        order_nsu: `${order.id}_master_${Date.now()}`,
         redirect_url: `https://rtcweb.vercel.app/finance?orderId=${order.id}`,
         webhook_url: 'https://rtcweb.vercel.app/api/infinitepay-webhook',
-        payment_methods: ['pix']
+        payment_methods: pendingInstallments.some(i => i.paymentMethod?.toUpperCase().includes('CARTÃO')) ? ['credit_card'] : ['pix']
       };
 
-      // Tenta impor o limte de parcelas (O comportamento exato depende de como a CloudWalk interpreta no V1)
-      if (maxInstallments) {
-         payload.max_installments = maxInstallments;
-         payload.installments = maxInstallments;
-      }
+      // Limite de parcelas removido para evitar Invalid checkout link params
 
       if (customerData) {
         payload.customer = {

@@ -443,8 +443,8 @@ const App = () => {
           });
         }
       }
-    } catch (err) {
-      alert("Erro ao salvar agendamento");
+    } catch (err: any) {
+      alert("Erro ao salvar agendamento: " + (err.message || JSON.stringify(err)));
     }
   };
 
@@ -752,7 +752,7 @@ const App = () => {
       case 'installations':
         return <Installations
           orders={orders} customers={customers} technicalSheets={technicalSheets} products={products}
-          installers={installers}
+          installers={installers} appointments={viewAppointments} currentUser={currentUser!} sellers={sellers}
           onUpdateOrder={handleUpdateOrder} onAddAppointment={handleAddAppointment}
         />;
       case 'finance':
