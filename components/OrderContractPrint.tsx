@@ -262,7 +262,7 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                             </div>
                             <div className="flex items-center gap-6">
                               <div className="flex flex-col items-end w-16">
-                                <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
+                                <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span>
                               </div>
                               <div className="flex flex-col items-end min-w-[80px]">
                                 <span className="font-black text-blue-700 leading-tight">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>

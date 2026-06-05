@@ -197,7 +197,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             'Vendedor': inst.sellerName,
             'NFe': order?.nfeNumber || '--',
             'Parcela': `${inst.installmentNumber}/${inst.totalInstallments}`,
-            'Vencimento': new Date(inst.dueDate).toLocaleDateString('pt-BR'),
+            'Vencimento': new Date(inst.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
             'Pagamento': inst.paymentDate ? new Date(inst.paymentDate).toLocaleDateString('pt-BR') : '--',
             'Valor': inst.value,
             'Status': inst.status === 'PAID' ? 'Liquidado' : 'Pendente'
@@ -1664,7 +1664,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                                             </div>
                                                             <div className="flex items-center gap-10">
                                                                <div className="flex flex-col items-end w-16">
-                                                                  <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
+                                                                  <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span>
                                                                </div>
                                                                <div className="flex flex-col items-end min-w-[80px]">
                                                                   <span className="font-black text-blue-700 leading-tight">R$ {(inst.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
