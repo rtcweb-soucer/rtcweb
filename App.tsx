@@ -31,6 +31,7 @@ import InstallerPortal from './pages/InstallerPortal';
 import RawMaterialStock from './pages/RawMaterialStock';
 import IAManager from './pages/IAManager';
 import CRM from './pages/CRM';
+import MassMessaging from './pages/MassMessaging';
 
 import { Search, LogOut, User as UserIcon, Menu as MenuIcon, RefreshCw, ShoppingCart, Clock } from 'lucide-react';
 import { dataService } from './services/dataService';
@@ -623,6 +624,8 @@ const App = () => {
           onAddCustomer={handleAddCustomer}
           currentUser={currentUser!}
         />;
+      case 'mass-messaging':
+        return <MassMessaging />;
       case 'quick-quote':
         return (
           <QuickQuote 

@@ -57,6 +57,7 @@ export const MENU_ITEMS = [
   { id: 'api-config', label: 'Configuração de APIs', icon: <SettingsIcon size={20} className="text-indigo-600" />, roles: ['ADMIN'] },
   { id: 'system-users', label: 'Cadastro de Equipe', icon: <Users2 size={20} className="text-rose-500" />, roles: ['ADMIN', 'ATTENDANT'] },
   { id: 'settings', label: 'Configurações', icon: <SettingsIcon size={20} className="text-blue-600" />, roles: ['ADMIN'] },
+  { id: 'mass-messaging', label: 'Ativação de Clientes', icon: <MessageSquare size={20} className="text-blue-500" />, roles: ['ADMIN', 'SELLER', 'ATTENDANT'] },
 ];
 
 

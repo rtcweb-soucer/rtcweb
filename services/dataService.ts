@@ -1851,6 +1851,63 @@ export const dataService = {
             console.error("Erro ao gerar backup de tabelas:", error);
             throw error;
         }
+    },
+
+    // Mass Messaging (Disparo em Lote)
+    async getMassMessages() {
+        let allData: any[] = [];
+        let from = 0;
+        let to = 999;
+        let hasMore = true;
+
+        while (hasMore) {
+            const { data, error } = await supabase.from('mass_messages')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .range(from, to);
+            
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                from += 1000;
+                to += 1000;
+            }
+            
+            if (!data || data.length < 1000) {
+                hasMore = false;
+            }
+        }
+        
+        return allData;
+    },
+
+    async saveMassMessages(messages: any[]) {
+        const { data, error } = await supabase.from('mass_messages').upsert(messages, { onConflict: 'phone' }).select();
+        if (error) throw error;
+        return data;
+    },
+
+    async queueSelectedMessages(ids: string[], template: string) {
+        const { error } = await supabase.from('mass_messages')
+            .update({ status: 'PENDING', message_template: template })
+            .in('id', ids);
+        if (error) throw error;
+    },
+
+    async deleteMassMessage(id: string) {
+        const { error } = await supabase.from('mass_messages').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async pauseAllMassMessages() {
+        const { error } = await supabase.from('mass_messages').update({ status: 'PAUSED' }).eq('status', 'PENDING');
+        if (error) throw error;
+    },
+
+    async resumeAllMassMessages() {
+        const { error } = await supabase.from('mass_messages').update({ status: 'PENDING' }).eq('status', 'PAUSED');
+        if (error) throw error;
     }
 };
 

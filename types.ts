@@ -466,3 +466,16 @@ export interface QuickQuote {
   notes?: string;
   createdAt: string | Date;
 }
+
+export interface MassMessage {
+  id: string;
+  name?: string;
+  phone: string;
+  message_template: string;
+  status: 'PENDING' | 'SENT' | 'ERROR' | 'PAUSED';
+  sent_at?: string;
+  error_log?: string;
+  created_at?: string;
+  created_by?: string;
+  metadata?: Record<string, any>;
+}

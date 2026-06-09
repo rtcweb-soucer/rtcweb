@@ -131,6 +131,14 @@ serve(async (req) => {
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+        // Buscar configuração da Evolution API
+        const { data: evoSettings } = await supabase.from('api_settings').select('settings').eq('service', 'evolution').single();
+        const baseUrl = evoSettings?.settings?.baseUrl || EVOLUTION_URL;
+        const apiKey = evoSettings?.settings?.apiKey || EVOLUTION_API_KEY;
+
+        const { data: inst } = await supabase.from('whatsapp_instances').select('instance_name').eq('is_active', true).limit(1);
+        const instanceName = inst?.[0]?.instance_name || "welington";
+
         for (const [seller, data] of Object.entries(groupedData)) {
             let rawReport = `Vendedor: ${seller} (Total em aberto: ${formatCurrency(data.totalValue)})\n\n`;
             
@@ -169,11 +177,16 @@ DADOS: ${rawReport}`;
                 message = `*Orçamentos em Aberto - ${seller}*\n\n${rawReport.replace(/Vendedor:/g, '*Vendedor:*').replace(/Total em aberto:/g, '*Total na Mesa:*')}`;
             }
 
-            await fetch(`${EVOLUTION_URL}/message/sendText/${INSTANCE_NAME}`, {
+            const response = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
                 method: 'POST',
-                headers: { 'apikey': EVOLUTION_API_KEY, 'Content-Type': 'application/json' },
+                headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ number: DIRECTOR_PHONE, text: message })
             });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                console.error(`Erro Evolution API: Status ${response.status}`, JSON.stringify(err));
+            }
 
             // Pausa de 3s para o WhatsApp não bloquear
             await new Promise(r => setTimeout(r, 3000));

@@ -121,10 +121,18 @@ ${rawReport}
             message = rawReport;
         }
 
-        await fetch(`${EVOLUTION_URL}/message/sendText/${INSTANCE_NAME}`, {
+        // Buscar configuração da Evolution API
+        const { data: evoSettings } = await supabase.from('api_settings').select('settings').eq('service', 'evolution').single();
+        const baseUrl = evoSettings?.settings?.baseUrl || EVOLUTION_URL;
+        const apiKey = evoSettings?.settings?.apiKey || EVOLUTION_API_KEY;
+
+        const { data: inst } = await supabase.from('whatsapp_instances').select('instance_name').eq('is_active', true).limit(1);
+        const instanceName = inst?.[0]?.instance_name || "welington";
+
+        const response = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
             method: 'POST',
             headers: {
-                'apikey': EVOLUTION_API_KEY,
+                'apikey': apiKey,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -132,6 +140,11 @@ ${rawReport}
                 text: message
             })
         });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            console.error(`Erro Evolution API: Status ${response.status}`, JSON.stringify(err));
+        }
 
         return new Response(JSON.stringify({ success: true, processed: delayedOrders.length }), { headers: { "Content-Type": "application/json" } });
 
