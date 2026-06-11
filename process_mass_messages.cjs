@@ -75,10 +75,17 @@ async function processMassMessages() {
 
   try {
     // 1. Atualizar config da API do BD, se houver
-    const { data: settings } = await supabase.from('api_settings').select('*').eq('service', 'evolution').maybeSingle();
-    if (settings && settings.settings && settings.settings.baseUrl) {
-      evoBaseUrl = settings.settings.baseUrl;
-      evoApiKey = settings.settings.apiKey;
+    const { data: evoSettings } = await supabase.from('api_settings').select('*').eq('service', 'evolution').maybeSingle();
+    if (evoSettings && evoSettings.settings && evoSettings.settings.baseUrl) {
+      evoBaseUrl = evoSettings.settings.baseUrl;
+      evoApiKey = evoSettings.settings.apiKey;
+    }
+
+    // Buscar configurações da YCloud (Usada exclusivamente para os disparos)
+    let ycloudConfig = null;
+    const { data: ycSettings } = await supabase.from('api_settings').select('*').eq('service', 'ycloud').maybeSingle();
+    if (ycSettings && ycSettings.settings && ycSettings.settings.apiKey) {
+      ycloudConfig = ycSettings.settings;
     }
 
     // 2. Buscar a primeira instância ativa (assumindo que o bot de disparo usará a instância principal)
@@ -137,15 +144,63 @@ async function processMassMessages() {
       console.log(`📤 MassMessaging: Enviando para ${msg.phone} (Enviadas hoje: ${count || 0}/${MAX_MESSAGES_PER_DAY})...`);
       
       try {
-        await sendWhatsApp(instanceName, msg.phone, finalMessage);
+        if (ycloudConfig && ycloudConfig.apiKey && ycloudConfig.templateName) {
+          // Disparo via YCloud (API Oficial)
+          console.log(`🚀 Usando YCloud API (Oficial) com template: ${ycloudConfig.templateName}`);
+          
+          const ycloudUrl = `https://api.ycloud.com/v2/whatsapp/messages/send`;
+          
+          // Formata o número (remover + e garantir DDI)
+          let cleanPhone = msg.phone.replace(/\D/g, '');
+          if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+          cleanPhone = '+' + cleanPhone;
+
+          const ycResponse = await fetch(ycloudUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': ycloudConfig.apiKey
+            },
+            body: JSON.stringify({
+              from: ycloudConfig.senderId || undefined,
+              to: cleanPhone,
+              type: 'template',
+              template: {
+                name: ycloudConfig.templateName,
+                language: {
+                  code: 'pt_BR'
+                },
+                components: [
+                  {
+                    type: 'body',
+                    parameters: [
+                      {
+                        type: 'text',
+                        text: firstName
+                      }
+                    ]
+                  }
+                ]
+              }
+            })
+          });
+
+          if (!ycResponse.ok) {
+             const ycErr = await ycResponse.json().catch(() => ({}));
+             throw new Error(`Erro YCloud: ${JSON.stringify(ycErr)}`);
+          }
+          console.log(`✅ MassMessaging (YCloud): Mensagem enviada para ${msg.phone} com sucesso.`);
+        } else {
+          // Trava de Segurança: Sem YCloud, não envia em lote!
+          console.log(`🚫 Disparo Bloqueado: YCloud não está configurada. Para evitar banimentos, a ativação em lote só funciona via YCloud.`);
+          throw new Error("Configuração da YCloud ausente ou incompleta. Configure a API Key e o Nome do Template no painel de APIs.");
+        }
         
         // Atualiza como enviado
         await supabase.from('mass_messages').update({
           status: 'SENT',
           sent_at: new Date().toISOString()
         }).eq('id', msg.id);
-        
-        console.log(`✅ MassMessaging: Mensagem enviada para ${msg.phone} com sucesso.`);
         
         // Se sucesso, espera o tempo configurado
         const delayMs = getRandomDelay();

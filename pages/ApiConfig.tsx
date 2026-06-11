@@ -15,7 +15,7 @@ const ApiConfig = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<ApiSettings[]>([]);
-  const [activeTab, setActiveTab] = useState<'infinitepay' | 'evolution' | 'gemini'>('evolution');
+  const [activeTab, setActiveTab] = useState<'infinitepay' | 'evolution' | 'gemini' | 'ycloud'>('evolution');
 
   // Form states
   const [infinitePayForm, setInfinitePayForm] = useState({
@@ -40,6 +40,12 @@ const ApiConfig = () => {
     promiseGraceSeller: 4,
     promiseGraceDirector: 8,
     directorPhone: ''
+  });
+
+  const [ycloudForm, setYcloudForm] = useState({
+    apiKey: '',
+    senderId: '',
+    templateName: ''
   });
 
   const [whatsappInstances, setWhatsappInstances] = useState<any[]>([]);
@@ -109,6 +115,11 @@ const ApiConfig = () => {
       const gm = data.find(s => s.service === 'gemini');
       if (gm) {
         setGeminiForm(prev => ({ ...prev, ...gm.settings }));
+      }
+
+      const yc = data.find(s => s.service === 'ycloud');
+      if (yc) {
+        setYcloudForm(prev => ({ ...prev, ...yc.settings }));
       }
     } catch (err) {
       console.error(err);
@@ -307,6 +318,26 @@ const ApiConfig = () => {
       }
       return;
     }
+
+    if (activeTab === 'ycloud') {
+      setSaving(true);
+      try {
+        const existing = settings.find(s => s.service === 'ycloud');
+        await dataService.saveApiSettings({
+          id: existing?.id,
+          service: 'ycloud',
+          settings: ycloudForm
+        });
+        alert("Configurações da YCloud salvas com sucesso!");
+        loadSettings();
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao salvar.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     
     setSaving(true);
     try {
@@ -384,6 +415,14 @@ const ApiConfig = () => {
             }`}
           >
             <Sparkles size={18} /> Google Gemini AI
+          </button>
+          <button
+            onClick={() => setActiveTab('ycloud')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${
+              activeTab === 'ycloud' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <MessageCircle size={18} /> YCloud (Oficial)
           </button>
         </div>
 
@@ -805,6 +844,69 @@ const ApiConfig = () => {
                     </div>
                   </a>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'ycloud' && (
+            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                  <MessageCircle size={24} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 uppercase tracking-tighter text-lg leading-none">WhatsApp API Oficial (YCloud)</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Configuração Exclusiva para Disparos em Lote e Ativação</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2 lg:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">YCloud API Key</label>
+                  <div className="relative">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="password"
+                      className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:italic"
+                      placeholder="Chave de API gerada na YCloud..."
+                      value={ycloudForm.apiKey}
+                      onChange={e => setYcloudForm({...ycloudForm, apiKey: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp Business Sender ID</label>
+                  <div className="relative">
+                    <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:italic"
+                      placeholder="ID do número (ex: 123456789)"
+                      value={ycloudForm.senderId}
+                      onChange={e => setYcloudForm({...ycloudForm, senderId: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Template Base</label>
+                  <div className="relative">
+                    <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:italic"
+                      placeholder="Ex: ativacao_cliente_v1"
+                      value={ycloudForm.templateName}
+                      onChange={e => setYcloudForm({...ycloudForm, templateName: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 p-4 bg-emerald-50 text-emerald-700 rounded-2xl text-[10px] border border-emerald-100 flex gap-4 items-center">
+                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shrink-0 border border-emerald-100">
+                   <ShieldCheck size={16} />
+                </div>
+                <p className="font-medium">Essa conexão utiliza a <b>API Oficial da Meta</b> garantindo zero banimentos. Será utilizada exclusivamente pelo robô de disparo em lote para ativar os leads usando o template especificado acima.</p>
               </div>
             </div>
           )}
