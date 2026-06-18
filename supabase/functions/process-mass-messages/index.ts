@@ -35,78 +35,98 @@ serve(async (req) => {
             return new Response(JSON.stringify({ message: `Limite diário de 50 mensagens atingido (${count}).` }), { status: 200 });
         }
 
-        // 3. Buscar 1 mensagem pendente
-        const { data: messages, error: msgError } = await supabase
+        // 3. Buscar mensagens pendentes e ordenar pela sequência de anos
+        const { data: pendingMsgs, error: msgError } = await supabase
             .from('mass_messages')
             .select('*')
             .eq('status', 'PENDING')
-            .order('created_at', { ascending: true })
-            .limit(1);
+            .limit(5000); // Pega lote grande para ordenar em memória
 
         if (msgError) throw msgError;
 
-        if (!messages || messages.length === 0) {
+        if (!pendingMsgs || pendingMsgs.length === 0) {
             return new Response(JSON.stringify({ message: "Fila vazia." }), { status: 200 });
         }
 
-        const msg = messages[0];
+        // Sequência exigida: 2020, 2021, 2022, 2023, 2024, 2015, 2016, 2017, 2018, 2019
+        const yearPriority: Record<string, number> = {
+            '2020': 1, '2021': 2, '2022': 3, '2023': 4, '2024': 5,
+            '2015': 6, '2016': 7, '2017': 8, '2018': 9, '2019': 10
+        };
 
-        // Formatar texto substituindo {nome}
+        pendingMsgs.sort((a, b) => {
+            const dateA = a.metadata && a.metadata['Última compra'] ? String(a.metadata['Última compra']).split('/').pop() || '9999' : '9999';
+            const dateB = b.metadata && b.metadata['Última compra'] ? String(b.metadata['Última compra']).split('/').pop() || '9999' : '9999';
+            
+            const priorityA = yearPriority[dateA] || 99;
+            const priorityB = yearPriority[dateB] || 99;
+            
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+            }
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+
+        const msg = pendingMsgs[0];
         const firstName = msg.name ? msg.name.trim().split(' ')[0] : 'Cliente';
-        const finalMessage = msg.message_template.replace(/\{\{?nome\}\}?/gi, firstName);
 
-        // 4. Buscar configuração da Evolution API
-        const { data: evoSettings } = await supabase
+        // 4. Buscar configuração da YCloud (Substituindo a antiga Evolution)
+        const { data: ycSettings } = await supabase
             .from('api_settings')
-            .select('settings')
-            .eq('service', 'evolution')
+            .select('*')
+            .eq('service', 'ycloud')
             .single();
 
-        const baseUrl = evoSettings?.settings?.baseUrl || "https://evolution-api-production-8ad2.up.railway.app";
-        const apiKey = evoSettings?.settings?.apiKey || "429683C4C977415CAAFCCE10F7D57E11";
-        const cleanUrl = baseUrl.replace(/\/$/, '');
+        if (!ycSettings || !ycSettings.settings || !ycSettings.settings.apiKey || !ycSettings.settings.templateName) {
+            return new Response(JSON.stringify({ error: "Configuração da YCloud ausente ou incompleta. Configure no painel." }), { status: 500 });
+        }
 
-        const { data: inst } = await supabase
-            .from('whatsapp_instances')
-            .select('instance_name')
-            .eq('is_active', true)
-            .limit(1);
-        const instanceName = inst?.[0]?.instance_name || "welelington";
+        const ycloudConfig = ycSettings.settings;
+        const ycloudUrl = "https://api.ycloud.com/v2/whatsapp/messages/sendDirectly";
 
-        // 5. Enviar para Evolution API com delay de digitação
-        const url = `${cleanUrl}/message/sendText/${instanceName}`;
-        const response = await fetch(url, {
+        let cleanPhone = msg.phone.replace(/\D/g, '');
+        if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+        cleanPhone = '+' + cleanPhone;
+
+        // 5. Enviar usando a API Oficial (YCloud)
+        const response = await fetch(ycloudUrl, {
             method: 'POST',
             headers: {
-                'apikey': apiKey,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-API-Key': ycloudConfig.apiKey
             },
             body: JSON.stringify({
-                number: msg.phone,
-                options: {
-                    delay: 4000,
-                    presence: 'composing'
-                },
-                text: finalMessage
+                from: ycloudConfig.senderId || undefined,
+                to: cleanPhone,
+                type: 'template',
+                template: {
+                    name: ycloudConfig.templateName,
+                    language: { code: 'pt_BR' },
+                    components: [
+                        {
+                            type: 'body',
+                            parameters: [
+                                { type: 'text', text: firstName }
+                            ]
+                        }
+                    ]
+                }
             })
         });
 
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
             let errorLog = response.statusText;
-            if (err?.response?.message?.[0]?.exists === false) {
-                errorLog = 'Número não possui WhatsApp registrado.';
-            } else if (err?.message || err?.error) {
+            if (err?.message || err?.error) {
                 errorLog = Array.isArray(err.message) ? err.message.join('; ') : (err.message || err.error);
             }
             
-            // Marcar como erro
             await supabase.from('mass_messages').update({
                 status: 'ERROR',
-                error_log: errorLog
+                error_log: `Erro YCloud: ${JSON.stringify(errorLog)}`
             }).eq('id', msg.id);
 
-            return new Response(JSON.stringify({ message: `Erro ao enviar: ${errorLog}` }), { status: 200 });
+            return new Response(JSON.stringify({ message: `Erro ao enviar via YCloud: ${errorLog}` }), { status: 200 });
         }
 
         // Sucesso
