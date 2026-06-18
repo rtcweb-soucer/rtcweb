@@ -114,19 +114,40 @@ async function processMassMessages() {
       return;
     }
 
-    // 4. Buscar a próxima mensagem pendente (apenas 1 por vez para não dar burst)
+    // 4. Buscar mensagens pendentes e ordenar pela sequência customizada de anos
     const { data: pendingMsgs } = await supabase
       .from('mass_messages')
       .select('*')
       .eq('status', 'PENDING')
-      .order('created_at', { ascending: true })
-      .limit(1);
+      .limit(5000); // Pega um lote grande para poder ordenar em memória
 
     if (!pendingMsgs || pendingMsgs.length === 0) {
       // Nada pendente
       isProcessing = false;
       return;
     }
+
+    // Sequência exigida: 2020, 2021, 2022, 2023, 2024, 2015, 2016, 2017, 2018, 2019
+    const yearPriority = {
+      '2020': 1, '2021': 2, '2022': 3, '2023': 4, '2024': 5,
+      '2015': 6, '2016': 7, '2017': 8, '2018': 9, '2019': 10
+    };
+
+    pendingMsgs.sort((a, b) => {
+      // Extrair o ano da última compra (formato dd/mm/yyyy no metadata)
+      const dateA = a.metadata && a.metadata['Última compra'] ? String(a.metadata['Última compra']).split('/').pop() : '9999';
+      const dateB = b.metadata && b.metadata['Última compra'] ? String(b.metadata['Última compra']).split('/').pop() : '9999';
+      
+      const priorityA = yearPriority[dateA] || 99; // 99 para anos que não estão na lista prioritária
+      const priorityB = yearPriority[dateB] || 99;
+      
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      
+      // Desempate: data de criação da mensagem na fila
+      return new Date(a.created_at) - new Date(b.created_at);
+    });
 
     const msg = pendingMsgs[0];
     
@@ -148,7 +169,7 @@ async function processMassMessages() {
           // Disparo via YCloud (API Oficial)
           console.log(`🚀 Usando YCloud API (Oficial) com template: ${ycloudConfig.templateName}`);
           
-          const ycloudUrl = `https://api.ycloud.com/v2/whatsapp/messages/send`;
+          const ycloudUrl = `https://api.ycloud.com/v2/whatsapp/messages/sendDirectly`;
           
           // Formata o número (remover + e garantir DDI)
           let cleanPhone = msg.phone.replace(/\D/g, '');
