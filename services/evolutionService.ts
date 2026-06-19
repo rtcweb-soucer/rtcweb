@@ -38,6 +38,92 @@ async function getDefaultConfig(): Promise<{ baseUrl: string; apiKey: string; in
 }
 
 /**
+ * Busca a configuração baseando-se em um nome de instância específico.
+ */
+async function getConfigByInstanceName(instanceName: string): Promise<{ baseUrl: string; apiKey: string; instanceName: string } | null> {
+  try {
+    const { data: evolutionApi } = await supabase
+      .from('api_settings')
+      .select('*')
+      .eq('service', 'evolution')
+      .maybeSingle();
+
+    const settings = evolutionApi?.settings || {};
+    if (!settings.baseUrl || !settings.apiKey) return null;
+
+    let apiKey = settings.apiKey;
+    
+    // Tenta encontrar a instância específica no banco para pegar uma apikey customizada se existir
+    const { data: instances } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .ilike('instance_name', instanceName)
+      .maybeSingle();
+
+    if (instances && instances.apikey) {
+      apiKey = instances.apikey;
+    }
+
+    return {
+      baseUrl: settings.baseUrl as string,
+      apiKey: apiKey as string,
+      instanceName: instances ? (instances.instance_name as string) : instanceName,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Busca a configuração baseando-se no ID do vendedor (vinculado a um SystemUser).
+ */
+async function getConfigBySellerId(sellerId: string): Promise<{ baseUrl: string; apiKey: string; instanceName: string } | null> {
+  try {
+    const { data: evolutionApi } = await supabase
+      .from('api_settings')
+      .select('*')
+      .eq('service', 'evolution')
+      .maybeSingle();
+
+    const settings = evolutionApi?.settings || {};
+    if (!settings.baseUrl || !settings.apiKey) return null;
+
+    let apiKey = settings.apiKey;
+    
+    // Encontrar o system_user que tem este sellerId
+    const { data: systemUsers } = await supabase
+      .from('system_users')
+      .select('id')
+      .eq('sellerId', sellerId)
+      .maybeSingle();
+      
+    if (systemUsers?.id) {
+       // Tenta encontrar a instância específica no banco vinculada a este usuário
+       const { data: instances } = await supabase
+         .from('whatsapp_instances')
+         .select('*')
+         .eq('user_id', systemUsers.id)
+         .maybeSingle();
+
+       if (instances) {
+         if (instances.apikey) {
+           apiKey = instances.apikey;
+         }
+         return {
+           baseUrl: settings.baseUrl as string,
+           apiKey: apiKey as string,
+           instanceName: instances.instance_name as string,
+         };
+       }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Limpa o número e garante o prefixo 55 se necessário.
  */
 function prepareNumber(number: string): string {
@@ -262,6 +348,30 @@ export const evolutionService = {
     if (!config) {
       console.warn('⚠️ evolutionService.sendMessageAuto: Nenhuma configuração de Evolution API encontrada.');
       return null;
+    }
+    return this.sendMessage(config.baseUrl, config.apiKey, config.instanceName, number, text);
+  },
+
+  /**
+   * Envia mensagem de texto tentando usar uma instância específica (baseada no nome do vendedor).
+   */
+  async sendMessageAutoByInstance(number: string, text: string, instanceName: string): Promise<any> {
+    const config = await getConfigByInstanceName(instanceName);
+    if (!config) {
+      console.warn(`⚠️ evolutionService.sendMessageAutoByInstance: Instância '${instanceName}' não encontrada ou sem configuração base. Fallback para padrão.`);
+      return this.sendMessageAuto(number, text); // fallback para default
+    }
+    return this.sendMessage(config.baseUrl, config.apiKey, config.instanceName, number, text);
+  },
+
+  /**
+   * Envia mensagem de texto tentando usar uma instância específica vinculada ao ID do Vendedor.
+   */
+  async sendMessageAutoBySellerId(number: string, text: string, sellerId: string): Promise<any> {
+    const config = await getConfigBySellerId(sellerId);
+    if (!config) {
+      console.warn(`⚠️ evolutionService.sendMessageAutoBySellerId: Instância para vendedor '${sellerId}' não encontrada. Fallback para padrão.`);
+      return this.sendMessageAuto(number, text); // fallback para default
     }
     return this.sendMessage(config.baseUrl, config.apiKey, config.instanceName, number, text);
   }

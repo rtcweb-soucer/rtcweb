@@ -86,6 +86,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
     installments: number;
     scarcityDate: string;
     message: string;
+    sellerId?: string;
   } | null>(null);
 
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
@@ -452,7 +453,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
 
   
   
-  const handleOpenMessageModal = (type: 'promo' | 'tranquil', phone?: string, name?: string, quoteId?: string, quoteValue?: number) => {
+  const handleOpenMessageModal = (type: 'promo' | 'tranquil', phone?: string, name?: string, quoteId?: string, quoteValue?: number, sellerId?: string) => {
     if (!phone) {
       alert('Cliente sem telefone cadastrado.');
       return;
@@ -486,7 +487,8 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
       paymentMethod,
       installments,
       scarcityDate,
-      message: msg
+      message: msg,
+      sellerId
     });
   };
 
@@ -519,7 +521,11 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
   const handleSendCustomWhatsApp = async () => {
     if (!whatsappMessageModal) return;
     try {
-      await evolutionService.sendMessageAuto(whatsappMessageModal.phone, whatsappMessageModal.message);
+      if (whatsappMessageModal.sellerId) {
+        await evolutionService.sendMessageAutoBySellerId(whatsappMessageModal.phone, whatsappMessageModal.message, whatsappMessageModal.sellerId);
+      } else {
+        await evolutionService.sendMessageAuto(whatsappMessageModal.phone, whatsappMessageModal.message);
+      }
       alert('Mensagem enviada com sucesso!');
       setWhatsappMessageModal(null);
     } catch (err: any) {
@@ -623,10 +629,10 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
                              </button>
                              {sellerMode && (
                                <>
-                                 <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
+                                 <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue, seller?.id)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
                                    <Flame size={16} />
                                  </button>
-                                 <button onClick={() => handleOpenMessageModal('tranquil', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Tranquila (Acompanhamento)'}>
+                                 <button onClick={() => handleOpenMessageModal('tranquil', customer?.phone, customer?.name, quote.id, quote.totalValue, seller?.id)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Tranquila (Acompanhamento)'}>
                                    <MessageCircle size={16} />
                                  </button>
                                  {customer?.phone && (
@@ -726,10 +732,10 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
                              </button>
                              {sellerMode && (
                                <>
-                                 <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
+                                 <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue, seller?.id)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
                                    <Flame size={16} />
                                  </button>
-                                 <button onClick={() => handleOpenMessageModal('tranquil', customer?.phone, customer?.name, quote.id, quote.totalValue)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Tranquila (Acompanhamento)'}>
+                                 <button onClick={() => handleOpenMessageModal('tranquil', customer?.phone, customer?.name, quote.id, quote.totalValue, seller?.id)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Tranquila (Acompanhamento)'}>
                                    <MessageCircle size={16} />
                                  </button>
                                  {customer?.phone && (
