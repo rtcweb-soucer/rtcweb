@@ -110,6 +110,11 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
   const [historyMessages, setHistoryMessages] = useState<any[]>([]);
   const [activeHistoryQuote, setActiveHistoryQuote] = useState<Order | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const [isActionHistoryModalOpen, setIsActionHistoryModalOpen] = useState(false);
+  const [actionHistoryMessages, setActionHistoryMessages] = useState<any[]>([]);
+  const [activeActionHistoryQuote, setActiveActionHistoryQuote] = useState<Order | null>(null);
+  const [isLoadingActionHistory, setIsLoadingActionHistory] = useState(false);
   
   // Polling para ler mensagens do banco
   useEffect(() => {
@@ -526,10 +531,40 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
       } else {
         await evolutionService.sendMessageAuto(whatsappMessageModal.phone, whatsappMessageModal.message);
       }
+
+      await supabase.from('ia_dispatches').insert({
+        quote_id: whatsappMessageModal.quoteId,
+        customer_name: whatsappMessageModal.name,
+        phone: whatsappMessageModal.phone,
+        type: whatsappMessageModal.type,
+        seller_id: whatsappMessageModal.sellerId,
+        message: whatsappMessageModal.message
+      });
+
       alert('Mensagem enviada com sucesso!');
       setWhatsappMessageModal(null);
     } catch (err: any) {
       alert(`Erro ao enviar mensagem: ${err.message}`);
+    }
+  };
+
+  const handleOpenActionHistory = async (quote: Order) => {
+    setActiveActionHistoryQuote(quote);
+    setIsActionHistoryModalOpen(true);
+    setIsLoadingActionHistory(true);
+    try {
+      const { data } = await supabase
+        .from('ia_dispatches')
+        .select('*')
+        .eq('quote_id', quote.id)
+        .order('created_at', { ascending: false });
+      
+      setActionHistoryMessages(data || []);
+    } catch (e) {
+      console.error(e);
+      setActionHistoryMessages([]);
+    } finally {
+      setIsLoadingActionHistory(false);
     }
   };
 
@@ -626,6 +661,9 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
                              </button>
                              <button onClick={() => handleOpenHistory(quote, customer?.phone)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all inline-flex" title="Histórico de Conversas">
                                <History size={16} />
+                             </button>
+                             <button onClick={() => handleOpenActionHistory(quote)} className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all inline-flex" title="Histórico de Disparos IA">
+                               <Target size={16} />
                              </button>
                              {sellerMode && (
                                <>
@@ -730,6 +768,9 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
                              <button onClick={() => handleOpenHistory(quote, customer?.phone)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all inline-flex" title="Histórico de Conversas">
                                <History size={16} />
                              </button>
+                             <button onClick={() => handleOpenActionHistory(quote)} className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all inline-flex" title="Histórico de Disparos IA">
+                               <Target size={16} />
+                             </button>
                              {sellerMode && (
                                <>
                                  <button onClick={() => handleOpenMessageModal('promo', customer?.phone, customer?.name, quote.id, quote.totalValue, seller?.id)} disabled={customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out} className={`p-2 rounded-xl transition-all inline-flex ${(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'}`} title={(customerPrefs[customer?.phone?.replace(/\D/g, '')]?.opt_out || customerPrefs['55'+customer?.phone?.replace(/\D/g, '')]?.opt_out) ? 'Bloqueado: Cliente pediu para não receber mensagens' : 'Ação Agressiva (Promoção e Escassez)'}>
@@ -792,6 +833,57 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
 
   const renderModals = () => (
     <>
+
+      {isActionHistoryModalOpen && activeActionHistoryQuote && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col h-[80vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <Target size={18} className="text-indigo-600" />
+                  Histórico de Disparos IA
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Orçamento #{activeActionHistoryQuote.number || activeActionHistoryQuote.id.substring(0,8)}</p>
+              </div>
+              <button 
+                onClick={() => setIsActionHistoryModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 bg-[#f8fafc] flex flex-col gap-3">
+              {isLoadingActionHistory ? (
+                <div className="flex justify-center items-center h-full">
+                  <Timer size={24} className="animate-spin text-indigo-600" />
+                </div>
+              ) : actionHistoryMessages.length === 0 ? (
+                <div className="flex justify-center items-center h-full text-slate-500 bg-white/50 py-2 px-4 rounded-xl self-center text-sm shadow-sm">
+                  Nenhum disparo registrado para este orçamento.
+                </div>
+              ) : (
+                actionHistoryMessages.map((msg, idx) => (
+                  <div key={idx} className="flex justify-start">
+                    <div className={`max-w-[90%] rounded-2xl px-4 py-3 shadow-sm relative border ${msg.type === 'promo' ? 'bg-amber-50/50 border-amber-200' : 'bg-emerald-50/50 border-emerald-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {msg.type === 'promo' ? <Flame size={14} className="text-amber-500" /> : <MessageCircle size={14} className="text-emerald-500" />}
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${msg.type === 'promo' ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {msg.type === 'promo' ? 'Ação Agressiva' : 'Ação Tranquila'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 ml-auto">
+                          {new Date(msg.created_at).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap text-slate-700">{msg.message}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isHistoryModalOpen && activeHistoryQuote && (
         <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
