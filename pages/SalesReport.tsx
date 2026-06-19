@@ -1134,11 +1134,11 @@ const SalesReport = ({ orders, sellers, products, customers, technicalSheets, on
                                             <input 
                                                 type="date"
                                                 value={editingPaymentDate.currentDate}
-                                                onChange={(e) => setEditingPaymentDate({ ...editingPaymentDate, currentDate: e.target.value })}
+                                                onChange={(e) => setEditingPaymentDate(editingPaymentDate ? { ...editingPaymentDate, currentDate: e.target.value } : null)}
                                                 className="px-1 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] outline-none focus:ring-1 focus:ring-blue-500"
                                             />
                                             <button 
-                                                onClick={() => handleUpdatePaymentDate(row.orderId, row.installmentId, editingPaymentDate.currentDate)}
+                                                onClick={() => editingPaymentDate && handleUpdatePaymentDate(row.orderId, row.installmentId, editingPaymentDate.currentDate)}
                                                 className="p-1 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200"
                                                 title="Confirmar"
                                             >
