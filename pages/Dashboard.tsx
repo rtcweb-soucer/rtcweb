@@ -104,45 +104,7 @@ const Dashboard = ({ orders, appointments, products, technicalSheets, transactio
         </div>
       </div>
 
-      {/* Financial Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
-              <ArrowUpRight size={24} />
-            </div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Realizado</span>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total de Entradas</p>
-          <p className="text-2xl font-black mt-2 text-emerald-600">
-            R$ {stats.financial.income.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-rose-50 rounded-xl text-rose-600">
-              <ArrowDownRight size={24} />
-            </div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Realizado</span>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Total de Saídas</p>
-          <p className="text-2xl font-black mt-2 text-rose-600">
-            R$ {stats.financial.expense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-slate-900 p-6 rounded-2xl shadow-xl shadow-slate-200 transition-all hover:translate-y-[-2px]">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-white/10 rounded-xl text-white">
-              <TrendingUp size={24} />
-            </div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Atual</span>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Balanço em Caixa</p>
-          <p className="text-2xl font-black mt-2 text-white">
-            R$ {stats.financial.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-      </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
