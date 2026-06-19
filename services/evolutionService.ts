@@ -90,11 +90,11 @@ async function getConfigBySellerId(sellerId: string): Promise<{ baseUrl: string;
 
     let apiKey = settings.apiKey;
     
-    // Encontrar o system_user que tem este sellerId
+    // Encontrar o system_user que tem este seller_id
     const { data: systemUsers } = await supabase
       .from('system_users')
       .select('id')
-      .eq('sellerId', sellerId)
+      .eq('seller_id', sellerId)
       .maybeSingle();
       
     if (systemUsers?.id) {
@@ -281,6 +281,10 @@ export const evolutionService = {
         },
         body: JSON.stringify({
           number: cleanNumber,
+          options: {
+            delay: 1200,
+            presence: 'composing'
+          },
           text: text
         })
       });
