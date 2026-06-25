@@ -77,6 +77,7 @@ export interface Product {
   detalhamento_tecnico?: string;
   dias_garantia: number;
   priceFormula?: string; // New: Custom formula for price calculation
+  productionDetailingId?: string; // New: Vincula o produto a um detalhamento de produção
 }
 
 export interface Customer {
@@ -105,6 +106,32 @@ export interface Customer {
   legacyHistory?: string;
   createdAt?: string | Date;
   createdBy?: string; // New: To track registration ownership
+}
+
+export interface ProductionDetailingCutFormula {
+  id: string;
+  name: string;
+  type: 'MEASURE' | 'UNIT';
+  formula?: string;
+  quantity?: number;
+}
+
+export interface ProductionDetailingRule {
+  id: string;
+  detailingId: string;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  components: string;
+  cutFormulas?: ProductionDetailingCutFormula[];
+}
+
+export interface ProductionDetailing {
+  id: string;
+  name: string;
+  type: string;
+  rules: ProductionDetailingRule[];
 }
 
 // Interfaces para campos específicos por tipo de produto

@@ -70,6 +70,7 @@ const App = () => {
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>([]);
   const [accountCategories, setAccountCategories] = useState<AccountCategory[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [productionDetailings, setProductionDetailings] = useState<any[]>([]); // New State
   const [systemSettings, setSystemSettings] = useState<{ id: string, key: string, value: string }[]>([]);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalSheet | null>(null);
@@ -93,7 +94,7 @@ const App = () => {
     if (isAuto) setIsSyncing(true);
 
     try {
-      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings, dbTimeEntries, dbRawMaterials] = await Promise.all([
+      const [dbSellers, dbCustomers, dbProducts, dbAppointments, dbOrders, dbUsers, dbTechnicalSheets, dbBlockedSlots, dbInstallers, dbFinancialTransactions, dbAccountCategories, dbSystemSettings, dbTimeEntries, dbRawMaterials, dbProductionDetailings] = await Promise.all([
         dataService.getSellers(),
         dataService.getCustomers(),
         dataService.getProducts(),
@@ -107,7 +108,8 @@ const App = () => {
         dataService.getAccountCategories(),
         dataService.getSystemSettings(),
         dataService.getTimeEntries(),
-        dataService.getRawMaterials()
+        dataService.getRawMaterials(),
+        dataService.getProductionDetailings()
       ]);
 
       setSellers(dbSellers);
@@ -124,6 +126,7 @@ const App = () => {
       setAccountCategories(dbAccountCategories);
       setSystemSettings(dbSystemSettings);
       setRawMaterials(dbRawMaterials);
+      setProductionDetailings(dbProductionDetailings);
       setLastSync(new Date());
 
       // Se ainda não houver usuários (primeiro acesso), criar o MASTER
@@ -660,7 +663,7 @@ const App = () => {
           currentUser={currentUser!}
         />;
       case 'products':
-        return <Products products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />;
+        return <Products products={products} productionDetailings={productionDetailings} setProductionDetailings={setProductionDetailings} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />;
       case 'schedule':
       case 'my-schedule':
         return <Schedule

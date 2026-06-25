@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task, TimeEntry, Rework, ApiSettings, RawMaterial, RawMaterialMovement, RawMaterialMapping } from '../types';
+import { Product, Customer, Seller, Appointment, Order, TechnicalSheet, SystemUser, ProductionTracking, Expense, ProductionInstallationSheet, SellerBlockedSlot, Installer, AccountCategory, FinancialTransaction, PurchaseRequest, PurchaseOrder, Task, TimeEntry, Rework, ApiSettings, RawMaterial, RawMaterialMovement, RawMaterialMapping, ProductionDetailing, ProductionDetailingRule } from '../types';
 
 const SYNC_QUEUE_KEY = 'rtc_sync_queue';
 
@@ -62,7 +62,8 @@ export const dataService = {
             localStorage.setItem('rtc_cache_products', JSON.stringify(data));
             return (data || []).map(p => ({
                 ...p,
-                priceFormula: p.price_formula
+                priceFormula: p.price_formula,
+                productionDetailingId: p.production_detailing_id
             })) as Product[];
         } catch (error) {
             console.error('Offline Mode: Usando cache de produtos local');
@@ -74,10 +75,12 @@ export const dataService = {
     async saveProduct(product: Product) {
         const payload = {
             ...product,
-            price_formula: product.priceFormula
+            price_formula: product.priceFormula,
+            production_detailing_id: product.productionDetailingId || null
         };
         // Remove camelCase version to avoid errors with Supabase
         delete (payload as any).priceFormula;
+        delete (payload as any).productionDetailingId;
 
         const { data, error } = await supabase.from('products').upsert(payload).select().single();
         if (error) throw error;
@@ -85,6 +88,73 @@ export const dataService = {
     },
     async deleteProduct(id: string) {
         const { error } = await supabase.from('products').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    // Production Detailings
+    async getProductionDetailings() {
+        const { data, error } = await supabase.from('production_detailings').select(`
+            *,
+            rules:production_detailing_rules(*)
+        `);
+        if (error) {
+            console.warn("Table production_detailings might not exist yet:", error);
+            return [];
+        }
+        return (data || []).map(d => ({
+            ...d,
+            rules: (d.rules || []).map((r: any) => ({
+                ...r,
+                detailingId: r.detailing_id,
+                minWidth: r.min_width,
+                maxWidth: r.max_width,
+                minHeight: r.min_height,
+                maxHeight: r.max_height,
+                components: r.components,
+                cutFormulas: r.cut_formulas || []
+            }))
+        })) as ProductionDetailing[];
+    },
+
+    async saveProductionDetailing(detailing: ProductionDetailing) {
+        const { rules, ...detailingData } = detailing;
+        const payload = {
+            id: detailingData.id,
+            name: detailingData.name,
+            type: detailingData.type
+        };
+
+        const { data, error } = await supabase.from('production_detailings').upsert(payload).select().single();
+        if (error) throw error;
+
+        if (rules && rules.length > 0) {
+            const rulesToSave = rules.map(rule => ({
+                id: rule.id,
+                detailing_id: data.id,
+                min_width: rule.minWidth,
+                max_width: rule.maxWidth,
+                min_height: rule.minHeight,
+                max_height: rule.maxHeight,
+                components: rule.components,
+                cut_formulas: rule.cutFormulas || []
+            }));
+            const { error: rulesError } = await supabase.from('production_detailing_rules').upsert(rulesToSave);
+            if (rulesError) throw rulesError;
+        }
+
+        return {
+            ...data,
+            rules: rules || []
+        } as ProductionDetailing;
+    },
+
+    async deleteProductionDetailing(id: string) {
+        const { error } = await supabase.from('production_detailings').delete().eq('id', id);
+        if (error) throw error;
+    },
+    
+    async deleteProductionDetailingRule(id: string) {
+        const { error } = await supabase.from('production_detailing_rules').delete().eq('id', id);
         if (error) throw error;
     },
 

@@ -5,6 +5,7 @@ import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product, S
 import { formatBusinessDate } from '../utils/dateUtils';
 import { dataService } from '../services/dataService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
+import { LabelPrintModal } from '../components/LabelPrintModal';
 import {
   Package,
   Clock,
@@ -73,6 +74,10 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
+
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [labelOrder, setLabelOrder] = useState<Order | null>(null);
+  const [labelPrintData, setLabelPrintData] = useState<any>(null);
 
   // Módulo de Compras (Requisição de Material)
   const [showRequestMaterialModal, setShowRequestMaterialModal] = useState(false);
@@ -350,6 +355,18 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
     }
   };
 
+  const handlePrintLabel = async (order: Order) => {
+    try {
+      const data = await dataService.getOrderProductionData(order.id);
+      setLabelPrintData(data);
+      setLabelOrder(order);
+      setShowLabelModal(true);
+    } catch (error) {
+      console.error('Error loading production data for label:', error);
+      alert('Erro ao carregar dados para etiqueta: ' + (error as Error).message);
+    }
+  };
+
   const handlePrint = () => {
     if (printRef.current) {
       const htmlContent = printRef.current.innerHTML;
@@ -587,6 +604,17 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
                           </div>
                         )}
 
+                        {stage.id === ProductionStage.PREPARATION && (
+                          <div className="mb-4">
+                            <button
+                              onClick={() => handlePrintLabel(order)}
+                              className={`w-full flex justify-center items-center gap-2 py-2 ${deadlineStatus.isDark ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-indigo-600 text-white hover:bg-indigo-700'} font-bold rounded-xl transition-colors border border-transparent text-[10px] uppercase shadow-md`}
+                            >
+                              <Printer size={14} /> Imprimir Etiqueta (Cortes)
+                            </button>
+                          </div>
+                        )}
+
                         {/* Controles de Movimentação (Forward/Encaminhar) */}
                         <div className={`flex items-center gap-2 mt-4 pt-4 border-t ${deadlineStatus.isDark ? 'border-white/20' : 'border-slate-900/10'}`}>
                           <button
@@ -664,6 +692,15 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
             </div>
           </div>
         </div>
+      )}
+
+      {showLabelModal && labelOrder && labelPrintData && (
+        <LabelPrintModal
+          order={labelOrder}
+          printData={labelPrintData}
+          products={products}
+          onClose={() => setShowLabelModal(false)}
+        />
       )}
 
       {/* Modal de Solicitar Material */}
