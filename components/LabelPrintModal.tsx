@@ -119,7 +119,7 @@ export const LabelPrintModal = ({ order, printData, products, onClose }: LabelPr
           });
 
           labels.push({
-            id: \`\${item.id}-\${i}\`,
+            id: `${item.id}-${i}`,
             customerName: printData?.customer?.name || 'Cliente',
             orderNumber: order.contractNumber || order.quoteNumber || order.id.substring(0, 8),
             productName: product.nome,
