@@ -690,6 +690,8 @@ const App = () => {
           onGenerateQuote={handleGenerateQuote}
           onEditSheet={handleEditSheet}
           onDeleteSheet={handleDeleteTechnicalSheet}
+          onAddCustomer={handleAddCustomer}
+          orders={viewOrders}
         />;
       case 'quotes':
         return <Quotes

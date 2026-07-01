@@ -171,8 +171,33 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
       )
       .subscribe();
 
+    // Setup Realtime para MENSAGENS (atualiza last_contact para forçar reordenação)
+    const globalMessagesChannel = supabase
+      .channel('crm-messages-global')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'api_messages' },
+        async (payload) => {
+           const newMsg = payload.new;
+           if (newMsg && newMsg.phone) {
+               try {
+                   const cleanPhone = newMsg.phone.replace(/\D/g, '');
+                   // Find the lead and update last_contact to trigger re-render and sort
+                   const { data: leads } = await supabase.from('crm_leads').select('id').ilike('phone', `%${cleanPhone}%`).limit(1);
+                   if (leads && leads.length > 0) {
+                       await supabase.from('crm_leads').update({ last_contact: new Date().toISOString() }).eq('id', leads[0].id);
+                   }
+               } catch(e) {
+                   console.error('Error updating lead last_contact on new message:', e);
+               }
+           }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(globalMessagesChannel);
     };
   }, []);
 
@@ -220,9 +245,10 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
     try {
       const data = await dataService.getWhatsappInstances();
       
-      // Filtrar instâncias se não for ADMIN
+      // Filtrar instâncias se não for ADMIN e também filtrar para exibir apenas 'welington' e 'aline01' no CRM
+      const allowedInstances = data.filter(inst => inst.instance_name === 'welington' || inst.instance_name === 'aline01');
       const isAdmin = currentUser.role === 'ADMIN';
-      const availableInstances = isAdmin ? data : data.filter(inst => inst.user_id === currentUser.id);
+      const availableInstances = isAdmin ? allowedInstances : allowedInstances.filter(inst => inst.user_id === currentUser.id);
       
       setInstances(availableInstances);
       

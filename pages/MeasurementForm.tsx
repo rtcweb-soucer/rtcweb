@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura } from '../types';
+import { Customer, TechnicalSheet, MeasurementItem, Product, ProductionInstallationSheet, ProductionSheetCortina, ProductionSheetToldo, ProductionSheetCobertura, Order } from '../types';
 import { Ruler, Sparkles, Plus, Search, Trash2, Save, FileText, Clock, MapPin, Phone, User, Building2, Package, CheckCircle2, CheckSquare, Square, Palette, Link as LinkIcon, CornerDownRight, X, Wrench, Edit3, ArrowUp, ArrowDown, Copy, Scissors } from 'lucide-react';
 import { getProductionInsights } from '../services/geminiService';
 import { dataService } from '../services/dataService';
@@ -12,7 +12,8 @@ import SearchableCustomerSelect from '../components/SearchableCustomerSelect';
 import ThreeDecimalInput from '../components/ThreeDecimalInput';
 import { CORTINA_COMMAND_OPTIONS, TOLDO_COMMAND_OPTIONS } from '../constants';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
-import { Printer } from 'lucide-react';
+import CustomerModal from '../components/CustomerModal';
+import { Printer, FilePlus2 } from 'lucide-react';
 
 interface MeasurementFormProps {
   customers: Customer[];
@@ -25,6 +26,8 @@ interface MeasurementFormProps {
   onGenerateQuote: (sheet: TechnicalSheet, selectedItemIds?: string[]) => void;
   onEditSheet?: (sheet: TechnicalSheet) => void;
   onDeleteSheet?: (id: string) => void;
+  onAddCustomer?: (c: Customer) => void;
+  orders?: Order[];
 }
 
 // Componente de Busca Customizado para Produtos
@@ -111,10 +114,22 @@ const MeasurementForm = ({
   onSave,
   onGenerateQuote,
   onEditSheet,
-  onDeleteSheet
+  onDeleteSheet,
+  onAddCustomer,
+  orders = []
 }: MeasurementFormProps) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId || '');
   const [items, setItems] = useState<MeasurementItem[]>([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+
+  const handleNewSheet = () => {
+    setSelectedCustomerId('');
+    setItems([]);
+    setSelectedItemIds(new Set());
+    setHistorySelectedItems({});
+    setCurrentSheetId(null);
+    setAiInsights(null);
+  };
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [aiInsights, setAiInsights] = useState<any>(null);
   const [loadingAi, setLoadingAi] = useState(false);
@@ -140,6 +155,10 @@ const MeasurementForm = ({
       setItems([...editingSheet.items]);
       setSelectedItemIds(new Set(editingSheet.items.map((i: MeasurementItem) => i.id)));
       setCurrentSheetId(editingSheet.id);
+      
+      setTimeout(() => {
+        document.getElementById('active-form-items')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
     } else if (initialCustomerId) {
       setSelectedCustomerId(initialCustomerId);
       setCurrentSheetId(null);
@@ -725,15 +744,33 @@ const MeasurementForm = ({
               <p className="text-slate-500 text-xs">{editingSheet ? `ID: ${editingSheet.id}` : 'Crie fichas técnicas detalhadas.'}</p>
             </div>
           </div>
-          {editingSheet && (
-            <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-lg text-[10px] font-black uppercase tracking-widest">Modo Edição</span>
-          )}
+          <div className="flex items-center gap-3">
+            {editingSheet && (
+              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-lg text-[10px] font-black uppercase tracking-widest">Modo Edição</span>
+            )}
+            <button
+              onClick={handleNewSheet}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold text-xs transition-colors shadow-sm"
+            >
+              <FilePlus2 size={16} /> Nova Ficha
+            </button>
+          </div>
         </div>
 
         <div className="mb-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Cliente *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cliente *</label>
+                {onAddCustomer && (
+                  <button
+                    onClick={() => setShowCustomerModal(true)}
+                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-0.5 rounded transition-colors"
+                  >
+                    <Plus size={12} /> Novo Cliente
+                  </button>
+                )}
+              </div>
               <SearchableCustomerSelect
                 value={selectedCustomerId}
                 onChange={setSelectedCustomerId}
@@ -783,20 +820,43 @@ const MeasurementForm = ({
                   <div key={sheet.id} className="bg-slate-50/30 border border-slate-200 rounded-3xl p-6 transition-all shadow-sm">
                     <div className="flex items-center justify-between sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm -mx-6 px-6 py-4 border-b border-slate-100 mb-6 rounded-t-3xl shadow-sm">
                       <div className="flex items-center gap-4">
-                        <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
-                          <Clock size={20} className="text-blue-500" />
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <Clock size={20} className="text-blue-500" />
+                          </div>
+                          <button
+                            onClick={() => onEditSheet?.(sheet)}
+                            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl font-bold text-[10px] ring-1 ring-blue-100 hover:bg-blue-100 transition-all shadow-sm w-full"
+                            title="Editar esta ficha"
+                          >
+                            <Edit3 size={12} /> Editar
+                          </button>
+                          <button
+                            onClick={() => onDeleteSheet?.(sheet.id)}
+                            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl font-bold text-[10px] ring-1 ring-rose-100 hover:bg-rose-100 transition-all shadow-sm w-full"
+                            title="Excluir ficha completa"
+                          >
+                            <Trash2 size={12} /> Excluir
+                          </button>
                         </div>
                         <div>
                           <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Medição Realizada em</p>
                           <h5 className="font-black text-slate-800 text-lg">
                             {new Date(sheet.createdAt).toLocaleDateString('pt-BR')} às {new Date(sheet.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </h5>
-                          <p className="text-[9px] font-bold text-slate-400 mt-0.5">ID da Ficha: {sheet.id}</p>
+                          <div className="flex flex-col gap-0.5 mt-0.5">
+                            <p className="text-[9px] font-bold text-slate-400">ID da Ficha: {sheet.id}</p>
+                            {orders.filter(o => o.technicalSheetId === sheet.id || o.itemIds?.some(itemId => sheet.items.find(si => si.id === itemId))).map(o => (
+                              <p key={o.id} className="text-[9px] font-bold text-indigo-500">
+                                Vinculado a: {o.contractNumber || o.quoteNumber || `Pedido #${o.id.slice(0, 6)}`}
+                              </p>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
                       {/* Opcional: mantemos esse botão mas ele avisa sobre a global ou funciona apenas para esse sheet */}
-                        <div className="flex items-center gap-2">
+                        <div className="hidden md:flex items-center gap-2">
                           <button
                             onClick={() => handlePrintSelectedFromHistory(sheet)}
                             disabled={isPrintingHistory === sheet.id}
@@ -805,20 +865,6 @@ const MeasurementForm = ({
                           >
                             <Printer size={14} className={isPrintingHistory === sheet.id ? 'animate-spin' : ''} /> 
                             {isPrintingHistory === sheet.id ? 'Carregando...' : `Imprimir Ficha (${historySelectedItems[sheet.id]?.size || 0})`}
-                          </button>
-                          <button
-                            onClick={() => onEditSheet?.(sheet)}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs ring-1 ring-blue-100 hover:bg-blue-100 transition-all shadow-sm"
-                            title="Editar esta ficha"
-                          >
-                            <Edit3 size={14} /> Editar
-                          </button>
-                          <button
-                            onClick={() => onDeleteSheet?.(sheet.id)}
-                            className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-xs ring-1 ring-rose-100 hover:bg-rose-100 transition-all shadow-sm"
-                            title="Excluir ficha completa"
-                          >
-                            <Trash2 size={14} /> Excluir
                           </button>
                           <button
                             onClick={() => handleGenerateQuoteFromHistory(sheet)}
@@ -923,6 +969,24 @@ const MeasurementForm = ({
                         );
                       })}
                     </div>
+
+                    {/* Botões Mobile dentro do card */}
+                    <div className="flex md:hidden flex-col gap-2 mt-6 pt-6 border-t border-slate-100">
+                      <button
+                        onClick={() => handlePrintSelectedFromHistory(sheet)}
+                        disabled={isPrintingHistory === sheet.id}
+                        className={`flex justify-center items-center gap-2 px-4 py-3 rounded-xl font-bold text-xs transition-all ring-1 ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-indigo-50 text-indigo-600 ring-indigo-200 hover:bg-indigo-100' : 'bg-slate-50 text-slate-400 ring-slate-100 cursor-not-allowed'} ${isPrintingHistory === sheet.id ? 'animate-pulse opacity-70' : ''}`}
+                      >
+                        <Printer size={14} className={isPrintingHistory === sheet.id ? 'animate-spin' : ''} /> 
+                        {isPrintingHistory === sheet.id ? 'Carregando...' : `Imprimir Ficha (${historySelectedItems[sheet.id]?.size || 0})`}
+                      </button>
+                      <button
+                        onClick={() => handleGenerateQuoteFromHistory(sheet)}
+                        className={`flex justify-center items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs transition-all active:scale-[0.98] shadow-lg ${(historySelectedItems[sheet.id]?.size || 0) > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed uppercase tracking-widest'}`}
+                      >
+                        <FileText size={16} /> Gerar Orçamento destes ({historySelectedItems[sheet.id]?.size || 0})
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -930,10 +994,10 @@ const MeasurementForm = ({
           )}
         </div>
 
-        <div className="space-y-4">
+        <div id="active-form-items" className="space-y-4 scroll-mt-24">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-              Itens da Ficha Técnica (Novos)
+              Itens da Ficha Técnica ({editingSheet ? 'Edição' : 'Novos'})
               <span className="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded-full">{items.length}</span>
             </h3>
             <button
@@ -1543,6 +1607,17 @@ const MeasurementForm = ({
             </div>
           </div>
         </div>
+      )}
+      {onAddCustomer && (
+        <CustomerModal
+          isOpen={showCustomerModal}
+          onClose={() => setShowCustomerModal(false)}
+          onSave={async (c) => {
+            await onAddCustomer(c);
+            setShowCustomerModal(false);
+            setSelectedCustomerId(c.id);
+          }}
+        />
       )}
     </div >
   );

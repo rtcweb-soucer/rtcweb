@@ -85,6 +85,48 @@ export const getProductionInsights = async (items: any[]) => {
     }
 };
 
+export const analyzeCustomerMessage = async (message: string) => {
+    try {
+        const genAI = await getAI();
+        if (!genAI) return "O cliente demonstrou interesse. (Configuração Gemini pendente)";
+
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `Você é uma IA analisando o sentimento e intenção de uma mensagem de um cliente para uma loja de toldos. Responda em no máximo 1 ou 2 frases curtas indicando se o cliente está quente (pronto pra comprar), com dúvidas, ou frio/reclamando. Mensagem do cliente: "${message}"`;
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text().trim();
+    } catch (error) {
+        console.error("Gemini Error:", error);
+        return "Erro na análise da IA.";
+    }
+};
+
+export const reviseMessage = async (message: string, type: 'promo' | 'tranquil') => {
+    try {
+        const genAI = await getAI();
+        if (!genAI) return message;
+
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const context = type === 'promo' 
+            ? "O objetivo desta mensagem é fechar uma venda com agressividade comercial (urgência/escassez)."
+            : "O objetivo desta mensagem é manter o relacionamento, sendo super prestativo, educado e paciente.";
+        
+        const prompt = `Reescreva a seguinte mensagem de WhatsApp de um vendedor para um cliente de toldos e cortinas. 
+${context}
+Deixe o texto persuasivo, mas natural e não muito longo. Não adicione saudações duplas.
+Mensagem Original:
+"${message}"`;
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text().trim();
+    } catch (error) {
+        console.error("Gemini Error:", error);
+        return message;
+    }
+};
+
 export const suggestQuoteValue = async (items: any[]) => {
     try {
         const genAI = await getAI();

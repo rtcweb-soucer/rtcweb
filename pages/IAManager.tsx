@@ -31,7 +31,7 @@ import { Order, OrderStatus, Seller, Customer, SystemUser, Appointment, SalesGoa
 import { aiManagerService, SellerPerformance } from '../services/aiManagerService';
 import { evolutionService } from '../services/evolutionService';
 import { dataService } from '../services/dataService';
-
+import { analyzeCustomerMessage, reviseMessage } from '../services/geminiService';
 import { Settings, Plus, Trash2, Phone, ToggleLeft, ToggleRight, UserCheck, FileText, Link, X } from 'lucide-react';
 import OrderContractPrint from '../components/OrderContractPrint';
 import { supabase } from '../services/supabase';
@@ -116,6 +116,9 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
   const [activeActionHistoryQuote, setActiveActionHistoryQuote] = useState<Order | null>(null);
   const [isLoadingActionHistory, setIsLoadingActionHistory] = useState(false);
   
+  const [geminiAnalyses, setGeminiAnalyses] = useState<Record<string, string>>({});
+  const analyzedPhonesRef = useRef<Set<string>>(new Set());
+
   // Polling para ler mensagens do banco
   useEffect(() => {
     const fetchHistoryAndPrefs = async () => {
@@ -169,7 +172,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
             }
 
             // Check interest
-            if (text.includes('quero') || text.includes('sim') || text.includes('interesse') || text.includes('como') || text.includes('pagar')) {
+            if (text.length > 0) {
                const cust = customers.find(c => {
                   const p1 = (c.phone || '').replace(/\D/g, '');
                   const p2 = (c.phone2 || '').replace(/\D/g, '');
@@ -219,6 +222,15 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
           }
           
           setInterestedCustomers(interested);
+          
+          interested.forEach(cust => {
+             if (!analyzedPhonesRef.current.has(cust.phone)) {
+                analyzedPhonesRef.current.add(cust.phone);
+                analyzeCustomerMessage(cust.message).then(analysis => {
+                   setGeminiAnalyses(prev => ({...prev, [cust.phone]: analysis}));
+                });
+             }
+          });
           
           if (interested.length > lastMessageCount) {
              // Toca o sininho se o número de mensagens aumentou!
@@ -502,25 +514,14 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
     if (!whatsappMessageModal) return;
     setIsRevisingText(true);
     
-    // Simulando tempo de resposta da IA
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    let msg = whatsappMessageModal.message;
-    
-    // Melhorias simuladas (Heurísticas que dariam a impressão de IA real)
-    if (whatsappMessageModal.type === 'promo') {
-      msg = msg.replace('Olá', 'Olá! Espero que esteja tendo um ótimo dia,');
-      msg = msg.replace('tudo bem?', '');
-      msg = msg.replace('Vamos aproveitar?', 'Essa é uma condição super especial e exclusiva. Podemos seguir com o projeto e garantir sua vaga?');
-    } else {
-      msg = msg.replace('Olá', 'Oi');
-      msg = msg.replace('Estou à disposição para ajudar!', 'Sigo totalmente à sua disposição. Me avise se precisar de algo, ok?');
+    try {
+        const newMsg = await reviseMessage(whatsappMessageModal.message, whatsappMessageModal.type);
+        setWhatsappMessageModal({...whatsappMessageModal, message: newMsg});
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsRevisingText(false);
     }
-    
-
-    
-    setWhatsappMessageModal({...whatsappMessageModal, message: msg.replace(/\s+/g, ' ')});
-    setIsRevisingText(false);
   };
   
   const handleSendCustomWhatsApp = async () => {
@@ -532,7 +533,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
         await evolutionService.sendMessageAuto(whatsappMessageModal.phone, whatsappMessageModal.message);
       }
 
-      await supabase.from('ia_dispatches').insert({
+      const { error } = await supabase.from('ia_dispatches').insert({
         quote_id: whatsappMessageModal.quoteId,
         customer_name: whatsappMessageModal.name,
         phone: whatsappMessageModal.phone,
@@ -540,8 +541,12 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
         seller_id: whatsappMessageModal.sellerId,
         message: whatsappMessageModal.message
       });
-
-      alert('Mensagem enviada com sucesso!');
+      if (error) {
+        alert('Erro ao salvar histórico: ' + error.message);
+        console.error(error);
+      } else {
+        alert('Mensagem enviada com sucesso!');
+      }
       setWhatsappMessageModal(null);
     } catch (err: any) {
       alert(`Erro ao enviar mensagem: ${err.message}`);
@@ -705,7 +710,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
                                       </p>
                                       <p className="text-[11px] text-slate-800 font-medium italic mb-0.5 leading-tight">"{aiInteraction.message}"</p>
                                       <p className={`text-[10px] leading-tight ${aiInteraction.escalated ? 'text-rose-700 font-bold' : 'text-purple-700'}`}>
-                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? 'O cliente demonstrou interesse, mas o VENDEDOR NÃO RESPONDEU.' : 'O vendedor interagiu, mas a venda não foi convertida após o interesse do cliente.') : generateAIAnalysis([{ direction: 'inbound', message: aiInteraction.message }])}
+                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? 'O cliente demonstrou interesse, mas o VENDEDOR NÃO RESPONDEU.' : 'O vendedor interagiu, mas a venda não foi convertida após o interesse do cliente.') : (geminiAnalyses[aiInteraction.phone] || 'Analisando sentimento com IA Gemini... 🪄')}
                                       </p>
                                     </div>
                                   </div>
@@ -811,7 +816,7 @@ const IAManager = ({ orders, sellers, customers, appointments, currentUser, prod
                                       </p>
                                       <p className="text-[11px] text-slate-800 font-medium italic mb-0.5 leading-tight">"{aiInteraction.message}"</p>
                                       <p className={`text-[10px] leading-tight ${aiInteraction.escalated ? 'text-rose-700 font-bold' : 'text-purple-700'}`}>
-                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? 'O cliente demonstrou interesse, mas o VENDEDOR NÃO RESPONDEU.' : 'O vendedor interagiu, mas a venda não foi convertida após o interesse do cliente.') : generateAIAnalysis([{ direction: 'inbound', message: aiInteraction.message }])}
+                                        {aiInteraction.escalated ? (aiInteraction.escalation_type === 'IGNORADA' ? 'O cliente demonstrou interesse, mas o VENDEDOR NÃO RESPONDEU.' : 'O vendedor interagiu, mas a venda não foi convertida após o interesse do cliente.') : (geminiAnalyses[aiInteraction.phone] || 'Analisando sentimento com IA Gemini... 🪄')}
                                       </p>
                                     </div>
                                   </div>
