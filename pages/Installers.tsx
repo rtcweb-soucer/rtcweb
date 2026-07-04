@@ -17,7 +17,8 @@ import {
     TrendingUp,
     Download,
     Clock,
-    Clipboard
+    Clipboard,
+    Printer
 } from 'lucide-react';
 import { Installer, Appointment, TimeEntry } from '../types';
 
@@ -314,7 +315,7 @@ const Installers = ({
                     {/* Grid de Instaladores */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredInstallers.map(installer => (
-                            <div key={installer.id} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col group hover:border-blue-300 transition-all">
+                            <div key={installer.id} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:overflow-visible print:border-none flex flex-col group hover:border-blue-300 transition-all">
                                 <div className="p-6">
                                     <div className="flex items-start justify-between mb-6">
                                         <div className="flex items-center gap-4">
@@ -380,12 +381,29 @@ const Installers = ({
                 </div>
             ) : (
                 /* Aba de Relatório */
-                <div className="space-y-6">
+                <div className="space-y-6 proposta-container">
+                    {/* Cabeçalho de Impressão */}
+                    <div className="hidden print:block mb-8 text-center">
+                        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-widest">Relatório de Instaladores</h2>
+                        <p className="text-sm font-bold text-slate-500 mt-2">
+                            Período: {new Date(reportStartDate + 'T12:00:00').toLocaleDateString('pt-BR')} a {new Date(reportEndDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        </p>
+                    </div>
+
                     {/* Filtros do Relatório */}
-                    <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Filter size={16} className="text-blue-600" />
-                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Filtros do Relatório</h3>
+                    <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-4 print:hidden">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                            <div className="flex items-center gap-2">
+                                <Filter size={16} className="text-blue-600" />
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Filtros do Relatório</h3>
+                            </div>
+                            <button
+                                onClick={() => window.print()}
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-xs font-bold transition-colors"
+                            >
+                                <Printer size={16} />
+                                Imprimir Relatório
+                            </button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                             <div className="space-y-1.5 md:col-span-2">
@@ -454,36 +472,36 @@ const Installers = ({
 
                     {reportType === 'fechamento' ? (
                         /* Tabela de Fechamento Unificado */
-                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:overflow-visible print:border-none">
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Agenda</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ponto (Ent/Saí)</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">H. Extras</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">A Pagar</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Agenda</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ponto (Ent/Saí)</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">H. Extras</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">A Pagar</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {fechamentoReportData.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="px-8 py-12 text-center text-slate-400 italic">Nenhum dado integrado encontrado no período.</td>
+                                            <td colSpan={6} className="px-4 print:px-2 py-12 text-center text-slate-400 italic">Nenhum dado integrado encontrado no período.</td>
                                         </tr>
                                     ) : (
                                         fechamentoReportData.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-8 py-4 text-sm font-bold text-slate-700">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-bold text-slate-700">
                                                     {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
                                                 </td>
-                                                <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
-                                                <td className="px-8 py-4">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2">
                                                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${row.statusAgenda === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : row.statusAgenda === 'SCHEDULED' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
                                                         {row.statusAgenda}
                                                     </span>
                                                 </td>
-                                                <td className="px-8 py-4 text-xs font-medium text-slate-500">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-xs font-medium text-slate-500">
                                                     <div className="flex items-center gap-1">
                                                         <span className="text-emerald-600">{row.entrance}</span>
                                                         <span>/</span>
@@ -491,7 +509,7 @@ const Installers = ({
                                                     </div>
                                                     <div className="text-[10px] font-black text-slate-400 mt-1">{row.duration}</div>
                                                 </td>
-                                                <td className="px-8 py-4">
+                                                <td className="px-4 print:px-2 py-4 print:py-2">
                                                     {row.extraHours !== '---' ? (
                                                         <div className="flex flex-col">
                                                             <span className="text-xs font-black text-amber-600">{row.extraHours}</span>
@@ -501,7 +519,7 @@ const Installers = ({
                                                         <span className="text-slate-300">---</span>
                                                     )}
                                                 </td>
-                                                <td className="px-8 py-4 text-right">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-right">
                                                     <div className="text-sm font-black text-slate-900">R$ {row.totalToPay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
                                                     <div className="text-[9px] font-bold text-slate-400 uppercase">Diária: R$ {row.dailyRate}</div>
                                                 </td>
@@ -512,8 +530,8 @@ const Installers = ({
                                 {fechamentoReportData.length > 0 && (
                                     <tfoot className="bg-slate-50">
                                         <tr>
-                                            <td colSpan={5} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Relatório de Fechamento Total:</td>
-                                            <td className="px-8 py-4 text-xl font-black text-emerald-600 text-right whitespace-nowrap">R$ {fechamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                            <td colSpan={5} className="px-4 print:px-2 py-4 print:py-2 text-xs font-black text-slate-900 uppercase text-right">Relatório de Fechamento Total:</td>
+                                            <td className="px-4 print:px-2 py-4 print:py-2 text-xl font-black text-emerald-600 text-right whitespace-nowrap">R$ {fechamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                         </tr>
                                     </tfoot>
                                 )}
@@ -521,30 +539,30 @@ const Installers = ({
                         </div>
                     ) : reportType === 'diarias' ? (
                         /* Tabela do Relatório de Diárias */
-                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:overflow-visible print:border-none">
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor da Diária</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor da Diária</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {reportData.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="px-8 py-12 text-center text-slate-400 italic">Nenhum registro de agenda encontrado no período.</td>
+                                            <td colSpan={4} className="px-4 print:px-2 py-12 text-center text-slate-400 italic">Nenhum registro de agenda encontrado no período.</td>
                                         </tr>
                                     ) : (
                                         reportData.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-8 py-4 text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-bold text-slate-700 flex items-center gap-2">
                                                     <Calendar size={14} className="text-blue-400" />
                                                     {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
                                                 </td>
-                                                <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
-                                                <td className="px-8 py-4">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-black text-slate-900 uppercase">{row.installerName}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2">
                                                     <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${row.status === 'COMPLETED'
                                                         ? 'bg-emerald-100 text-emerald-600'
                                                         : 'bg-blue-100 text-blue-600'
@@ -552,7 +570,7 @@ const Installers = ({
                                                         {row.status === 'COMPLETED' ? 'Realizado' : 'Agendado'}
                                                     </span>
                                                 </td>
-                                                <td className="px-8 py-4 text-sm font-bold text-slate-900 text-right">R$ {row.dailyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-bold text-slate-900 text-right">R$ {row.dailyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                             </tr>
                                         ))
                                     )}
@@ -560,8 +578,8 @@ const Installers = ({
                                 {reportData.length > 0 && (
                                     <tfoot className="bg-slate-50">
                                         <tr>
-                                            <td colSpan={3} className="px-8 py-4 text-xs font-black text-slate-900 uppercase text-right">Total Acumulado:</td>
-                                            <td className="px-8 py-4 text-lg font-black text-slate-900 text-right">R$ {reportTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                            <td colSpan={3} className="px-4 print:px-2 py-4 print:py-2 text-xs font-black text-slate-900 uppercase text-right">Total Acumulado:</td>
+                                            <td className="px-4 print:px-2 py-4 print:py-2 text-lg font-black text-slate-900 text-right">R$ {reportTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                         </tr>
                                     </tfoot>
                                 )}
@@ -569,40 +587,40 @@ const Installers = ({
                         </div>
                     ) : (
                         /* Tabela do Relatório de Ponto Eletrônico */
-                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:overflow-visible print:border-none">
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Saída</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Almoço (S/R)</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Prat. Líquida</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Localização</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Instalador</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Saída</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Almoço (S/R)</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Prat. Líquida</th>
+                                        <th className="px-4 print:px-2 py-4 print:py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Localização</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {pontoReportData.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="px-8 py-12 text-center text-slate-400 italic">Nenhuma marcação de ponto encontrada no período.</td>
+                                            <td colSpan={6} className="px-4 print:px-2 py-12 text-center text-slate-400 italic">Nenhuma marcação de ponto encontrada no período.</td>
                                         </tr>
                                     ) : (
                                         pontoReportData.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-8 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-bold text-slate-700 whitespace-nowrap">
                                                     {new Date(row.date + 'T12:00:00').toLocaleDateString('pt-BR')}
                                                 </td>
-                                                <td className="px-8 py-4 text-sm font-black text-slate-900 uppercase truncate max-w-[150px]">{row.installerName}</td>
-                                                <td className="px-8 py-4 text-sm font-bold text-emerald-600">{row.entrance}</td>
-                                                <td className="px-8 py-4 text-sm font-bold text-rose-600">{row.exit}</td>
-                                                <td className="px-8 py-4 text-xs font-medium text-amber-600 text-center">{row.lunch}</td>
-                                                <td className="px-8 py-4 text-center">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-black text-slate-900 uppercase truncate max-w-[150px]">{row.installerName}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-bold text-emerald-600">{row.entrance}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-sm font-bold text-rose-600">{row.exit}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-xs font-medium text-amber-600 text-center">{row.lunch}</td>
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-center">
                                                     <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-[10px] font-black">
                                                         {row.duration}
                                                     </span>
                                                 </td>
-                                                <td className="px-8 py-4 text-right">
+                                                <td className="px-4 print:px-2 py-4 print:py-2 text-right">
                                                     <div className="flex items-center justify-end gap-2 text-[10px] font-bold text-slate-500">
                                                         <Clock size={12} className={row.location === 'Sede Maria da Graça' ? 'text-blue-500' : 'text-slate-300'} />
                                                         {row.location}
