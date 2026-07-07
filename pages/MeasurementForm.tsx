@@ -421,10 +421,12 @@ const MeasurementForm = ({
       setCurrentSheetId(newSheet.id);
 
       if (!isSilent) {
-        setItems([]);
-        setSelectedItemIds(new Set());
-        setHistorySelectedItems({});
-        setAiInsights(null);
+        if (!editingSheet) {
+          setItems([]);
+          setSelectedItemIds(new Set());
+          setHistorySelectedItems({});
+          setAiInsights(null);
+        }
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
       }
