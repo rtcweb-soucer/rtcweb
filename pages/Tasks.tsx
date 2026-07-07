@@ -35,6 +35,7 @@ const Tasks = ({ currentUser }: TasksProps) => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'PENDING_SHEETS'>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -127,15 +128,24 @@ const Tasks = ({ currentUser }: TasksProps) => {
   };
 
   const filteredTasks = tasks.filter(task => {
-    const isOwner = task.assigned_to === currentUser.id || task.created_by === currentUser.id;
+    const isOwner = task.assigned_to === currentUser.id || task.created_by === currentUser.id || task.assigned_to === currentUser.sellerId;
     const canSeeAll = currentUser.role === 'ADMIN' || currentUser.role === 'ATTENDANT';
     
-    // Filtro de Segurança: Vendedores não veem tarefas de autorização financeira
-    if (currentUser.role === 'SELLER' && task.title.toUpperCase().includes('AUTORIZAÇÃO FINANCEIRA')) {
-      return false;
+    // Filtro de Segurança: Vendedores não veem tarefas específicas do backoffice
+    if (currentUser.role === 'SELLER') {
+      const title = task.title.toUpperCase();
+      if (title.includes('AUTORIZAÇÃO FINANCEIRA') || title.includes('NOVO PEDIDO NO PCP')) {
+        return false;
+      }
     }
 
     if (!canSeeAll && !isOwner) return false;
+    
+    // Filtro de Categoria (Aba Fichas Pendentes)
+    if (categoryFilter === 'PENDING_SHEETS') {
+      const isPendingSheetTask = task.title.includes('CORRIGIR FICHA TÉCNICA') || task.title.includes('Informações de Produção Faltando');
+      if (!isPendingSheetTask) return false;
+    }
 
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          (task.description?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -186,6 +196,24 @@ const Tasks = ({ currentUser }: TasksProps) => {
           className="px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center gap-2"
         >
           <Plus size={16} /> Nova Tarefa
+        </button>
+      </div>
+
+      <div className="flex gap-4 mb-2 border-b border-slate-200">
+        <button 
+          onClick={() => setCategoryFilter('ALL')}
+          className={`pb-4 px-2 font-bold text-sm border-b-2 transition-colors ${categoryFilter === 'ALL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Todas as Tarefas
+        </button>
+        <button 
+          onClick={() => setCategoryFilter('PENDING_SHEETS')}
+          className={`pb-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${categoryFilter === 'PENDING_SHEETS' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Fichas Pendentes
+          {tasks.filter(t => (t.title.includes('CORRIGIR FICHA TÉCNICA') || t.title.includes('Informações de Produção Faltando')) && t.status !== 'COMPLETED' && (t.assigned_to === currentUser.id || t.assigned_to === currentUser.sellerId)).length > 0 && (
+            <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full">!</span>
+          )}
         </button>
       </div>
 

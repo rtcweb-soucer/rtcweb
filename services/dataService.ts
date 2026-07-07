@@ -667,6 +667,11 @@ export const dataService = {
             createdAt: new Date(data.created_at)
         } as unknown as Appointment;
     },
+    async deleteAppointment(id: string) {
+        await supabase.from('appointment_installers').delete().eq('appointment_id', id);
+        const { error } = await supabase.from('appointments').delete().eq('id', id);
+        if (error) throw new Error(error.message || 'Erro ao excluir agendamento');
+    },
 
     // Orders
     async getOrders() {

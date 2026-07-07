@@ -644,6 +644,9 @@ const Quotes = ({
 
   const handleTransformToOrder = async () => {
     if (!selectedOrder || !selectedCustomer || isSaving) return;
+    
+    const isTechnicalSheetCorrect = window.confirm("A ficha técnica de produção e instalação está correta?");
+    
     setIsSaving(true);
 
     try {
@@ -813,6 +816,22 @@ const Quotes = ({
         ProductionStage.NEW_ORDER,
         [{ stage: ProductionStage.NEW_ORDER, timestamp: new Date() }]
       );
+
+      // Se a ficha técnica foi marcada como incorreta, cria a pendência para o vendedor
+      if (!isTechnicalSheetCorrect) {
+        await dataService.saveTask({
+          id: crypto.randomUUID(),
+          title: `CORRIGIR FICHA TÉCNICA - Pedido ${updatedOrder.contractNumber || updatedOrder.id}`,
+          description: `Ficha técnica marcada como incorreta durante a aprovação do pedido. Verifique e corrija os detalhes de produção/instalação.`,
+          status: 'PENDING',
+          priority: 'URGENT',
+          assigned_to: updatedOrder.sellerId, // ID do Perfil Seller
+          created_by: validCreatorId,
+          order_id: updatedOrder.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        } as any);
+      }
 
       // 4b. Criar tarefa inicial para Aline (PCP)
       const alineId = 'e3211006-47a7-4ed1-97ac-4c6b7f71c92e';
@@ -2157,7 +2176,7 @@ const Quotes = ({
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Final</label>
                     <CurrencyInput
@@ -2190,61 +2209,52 @@ const Quotes = ({
 
                 <div className="space-y-3">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade de Parcelamento (Editável)</h4>
-                  <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left text-[11px]">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-2 font-black text-slate-500 uppercase">Parc.</th>
-                          <th className="px-4 py-2 font-black text-slate-500 uppercase">Vencimento</th>
-                          <th className="px-4 py-2 font-black text-slate-500 uppercase">Forma de Pagto</th>
-                          <th className="px-4 py-2 font-black text-slate-500 uppercase text-right">Valor (R$)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {installments.map((inst, idx) => (
-                          <tr key={idx}>
-                            <td className="px-4 py-2 font-bold text-slate-400">
-                              {String(inst.number).padStart(2, '0')}/{String(installments.length).padStart(2, '0')}
-                            </td>
-                            <td className="px-4 py-2">
-                              <input
-                                type="date"
-                                value={inst.dueDate}
-                                onChange={(e) => updateInstallment(idx, 'dueDate', e.target.value)}
-                                className="bg-transparent border-none font-bold text-slate-700 p-0 focus:ring-0 w-full outline-none text-[11px]"
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <select
-                                value={inst.paymentMethod || ''}
-                                onChange={(e) => updateInstallment(idx, 'paymentMethod', e.target.value)}
-                                className="bg-transparent border-none font-medium text-slate-600 p-0 focus:ring-0 w-full outline-none text-[11px]"
-                              >
-                                <option value="">Selecione...</option>
-                                {PAYMENT_METHODS.map(m => (
-                                  <option key={m} value={m}>{m}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="px-4 py-2 text-right">
-                              <CurrencyInput
-                                value={inst.value}
-                                onChange={(val) => updateInstallment(idx, 'value', val)}
-                                prefixColor="text-blue-400"
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-50 border-t border-slate-200">
-                        <tr>
-                          <td colSpan={3} className="px-4 py-2 text-right font-black text-slate-500 uppercase">Soma das Parcelas:</td>
-                          <td className={`px-4 py-2 text-right font-black ${Math.abs(installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0) - finalValue) > 0.01 ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
-                            R$ {installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                  <div className="space-y-2">
+                    {installments.map((inst, idx) => (
+                      <div key={idx} className="bg-slate-50 rounded-2xl p-3 border border-slate-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Parcela {String(inst.number).padStart(2, '0')}/{String(installments.length).padStart(2, '0')}
+                          </span>
+                          <CurrencyInput
+                            value={inst.value}
+                            onChange={(val) => updateInstallment(idx, 'value', val)}
+                            prefixColor="text-blue-400"
+                            className="justify-end bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 font-black"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Vencimento</p>
+                            <input
+                              type="date"
+                              value={inst.dueDate}
+                              onChange={(e) => updateInstallment(idx, 'dueDate', e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Forma de Pagto</p>
+                            <select
+                              value={inst.paymentMethod || ''}
+                              onChange={(e) => updateInstallment(idx, 'paymentMethod', e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">Selecione...</option>
+                              {PAYMENT_METHODS.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Soma das Parcelas:</span>
+                    <span className={`text-sm font-black ${Math.abs(installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0) - finalValue) <= 0.01 ? 'text-emerald-600' : 'text-rose-500 animate-pulse'}`}>
+                      R$ {installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                   {Math.abs(installments.reduce((acc, curr) => acc + (parseFloat(curr.value.toString()) || 0), 0) - finalValue) > 0.01 && (
                     <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1 mt-1 px-1">

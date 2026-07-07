@@ -10,6 +10,7 @@ import { Order, Customer, TechnicalSheet, Product, Appointment, Installer, TimeE
 import { dataService } from '../services/dataService';
 import { notificationService } from '../services/notificationService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
+import MeasurementForm from './MeasurementForm';
 
 interface InstallerPortalProps {
   installer: Installer;
@@ -20,6 +21,7 @@ interface InstallerPortalProps {
   appointments: Appointment[];
   onLogout: () => void;
   onUpdateOrder: (order: Order) => void;
+  onSaveTechnicalSheet?: (sheet: TechnicalSheet) => Promise<TechnicalSheet>;
 }
 
 const OFFICE_LAT = -22.88363;
@@ -56,6 +58,7 @@ const InstallerPortal = ({
   const [lastPoint, setLastPoint] = useState<TimeEntry | null>(null);
   const [showReworkModal, setShowReworkModal] = useState<string | null>(null); // OrderID
   const [showSheetModal, setShowSheetModal] = useState<string | null>(null); // Agora armazena o OrderId
+  const [showReworkMeasurementForm, setShowReworkMeasurementForm] = useState<string | null>(null); // OrderId
   const [fullSheetData, setFullSheetData] = useState<any>(null);
   const [reworkReason, setReworkReason] = useState<'novo produto' | 'ajuste' | 'falta de peças'>('ajuste');
   const [reworkNotes, setReworkNotes] = useState('');
@@ -197,9 +200,9 @@ const InstallerPortal = ({
     }
   };
 
-  const handleSendRework = async () => {
+  const handleSendRework = async (technicalSheetId?: string) => {
     if (!showReworkModal) return;
-    if (!reworkNotes.trim()) {
+    if (reworkReason !== 'novo produto' && !reworkNotes.trim()) {
       alert("Por favor, descreva o motivo do retrabalho.");
       return;
     }
@@ -232,6 +235,7 @@ const InstallerPortal = ({
           productionHistory: newHistory,
           isRework: true,
           reworkReason: reworkReason,
+          reworkTechnicalSheetId: technicalSheetId,
           contractObservations: `${order.contractObservations || ''}\n[RETRABALHO]: ${reworkReason} - ${reworkNotes}`
         };
         await dataService.saveOrder(updatedOrder);
@@ -484,13 +488,57 @@ const InstallerPortal = ({
                 />
               </div>
 
-              <button
-                disabled={isLoading}
-                onClick={handleSendRework}
-                className="w-full py-5 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-xl shadow-slate-900/20 active:scale-95 transition-all"
+              {reworkReason === 'novo produto' ? (
+                <button
+                  disabled={isLoading}
+                  onClick={() => setShowReworkMeasurementForm(showReworkModal)}
+                  className="w-full py-5 bg-indigo-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 active:scale-95 transition-all"
+                >
+                  Preencher Ficha Técnica
+                </button>
+              ) : (
+                <button
+                  disabled={isLoading}
+                  onClick={() => handleSendRework()}
+                  className="w-full py-5 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-xl shadow-slate-900/20 active:scale-95 transition-all"
+                >
+                  Confirmar Registro de Retrabalho
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MeasurementForm Overlay para Retrabalho de Novo Produto */}
+      {showReworkMeasurementForm && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[2000] overflow-y-auto">
+          <div className="min-h-screen p-4 flex items-center justify-center">
+            <div className="bg-white w-full max-w-7xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 relative">
+              <button 
+                onClick={() => setShowReworkMeasurementForm(null)}
+                className="absolute top-4 right-4 z-50 p-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-400 rounded-full transition-all"
               >
-                Confirmar Registro de Retrabalho
+                <X size={24} />
               </button>
+              <div className="h-[90vh] overflow-y-auto">
+                <MeasurementForm
+                  customers={customers}
+                  products={products}
+                  technicalSheets={technicalSheets}
+                  initialCustomerId={orders.find(o => o.id === showReworkMeasurementForm)?.customerId}
+                  currentUser={installer}
+                  onSave={async (sheet) => {
+                    if (onSaveTechnicalSheet) {
+                      const saved = await onSaveTechnicalSheet(sheet);
+                      await handleSendRework(saved.id);
+                      setShowReworkMeasurementForm(null);
+                    }
+                  }}
+                  onGenerateQuote={() => {}} // No-op, not used in this context
+                  orders={orders}
+                />
+              </div>
             </div>
           </div>
         </div>

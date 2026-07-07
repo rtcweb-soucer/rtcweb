@@ -306,6 +306,7 @@ export interface Order {
   cardInstallments?: number; // Novo: Qtd de parcelas no cartão para este pedido
   isRework?: boolean;
   reworkReason?: string;
+  reworkTechnicalSheetId?: string;
   finalizedAt?: string;
   createdAt: Date;
 }

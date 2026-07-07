@@ -848,9 +848,10 @@ const MeasurementForm = ({
                           </h5>
                           <div className="flex flex-col gap-0.5 mt-0.5">
                             <p className="text-[9px] font-bold text-slate-400">ID da Ficha: {sheet.id}</p>
-                            {orders.filter(o => o.technicalSheetId === sheet.id || o.itemIds?.some(itemId => sheet.items.find(si => si.id === itemId))).map(o => (
-                              <p key={o.id} className="text-[9px] font-bold text-indigo-500">
-                                Vinculado a: {o.contractNumber || o.quoteNumber || `Pedido #${o.id.slice(0, 6)}`}
+                            {orders.filter(o => o.technicalSheetId === sheet.id || o.itemIds?.some(itemId => sheet.items.find(si => si.id === itemId)) || o.reworkTechnicalSheetId === sheet.id).map(o => (
+                              <p key={o.id} className={`text-[9px] font-bold ${o.reworkTechnicalSheetId === sheet.id ? 'text-rose-500 bg-rose-50 px-1 py-0.5 rounded-sm inline-block' : 'text-indigo-500'}`}>
+                                {o.reworkTechnicalSheetId === sheet.id ? 'Ficha ref a retrabalho contrato ' : 'Vinculado a: '}
+                                {o.contractNumber || o.quoteNumber || `Pedido #${o.id.slice(0, 6)}`}
                               </p>
                             ))}
                           </div>

@@ -165,7 +165,7 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                   <h2 className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5 underline decoration-blue-500/30 underline-offset-4">
                     <Layers size={10} className="text-blue-500" /> Detalhamento dos Itens Contratados
                   </h2>
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
                     <table className="w-full text-left border-collapse">
                       <thead className="bg-slate-900 text-white">
                         <tr>
@@ -237,7 +237,7 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
 
                     {order.installments && order.installments.length > 0 && (
                       <div className="space-y-1 list-none mb-4">
-                        <div className="px-3 flex justify-between text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">
+                        <div className="hidden sm:flex px-3 justify-between text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">
                           <div className="flex gap-4">
                             <span className="w-16 text-center">Nº Parcela</span>
                             <span>Forma de Pagamento</span>
@@ -248,20 +248,20 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                           </div>
                         </div>
                         {order.installments.map((inst, idx, arr) => (
-                          <div key={inst.id} className="py-2 px-3 bg-white border border-slate-100 rounded-lg flex items-center justify-between text-[9px] uppercase hover:border-blue-200 transition-colors">
-                            <div className="flex items-center gap-4">
+                          <div key={inst.id} className="py-2 px-3 bg-white border border-slate-100 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between text-[9px] uppercase hover:border-blue-200 transition-colors gap-2 sm:gap-0">
+                            <div className="flex items-center gap-4 justify-between sm:justify-start">
                               <span className="font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[8px] w-16 text-center">{inst.number}/{arr.length}</span>
-                              <div className="flex flex-col">
+                              <div className="flex flex-col text-right sm:text-left">
                                  <span className="font-bold text-slate-600 truncate max-w-[150px]">{inst.paymentMethod || 'Espécie'}</span>
                                  {inst.status === 'PAID' ? (
                                     <span className="text-[7px] font-black text-emerald-600">LIQUIDADO</span>
                                  ) : (
-                                    <span className="text-[7px] font-black text-amber-500 text-left">PENDENTE</span>
+                                    <span className="text-[7px] font-black text-amber-500">PENDENTE</span>
                                  )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-6">
-                              <div className="flex flex-col items-end w-16">
+                            <div className="flex items-center gap-6 justify-between sm:justify-end border-t border-slate-50 sm:border-0 pt-2 sm:pt-0">
+                              <div className="flex flex-col items-start sm:items-end w-auto sm:w-16">
                                 <span className="font-black text-slate-900 leading-tight">{new Date(inst.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span>
                               </div>
                               <div className="flex flex-col items-end min-w-[80px]">

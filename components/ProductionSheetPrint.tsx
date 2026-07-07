@@ -40,6 +40,7 @@ interface ProductionSheetPrintProps {
             command?: string; // New field
             notes?: string; // New field: Observações
             parentItemId?: string;
+            technical_sheet_id?: string;
             productionSheet?: {
                 id: string;
                 measurementItemId: string;
@@ -72,12 +73,15 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
     const groupedItems = React.useMemo(() => {
         // Create a map of clones to avoid mutating objects in the original data.items array
         const itemsMap = new Map(data.items.map(item => [item.id, { ...item, accessories: [] as any[] }]));
-        const grouped: Record<string, Record<string, any[]>> = {};
+        const groupedOriginal: Record<string, Record<string, any[]>> = {};
+        const groupedRework: Record<string, Record<string, any[]>> = {};
 
         // Link accessories to parents and organize main items into groups
         for (const item of itemsMap.values()) {
             const env = item.environment || 'Sem Ambiente';
             const type = getProductType(item.productId);
+            const isRework = item.technical_sheet_id && item.technical_sheet_id !== data.order.technicalSheetId;
+            const targetGroup = isRework ? groupedRework : groupedOriginal;
 
             if (item.parentItemId) {
                 const parent = itemsMap.get(item.parentItemId);
@@ -88,20 +92,20 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                     }
                 } else {
                     // Orphaned accessory: Treat as a main item so it's not hidden
-                    if (!grouped[env]) grouped[env] = {};
-                    if (!grouped[env][type]) grouped[env][type] = [];
-                    grouped[env][type].push(item);
+                    if (!targetGroup[env]) targetGroup[env] = {};
+                    if (!targetGroup[env][type]) targetGroup[env][type] = [];
+                    targetGroup[env][type].push(item);
                 }
             } else {
-                if (!grouped[env]) grouped[env] = {};
-                if (!grouped[env][type]) grouped[env][type] = [];
+                if (!targetGroup[env]) targetGroup[env] = {};
+                if (!targetGroup[env][type]) targetGroup[env][type] = [];
 
-                grouped[env][type].push(item);
+                targetGroup[env][type].push(item);
             }
         }
 
-        return grouped;
-    }, [data.items, products]);
+        return { original: groupedOriginal, rework: groupedRework };
+    }, [data.items, products, data.order.technicalSheetId]);
 
     // Render Cortina-specific fields
     const renderCortinaFields = (cortina: ProductionSheetCortina, command?: string) => (
@@ -375,9 +379,16 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
 
             {/* Items Grouped by Environment and Type */}
             <div className="mb-6">
-                <h2 className="text-lg font-black text-slate-800 mb-4 uppercase">Itens para Produção</h2>
+                {[ 
+                    { title: 'Itens para Produção', items: groupedItems.original, isRework: false }, 
+                    { title: 'ADENDO DE RETRABALHO - NOVAS MEDIDAS', items: groupedItems.rework, isRework: true } 
+                ].filter(group => Object.keys(group.items).length > 0).map((group, groupIdx) => (
+                    <div key={groupIdx} className={group.isRework ? "mt-12 border-t-4 border-rose-500 pt-8 page-break-before" : ""}>
+                        <h2 className={`text-lg font-black ${group.isRework ? 'text-rose-600' : 'text-slate-800'} mb-4 uppercase`}>
+                            {group.title}
+                        </h2>
 
-                {Object.entries(groupedItems).map(([environment, types]) => (
+                        {Object.entries(group.items).map(([environment, types]) => (
                     <div key={environment} className="mb-8 avoid-break">
                         {/* Environment Header */}
                         <div className="bg-slate-700 text-white px-4 py-2 rounded-t-lg">
@@ -571,6 +582,8 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                             })}
                         </div>
                     </div>
+                ))}
+                </div>
                 ))}
             </div>
 

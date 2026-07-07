@@ -5,7 +5,12 @@ import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.2.1";
 const EVOLUTION_URL = "https://evolution-api-production-8ad2.up.railway.app";
 const EVOLUTION_API_KEY = "101f540987bec16185e6923c03db2652afc9e1fc968faba25b976f30a8d8f0aa";
 const INSTANCE_NAME = "welelington";
-const DIRECTOR_PHONE = "5521964592050";
+const TARGET_PHONES = [
+    "5521964592050", // Joao
+    "5521990788880", // Aline
+    "5521986124416", // Welington
+    // "5521..." // Denis (to be filled)
+];
 
 serve(async (req) => {
     try {
@@ -129,21 +134,23 @@ ${rawReport}
         const { data: inst } = await supabase.from('whatsapp_instances').select('instance_name').eq('is_active', true).limit(1);
         const instanceName = inst?.[0]?.instance_name || "welington";
 
-        const response = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
-            method: 'POST',
-            headers: {
-                'apikey': apiKey,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                number: DIRECTOR_PHONE,
-                text: message
-            })
-        });
+        for (const phone of TARGET_PHONES) {
+            const response = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
+                method: 'POST',
+                headers: {
+                    'apikey': apiKey,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    number: phone,
+                    text: message
+                })
+            });
 
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            console.error(`Erro Evolution API: Status ${response.status}`, JSON.stringify(err));
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                console.error(`Erro Evolution API para ${phone}: Status ${response.status}`, JSON.stringify(err));
+            }
         }
 
         return new Response(JSON.stringify({ success: true, processed: delayedOrders.length }), { headers: { "Content-Type": "application/json" } });

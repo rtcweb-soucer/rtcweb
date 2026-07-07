@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Order, OrderStatus, ProductionStage, ProductionHistoryEntry, Product, Seller, Customer, SystemUser, TaskStatus, TaskPriority } from '../types';
 import { formatBusinessDate } from '../utils/dateUtils';
 import { dataService } from '../services/dataService';
+import { evolutionService } from '../services/evolutionService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
 import { LabelPrintModal } from '../components/LabelPrintModal';
 import {
@@ -203,28 +204,46 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
 
   const handleNotifySeller = async (order: Order) => {
     const sellerUser = systemUsers.find(u => u.sellerId === order.sellerId);
+    const sellerProfile = sellers.find(s => s.id === order.sellerId);
+
     if (!sellerUser) {
-      alert("Vendedor não encontrado no sistema para notificação.");
-      return;
+      alert("Usuário do vendedor não encontrado no sistema para notificação (Tarefa).");
+      // Could still proceed if we just want WhatsApp, but task creation requires sellerUser.id
     }
 
     const userDescription = prompt("O que o vendedor precisa fazer?", "Favor verificar detalhes de produção pendentes.");
     if (userDescription === null) return; // Cancelado
 
     try {
-      await dataService.saveTask({
-        id: crypto.randomUUID(),
-        title: `Informações de Produção Faltando - Pedido ${order.contractNumber || order.quoteNumber || order.id}`,
-        description: `Notificado por ${currentUser.name} (PCP): ${userDescription}`,
-        status: TaskStatus.PENDING,
-        priority: TaskPriority.URGENT,
-        assigned_to: sellerUser.id,
-        created_by: currentUser.id,
-        order_id: order.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      alert(`Vendedor ${sellerUser.name} notificado com sucesso!`);
+      if (sellerUser) {
+        await dataService.saveTask({
+          id: crypto.randomUUID(),
+          title: `Informações de Produção Faltando - Pedido ${order.contractNumber || order.quoteNumber || order.id}`,
+          description: `Notificado por ${currentUser.name} (PCP): ${userDescription}`,
+          status: TaskStatus.PENDING,
+          priority: TaskPriority.URGENT,
+          assigned_to: sellerUser.id,
+          created_by: currentUser.id,
+          order_id: order.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
+
+      // Envia notificação no WhatsApp usando a Evolution API
+      if (sellerProfile && sellerProfile.phone) {
+        const orderIdDisplay = order.contractNumber || order.quoteNumber || `Pedido #${order.id.slice(0, 8)}`;
+        const customerName = customers.find(c => c.id === order.customerId)?.name || 'Cliente não identificado';
+        
+        let message = `⚠️ *Aviso do PCP (Falta de Informação)* ⚠️\n\n`;
+        message += `Olá ${sellerProfile.name}, o setor de produção identificou falta de dados na Ficha Técnica do *${orderIdDisplay}* (Cliente: ${customerName}).\n\n`;
+        message += `*Mensagem de ${currentUser.name}:*\n_${userDescription}_\n\n`;
+        message += `Por favor, acesse o sistema e verifique os detalhes pendentes para que o pedido possa seguir para produção.`;
+
+        await evolutionService.sendMessageAuto(sellerProfile.phone, message);
+      }
+
+      alert(`Vendedor ${sellerProfile?.name || sellerUser?.name || 'desconhecido'} notificado com sucesso!`);
     } catch (error: any) {
       console.error("Erro ao notificar vendedor:", error);
       alert("Erro ao notificar vendedor: " + (error.message || error));

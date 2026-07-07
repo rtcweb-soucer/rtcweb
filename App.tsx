@@ -314,10 +314,14 @@ const App = () => {
     };
 
     dataService.saveOrder(newOrder).then(saved => {
-      setOrders((prev: Order[]) => [...prev, saved]);
-      loadData(true);
+      setOrders((prev: Order[]) => {
+        if (prev.some(o => o.id === saved.id)) {
+          return prev.map(o => o.id === saved.id ? saved : o);
+        }
+        return [...prev, saved];
+      });
       setTimeout(() => {
-        setLastGeneratedQuoteId(quoteId);
+        setLastGeneratedQuoteId(saved.id);
         setActiveTab('quotes');
       }, 50);
     }).catch(err => alert("Erro ao gerar orçamento"));
@@ -416,7 +420,13 @@ const App = () => {
   const handleAddAppointment = async (a: Appointment) => {
     try {
       const saved = await dataService.saveAppointment(a);
-      setAppointments([...appointments, saved]);
+      setAppointments(prev => {
+        const exists = prev.some(existing => existing.id === saved.id);
+        if (exists) {
+          return prev.map(existing => existing.id === saved.id ? saved : existing);
+        }
+        return [...prev, saved];
+      });
       
       // --- CRM Automation: Move to MEDICAO ---
       await dataService.autoUpdateLeadByCustomer(saved.customerId, 'MEDICAO');
@@ -452,6 +462,17 @@ const App = () => {
     }
   };
 
+  const handleDeleteAppointment = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este agendamento?')) return;
+    try {
+      await dataService.deleteAppointment(id);
+      setAppointments(prev => prev.filter(a => a.id !== id));
+      alert("Agendamento excluído com sucesso!");
+    } catch (e: any) {
+      alert("Erro ao excluir agendamento: " + e.message);
+    }
+  };
+
   const handleSaveTechnicalSheet = async (sheet: TechnicalSheet) => {
     try {
       const saved = await dataService.saveTechnicalSheet(sheet);
@@ -460,8 +481,10 @@ const App = () => {
         return exists ? prev.map((s: TechnicalSheet) => s.id === saved.id ? saved : s) : [...prev, saved];
       });
       loadData(true);
+      return saved;
     } catch (err: any) {
       alert("Erro ao salvar ficha técnica: " + (err.message || err));
+      throw err;
     }
   };
 
@@ -675,6 +698,7 @@ const App = () => {
           blockedSlots={blockedSlots}
           installers={installers}
           onAdd={handleAddAppointment}
+          onDelete={handleDeleteAppointment}
           onStartMeasurement={handleStartMeasurement}
           onEditTechnicalSheet={handleEditSheet}
           onGenerateQuote={handleGenerateQuote}
@@ -845,6 +869,7 @@ const App = () => {
               appointments={appointments}
               onLogout={() => setActiveTab('dashboard')}
               onUpdateOrder={handleUpdateOrder}
+              onSaveTechnicalSheet={handleSaveTechnicalSheet}
             />
           );
         }
@@ -890,6 +915,7 @@ const App = () => {
         appointments={appointments}
         onLogout={() => setCurrentUser(null)}
         onUpdateOrder={handleUpdateOrder}
+        onSaveTechnicalSheet={handleSaveTechnicalSheet}
       />
     );
   }

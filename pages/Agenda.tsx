@@ -41,6 +41,7 @@ interface AgendaProps {
     onStartMeasurement?: (customerId: string) => void;
     onEditTechnicalSheet?: (sheet: TechnicalSheet) => void;
     onGenerateQuote?: (sheet: TechnicalSheet, selectedItemIds?: string[]) => void;
+    onDeleteAppointment?: (id: string) => void;
     systemSettings: { id: string, key: string, value: string }[];
 }
 
@@ -76,6 +77,7 @@ const Agenda = ({
     onStartMeasurement,
     onEditTechnicalSheet,
     onGenerateQuote,
+    onDeleteAppointment,
     systemSettings
 }: AgendaProps) => {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -637,7 +639,16 @@ const Agenda = ({
                                 );
                             })()}
                         </div>
-                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-between">
+                            <button
+                                onClick={() => {
+                                    if (onDeleteAppointment) onDeleteAppointment(selectedApp.id);
+                                    setSelectedApp(null);
+                                }}
+                                className="px-6 py-3 bg-white border border-rose-200 text-rose-600 rounded-xl text-sm font-bold hover:bg-rose-50 transition-colors shadow-sm"
+                            >
+                                Excluir
+                            </button>
                             <button
                                 onClick={() => setSelectedApp(null)}
                                 className="px-8 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
