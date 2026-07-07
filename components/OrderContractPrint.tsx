@@ -80,19 +80,19 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
   if (!customer) return <div className="p-10 text-center font-bold text-slate-400">Dados do cliente não encontrados.</div>;
 
   return (
-    <div ref={ref} className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 print:shadow-none print:border-none print:m-0 print:rounded-none">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr>
-            <td>
-              <div className="p-6 pb-4 mb-4 bg-white border-b-2 border-slate-100 flex justify-between items-start gap-8">
-                <div className="flex items-center gap-4">
-                  <div className="h-16 w-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-200">
+    <div ref={ref} className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 print:shadow-none print:border-none print:m-0 print:rounded-none w-full max-w-full overflow-x-hidden">
+      <table className="w-full border-collapse block sm:table">
+        <thead className="block sm:table-header-group">
+          <tr className="block sm:table-row">
+            <td className="block sm:table-cell">
+              <div className="p-4 sm:p-6 pb-4 mb-4 bg-white border-b-2 border-slate-100 flex flex-col sm:flex-row justify-between items-start gap-4 sm:gap-8">
+                <div className="flex items-start sm:items-center gap-4">
+                  <div className="h-12 w-12 sm:h-16 sm:w-16 bg-white rounded-2xl flex items-center justify-center p-1 sm:p-2 shadow-sm border border-slate-200 shrink-0">
                     <img src="https://www.rtcdecor.com.br/wp-content/uploads/2014/06/RTC-logo-atualizada-2.jpg" alt="RTC Logo" className="logo-img object-contain" />
                   </div>
                   <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Contrato de Venda</h1>
-                    <div className="flex items-center gap-2 mt-1.5">
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none" style={{ fontFamily: "'Playfair Display', serif" }}>Contrato de Venda</h1>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest uppercase">
                         {order.contractNumber
                           ? `${order.quoteNumber || order.id} / ${order.contractNumber}`
@@ -106,7 +106,7 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                     </div>
                   </div>
                 </div>
-                <div className="text-right space-y-0">
+                <div className="text-left sm:text-right space-y-0 w-full sm:w-auto mt-4 sm:mt-0 border-t border-slate-100 sm:border-0 pt-4 sm:pt-0">
                   <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Contratada</p>
                   <p className="text-xs font-black text-slate-900">RTC TOLDOS E COBERTURAS LTDA</p>
                   <p className="text-[9px] text-slate-500 font-medium">CNPJ: 12.655.737/0001-21</p>
@@ -118,14 +118,14 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
           </tr>
         </thead>
 
-        <tbody>
-          <tr>
-            <td>
-              <div className="p-6 space-y-6">
+        <tbody className="block sm:table-row-group">
+          <tr className="block sm:table-row">
+            <td className="block sm:table-cell">
+              <div className="p-4 sm:p-6 space-y-6 w-full max-w-full overflow-hidden">
                 {/* Info do Cliente */}
                 <section className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                  <div className="grid grid-cols-6 gap-x-6 gap-y-2">
-                    <div className="col-span-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-x-6 gap-y-4 sm:gap-y-2">
+                    <div className="col-span-1 sm:col-span-3">
                       <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Contratante</p>
                       <p className="text-xs font-bold text-slate-900">{customer.name}</p>
                       {customer.tradeName && (
@@ -136,12 +136,12 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                       <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Documento</p>
                       <p className="text-xs font-bold text-slate-900">{customer.document}</p>
                     </div>
-                    <div className="col-span-2 text-right">
+                    <div className="col-span-1 sm:col-span-2 text-left sm:text-right">
                       <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Telefone</p>
                       <p className="text-xs font-bold text-slate-900">{customer.phone}{customer.phone2 ? ` / ${customer.phone2}` : ''}</p>
                     </div>
 
-                    <div className="col-span-3">
+                    <div className="col-span-1 sm:col-span-3 border-t border-slate-100 sm:border-0 pt-2 sm:pt-0">
                       <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">Endereço de Instalação</p>
                       <p className="text-xs font-bold text-slate-900">
                         {customer.address.street}, {customer.address.number}
@@ -149,11 +149,11 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                       </p>
                       <p className="text-[9px] text-slate-500 font-medium">{customer.address.neighborhood} - {customer.address.city}/{customer.address.state}</p>
                     </div>
-                    <div className="col-span-1">
+                    <div className="col-span-1 sm:col-span-1">
                       <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">CEP</p>
                       <p className="text-xs font-bold text-slate-900">{customer.address.cep}</p>
                     </div>
-                    <div className="col-span-2 text-right">
+                    <div className="col-span-1 sm:col-span-2 text-left sm:text-right">
                       <p className="text-[7px] text-slate-400 uppercase font-black tracking-wider">E-mail</p>
                       <p className="text-xs font-bold text-slate-900 truncate">{customer.email}</p>
                     </div>
@@ -165,7 +165,7 @@ const OrderContractPrint = forwardRef<HTMLDivElement, OrderContractPrintProps>((
                   <h2 className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-1.5 underline decoration-blue-500/30 underline-offset-4">
                     <Layers size={10} className="text-blue-500" /> Detalhamento dos Itens Contratados
                   </h2>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto w-full max-w-[85vw] sm:max-w-full rounded-xl border border-slate-200">
                     <table className="w-full text-left border-collapse">
                       <thead className="bg-slate-900 text-white">
                         <tr>
