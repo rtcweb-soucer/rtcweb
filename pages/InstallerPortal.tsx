@@ -51,17 +51,27 @@ const InstallerPortal = ({
   products, 
   appointments,
   onLogout,
-  onUpdateOrder
+  onUpdateOrder,
+  onSaveTechnicalSheet
 }: InstallerPortalProps) => {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [distanceToOffice, setDistanceToOffice] = useState<number | null>(null);
   const [lastPoint, setLastPoint] = useState<TimeEntry | null>(null);
+  const [activeTab, setActiveTab] = useState<'PENDING' | 'HISTORY'>('PENDING');
   const [showReworkModal, setShowReworkModal] = useState<string | null>(null); // OrderID
   const [showSheetModal, setShowSheetModal] = useState<string | null>(null); // Agora armazena o OrderId
   const [showReworkMeasurementForm, setShowReworkMeasurementForm] = useState<string | null>(null); // OrderId
   const [fullSheetData, setFullSheetData] = useState<any>(null);
   const [reworkReason, setReworkReason] = useState<'novo produto' | 'ajuste' | 'falta de peças'>('ajuste');
   const [reworkNotes, setReworkNotes] = useState('');
+  
+  // States para 'novo produto'
+  const [reworkSelectedItemId, setReworkSelectedItemId] = useState<string>('');
+  const [reworkWidth, setReworkWidth] = useState<string>('');
+  const [reworkHeight, setReworkHeight] = useState<string>('');
+  const [reworkColor, setReworkColor] = useState<string>('');
+  const [reworkCommand, setReworkCommand] = useState<string>('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSheetLoading, setIsSheetLoading] = useState(false);
 
@@ -76,6 +86,19 @@ const InstallerPortal = ({
       return { app, order, customer };
     })
     .filter(({ order }) => !order || (order.productionStage !== ProductionStage.READY && order.productionStage !== ProductionStage.NEW_ORDER && order.productionStage !== ProductionStage.ASSEMBLY));
+
+  // Instalações finalizadas para o histórico
+  const historyInstallations = appointments
+    .filter(app => app.installerIds?.includes(installer.id) && app.type === 'INSTALLATION')
+    .map(app => {
+      const order = orders.find(o => o.id === app.orderId);
+      const customer = customers.find(c => c.id === app.customerId);
+      return { app, order, customer };
+    })
+    .filter(({ order }) => order && order.productionStage === ProductionStage.READY)
+    .sort((a, b) => new Date(b.app.date).getTime() - new Date(a.app.date).getTime());
+
+  const displayedInstallations = activeTab === 'PENDING' ? todaysInstallations : historyInstallations;
 
   const hasInstallationsToday = todaysInstallations.length > 0;
 
@@ -200,7 +223,7 @@ const InstallerPortal = ({
     }
   };
 
-  const handleSendRework = async (technicalSheetId?: string) => {
+  const handleSendRework = async (technicalSheetId?: string, newItemIds?: string[]) => {
     if (!showReworkModal) return;
     if (reworkReason !== 'novo produto' && !reworkNotes.trim()) {
       alert("Por favor, descreva o motivo do retrabalho.");
@@ -236,6 +259,7 @@ const InstallerPortal = ({
           isRework: true,
           reworkReason: reworkReason,
           reworkTechnicalSheetId: technicalSheetId,
+          itemIds: newItemIds ? [...(order.itemIds || []), ...newItemIds] : order.itemIds,
           contractObservations: `${order.contractObservations || ''}\n[RETRABALHO]: ${reworkReason} - ${reworkNotes}`
         };
         await dataService.saveOrder(updatedOrder);
@@ -353,15 +377,28 @@ const InstallerPortal = ({
       </div>
 
       <div className="p-4 space-y-6">
-        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[3px] ml-2">Agenda de Hoje</h2>
+        <div className="flex gap-4 border-b border-slate-200">
+          <button 
+            onClick={() => setActiveTab('PENDING')}
+            className={`pb-3 px-2 font-black uppercase tracking-widest text-[10px] border-b-2 transition-colors ${activeTab === 'PENDING' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+          >
+            A Fazer Hoje
+          </button>
+          <button 
+            onClick={() => setActiveTab('HISTORY')}
+            className={`pb-3 px-2 font-black uppercase tracking-widest text-[10px] border-b-2 transition-colors ${activeTab === 'HISTORY' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+          >
+            Histórico (Finalizados)
+          </button>
+        </div>
         
-        {todaysInstallations.length === 0 ? (
+        {displayedInstallations.length === 0 ? (
           <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
              <Truck className="mx-auto text-slate-200 mb-4" size={48} />
-             <p className="text-slate-400 font-bold">Nenhum serviço para hoje.</p>
+             <p className="text-slate-400 font-bold">{activeTab === 'PENDING' ? 'Nenhum serviço para hoje.' : 'Nenhum serviço finalizado.'}</p>
           </div>
         ) : (
-          todaysInstallations.map(({ app, order, customer }) => (
+          displayedInstallations.map(({ app, order, customer }) => (
             <div key={app.id} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:border-blue-300 transition-all">
               <div className="p-6 space-y-4">
                 <div className="flex justify-between items-start">
@@ -427,20 +464,29 @@ const InstallerPortal = ({
                   <FileText className="text-slate-400 group-hover:text-blue-500 mb-1" size={18} />
                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900">Ficha</span>
                 </button>
-                <button 
-                  onClick={() => setShowReworkModal(order?.id || null)}
-                  className="flex flex-col items-center justify-center py-4 hover:bg-slate-50 transition-all group"
-                >
-                  <RotateCcw className="text-slate-400 group-hover:text-amber-500 mb-1" size={18} />
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900">Retrabalho</span>
-                </button>
-                <button 
-                  onClick={() => order && handleFinalize(order)}
-                  className="flex flex-col items-center justify-center py-4 bg-emerald-50 hover:bg-emerald-100 transition-all group"
-                >
-                  <CheckCircle2 className="text-emerald-500 mb-1" size={18} />
-                  <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Finalizar</span>
-                </button>
+                {activeTab === 'PENDING' ? (
+                  <>
+                    <button 
+                      onClick={() => setShowReworkModal(order?.id || null)}
+                      className="flex flex-col items-center justify-center py-4 hover:bg-slate-50 transition-all group"
+                    >
+                      <RotateCcw className="text-slate-400 group-hover:text-amber-500 mb-1" size={18} />
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900">Retrabalho</span>
+                    </button>
+                    <button 
+                      onClick={() => order && handleFinalize(order)}
+                      className="flex flex-col items-center justify-center py-4 bg-emerald-50 hover:bg-emerald-100 transition-all group"
+                    >
+                      <CheckCircle2 className="text-emerald-500 mb-1" size={18} />
+                      <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Finalizar</span>
+                    </button>
+                  </>
+                ) : (
+                  <div className="col-span-2 flex flex-col items-center justify-center py-4 bg-slate-50 opacity-70">
+                    <CheckCircle2 className="text-emerald-500 mb-1" size={18} />
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Concluído em {new Date(app.date).toLocaleDateString()}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))
@@ -453,7 +499,14 @@ const InstallerPortal = ({
           <div className="bg-white rounded-t-[40px] sm:rounded-[40px] w-full max-w-lg shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
             <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="font-black text-xl text-slate-900 uppercase tracking-tighter">Registrar Retrabalho</h3>
-              <button onClick={() => setShowReworkModal(null)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+              <button onClick={() => {
+                setShowReworkModal(null);
+                setReworkSelectedItemId('');
+                setReworkWidth('');
+                setReworkHeight('');
+                setReworkColor('');
+                setReworkCommand('');
+              }} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -489,13 +542,53 @@ const InstallerPortal = ({
               </div>
 
               {reworkReason === 'novo produto' ? (
-                <button
-                  disabled={isLoading}
-                  onClick={() => setShowReworkMeasurementForm(showReworkModal)}
-                  className="w-full py-5 bg-indigo-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 active:scale-95 transition-all"
-                >
-                  Preencher Ficha Técnica
-                </button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Selecione o Produto do Contrato</label>
+                    <select
+                      value={reworkSelectedItemId}
+                      onChange={(e) => setReworkSelectedItemId(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Selecione o item --</option>
+                      {showReworkModal && (technicalSheets.find(s => s.id === orders.find(o => o.id === showReworkModal)?.technicalSheetId)?.items || []).map(item => {
+                        const prod = products.find(p => p.id === item.productId);
+                        return (
+                          <option key={item.id} value={item.id}>
+                            {prod?.nome} - {item.environment} ({item.width}x{item.height})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nova Largura (m)</label>
+                      <input type="number" step="0.01" value={reworkWidth} onChange={(e) => setReworkWidth(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: 3.10" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nova Altura (m)</label>
+                      <input type="number" step="0.01" value={reworkHeight} onChange={(e) => setReworkHeight(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: 2.00" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nova Cor</label>
+                      <input type="text" value={reworkColor} onChange={(e) => setReworkColor(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" placeholder="Opcional" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Comando / Lado</label>
+                      <input type="text" value={reworkCommand} onChange={(e) => setReworkCommand(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: Direito" />
+                    </div>
+                  </div>
+                  <button
+                    disabled={isLoading || !reworkSelectedItemId || !reworkWidth || !reworkHeight}
+                    onClick={() => setShowReworkMeasurementForm(showReworkModal)}
+                    className="w-full py-5 bg-indigo-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    Preencher Ficha de Produção
+                  </button>
+                </div>
               ) : (
                 <button
                   disabled={isLoading}
@@ -527,12 +620,31 @@ const InstallerPortal = ({
                   products={products}
                   technicalSheets={technicalSheets}
                   initialCustomerId={orders.find(o => o.id === showReworkMeasurementForm)?.customerId}
+                  editingSheet={technicalSheets.find(s => s.id === orders.find(o => o.id === showReworkMeasurementForm)?.technicalSheetId)}
                   currentUser={installer}
+                  reworkItemPreFill={{
+                    originalItemId: reworkSelectedItemId,
+                    productId: (() => {
+                      const sheet = technicalSheets.find(s => s.id === orders.find(o => o.id === showReworkMeasurementForm)?.technicalSheetId);
+                      const item = sheet?.items.find(i => i.id === reworkSelectedItemId);
+                      return item?.productId || '';
+                    })(),
+                    width: Number(reworkWidth.toString().replace(',', '.')),
+                    height: Number(reworkHeight.toString().replace(',', '.')),
+                    color: reworkColor,
+                    command: reworkCommand,
+                    notes: reworkNotes ? `[RETRABALHO]: ${reworkReason} - ${reworkNotes}` : `[RETRABALHO]: ${reworkReason}`
+                  }}
                   onSave={async (sheet) => {
                     if (onSaveTechnicalSheet) {
                       const saved = await onSaveTechnicalSheet(sheet);
-                      await handleSendRework(saved.id);
+                      await handleSendRework(saved.id, saved.items.map((i: any) => i.id));
                       setShowReworkMeasurementForm(null);
+                      setReworkSelectedItemId('');
+                      setReworkWidth('');
+                      setReworkHeight('');
+                      setReworkColor('');
+                      setReworkCommand('');
                     }
                   }}
                   onGenerateQuote={() => {}} // No-op, not used in this context

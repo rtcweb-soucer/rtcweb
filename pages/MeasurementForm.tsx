@@ -28,6 +28,15 @@ interface MeasurementFormProps {
   onDeleteSheet?: (id: string) => void;
   onAddCustomer?: (c: Customer) => void;
   orders?: Order[];
+  reworkItemPreFill?: {
+    originalItemId: string;
+    productId: string;
+    width: number;
+    height: number;
+    color?: string;
+    command?: string;
+    notes?: string;
+  };
 }
 
 // Componente de Busca Customizado para Produtos
@@ -116,7 +125,8 @@ const MeasurementForm = ({
   onEditSheet,
   onDeleteSheet,
   onAddCustomer,
-  orders = []
+  orders = [],
+  reworkItemPreFill
 }: MeasurementFormProps) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId || '');
   const [items, setItems] = useState<MeasurementItem[]>([]);
@@ -138,6 +148,9 @@ const MeasurementForm = ({
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [editingProductionItemId, setEditingProductionItemId] = useState<string | null>(null);
   const [productionSheetData, setProductionSheetData] = useState<Partial<ProductionInstallationSheet>>({});
+
+  // Efeito movido para baixo para evitar sobrescrita
+
   const [currentSheetId, setCurrentSheetId] = useState<string | null>(editingSheet?.id || null);
   const [showUploadIframe, setShowUploadIframe] = useState(false);
   const [showGoogleForm, setShowGoogleForm] = useState(false);
@@ -152,7 +165,17 @@ const MeasurementForm = ({
   useEffect(() => {
     if (editingSheet) {
       setSelectedCustomerId(editingSheet.customerId);
-      setItems([...editingSheet.items]);
+      setItems(prev => {
+        const reworkItems = prev.filter(i => i.environment === 'Retrabalho (Novo Produto)');
+        // Ensure no duplicates by ID
+        const combined = [...editingSheet.items];
+        reworkItems.forEach(ri => {
+          if (!combined.find(i => i.id === ri.id)) {
+            combined.push(ri);
+          }
+        });
+        return combined;
+      });
       setSelectedItemIds(new Set(editingSheet.items.map((i: MeasurementItem) => i.id)));
       setCurrentSheetId(editingSheet.id);
       
@@ -164,6 +187,38 @@ const MeasurementForm = ({
       setCurrentSheetId(null);
     }
   }, [initialCustomerId, editingSheet]);
+
+  const hasPrefilledRework = React.useRef(false);
+
+  // Efeito para preencher via Rework (Retrabalho Novo Produto) e abrir a ficha automaticamente
+  useEffect(() => {
+    if (reworkItemPreFill && !hasPrefilledRework.current && products.length > 0) {
+      hasPrefilledRework.current = true;
+      const product = products.find(p => p.id === reworkItemPreFill?.productId);
+      if (product) {
+        const newItemId = crypto.randomUUID();
+        const newItem: MeasurementItem = {
+          id: newItemId,
+          productId: product.id,
+          productType: product.tipo,
+          width: reworkItemPreFill.width,
+          height: reworkItemPreFill.height,
+          color: reworkItemPreFill.color,
+          command: reworkItemPreFill.command,
+          quantity: 1,
+          environment: 'Retrabalho (Novo Produto)',
+          notes: (reworkItemPreFill as any).notes,
+        };
+        setItems(prev => {
+          // Garante que não duplique se já existir
+          if (prev.find(i => i.id === newItemId)) return prev;
+          return [...prev, newItem];
+        });
+        setEditingProductionItemId(newItemId);
+        setShowProductionModal(true);
+      }
+    }
+  }, [reworkItemPreFill, products]);
 
   // Ponte para receber o link do Google Drive do Apps Script
   useEffect(() => {
@@ -406,7 +461,7 @@ const MeasurementForm = ({
     return {
       id: currentSheetId || crypto.randomUUID(),
       customerId: selectedCustomerId,
-      sellerId: currentUser?.sellerId || null,
+      sellerId: editingSheet?.sellerId || currentUser?.sellerId || null,
       items: mergedItems || [...items],
       createdAt: editingSheet?.createdAt || new Date()
     } as TechnicalSheet;
@@ -433,7 +488,7 @@ const MeasurementForm = ({
       return newSheet;
     } catch (err: any) {
       console.error("Error in performSave:", err);
-      return null;
+      return { error: true, message: err.message || JSON.stringify(err) || 'Unknown error' };
     }
   };
 
@@ -696,8 +751,9 @@ const MeasurementForm = ({
 
       console.log('💾 Persisting technical sheet first to ensure FK integrity...');
       const savedSheet = await performSave(true);
-      if (!savedSheet) {
-          throw new Error('Falha ao salvar ficha técnica antes da produção');
+      if (!savedSheet || (savedSheet as any).error) {
+          const msg = (savedSheet as any)?.message || 'Falha ao salvar ficha técnica antes da produção';
+          throw new Error(msg);
       }
 
       console.log('💾 Initiating saveProductionInstallationSheet with type:', productType);
@@ -850,8 +906,8 @@ const MeasurementForm = ({
                             <p className="text-[9px] font-bold text-slate-400">ID da Ficha: {sheet.id}</p>
                             {orders.filter(o => o.technicalSheetId === sheet.id || o.itemIds?.some(itemId => sheet.items.find(si => si.id === itemId)) || o.reworkTechnicalSheetId === sheet.id).map(o => (
                               <p key={o.id} className={`text-[9px] font-bold ${o.reworkTechnicalSheetId === sheet.id ? 'text-rose-500 bg-rose-50 px-1 py-0.5 rounded-sm inline-block' : 'text-indigo-500'}`}>
-                                {o.reworkTechnicalSheetId === sheet.id ? 'Ficha ref a retrabalho contrato ' : 'Vinculado a: '}
-                                {o.contractNumber || o.quoteNumber || `Pedido #${o.id.slice(0, 6)}`}
+                                {o.reworkTechnicalSheetId === sheet.id ? 'Retrabalho vinculado ao pedido ' : 'Vinculado a: '}
+                                {o.contractNumber || o.quoteNumber || `#${o.id.slice(0, 6)}`}
                               </p>
                             ))}
                           </div>

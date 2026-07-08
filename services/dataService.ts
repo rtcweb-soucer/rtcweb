@@ -1508,6 +1508,7 @@ export const dataService = {
                 quoteNumber: orderData.quote_number,
                 sellerName: sellerName,
                 totalValue: orderData.total_value,
+                contractObservations: orderData.contract_observations,
                 createdAt: new Date(orderData.created_at)
             },
             customer: {

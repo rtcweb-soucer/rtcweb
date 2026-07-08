@@ -11,6 +11,7 @@ interface ProductionSheetPrintProps {
             quoteNumber?: string;
             sellerName?: string;
             totalValue: number;
+            contractObservations?: string;
             createdAt: Date;
         };
         customer: {
@@ -381,10 +382,10 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
             <div className="mb-6">
                 {[ 
                     { title: 'Itens para Produção', items: groupedItems.original, isRework: false }, 
-                    { title: 'ADENDO DE RETRABALHO - NOVAS MEDIDAS', items: groupedItems.rework, isRework: true } 
+                    { title: 'FICHA DE RETRABALHO', items: groupedItems.rework, isRework: true } 
                 ].filter(group => Object.keys(group.items).length > 0).map((group, groupIdx) => (
-                    <div key={groupIdx} className={group.isRework ? "mt-12 border-t-4 border-rose-500 pt-8 page-break-before" : ""}>
-                        <h2 className={`text-lg font-black ${group.isRework ? 'text-rose-600' : 'text-slate-800'} mb-4 uppercase`}>
+                    <div key={groupIdx} className={group.isRework ? "mt-12 border-t-4 border-rose-600 pt-8 page-break-before" : ""}>
+                        <h2 className={group.isRework ? "text-4xl text-center font-black text-rose-600 mb-8 uppercase tracking-widest border-b-2 border-dashed border-rose-200 pb-4" : "text-lg font-black text-slate-800 mb-4 uppercase"}>
                             {group.title}
                         </h2>
 
@@ -489,14 +490,14 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                             {Object.entries(types).map(([type, items]) => {
                                 const typeStyle = getTypeStyle(type);
                                 // Filter items that actually have production sheets or specs to avoid empty blocks
-                                const itemsWithSpecs = items.filter(i => i.productionSheet);
+                                const itemsWithSpecs = items.filter(i => i.productionSheet || i.notes);
 
                                 if (itemsWithSpecs.length === 0) return null;
 
                                 return (
                                     <div key={`specs-${type}`} className="space-y-6">
                                         {items.map((item, index) => {
-                                            const itemsToRender = [item, ...((item as any).accessories || [])].filter(i => i.productionSheet);
+                                            const itemsToRender = [item, ...((item as any).accessories || [])].filter(i => i.productionSheet || i.notes);
 
                                             return itemsToRender.map((it, itIdx) => {
                                                 const isNested = it.id !== item.id;
@@ -524,9 +525,9 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                                         </h5>
 
                                                         {/* Render specific fields based on type */}
-                                                        {it.productionSheet.cortina && renderCortinaFields(it.productionSheet.cortina, it.command)}
-                                                        {it.productionSheet.toldo && renderToldoFields(it.productionSheet.toldo, it.command)}
-                                                        {it.productionSheet.cobertura && renderCoberturaFields(it.productionSheet.cobertura)}
+                                                        {it.productionSheet?.cortina && renderCortinaFields(it.productionSheet.cortina, it.command)}
+                                                        {it.productionSheet?.toldo && renderToldoFields(it.productionSheet.toldo, it.command)}
+                                                        {it.productionSheet?.cobertura && renderCoberturaFields(it.productionSheet.cobertura)}
 
                                                         {/* Display Item Notes in Detailed View if not already covered */}
                                                         {it.notes && (
@@ -537,7 +538,7 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                                         )}
 
                                                         {/* General Observations */}
-                                                        {it.productionSheet.observacoesGerais && (
+                                                        {it.productionSheet?.observacoesGerais && (
                                                             <div className="mt-4">
                                                                 <p className={`text-xs font-bold text-${typeStyle.color}-700 uppercase mb-1`}>Observações Gerais</p>
                                                                 <p className={`text-sm text-${typeStyle.color}-900 bg-white p-3 rounded border border-${typeStyle.color}-200`}>
@@ -547,7 +548,7 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                                                         )}
 
                                                         {/* Video Link with QR Code */}
-                                                        {it.productionSheet.videoLink && (
+                                                        {it.productionSheet?.videoLink && (
                                                             <div className={`flex gap-5 items-center bg-white p-4 rounded-xl border-2 border-${typeStyle.color}-100 mt-4`}>
                                                                 <div className="flex-shrink-0">
                                                                     <div className={`bg-white p-2 border border-${typeStyle.color}-200 rounded-lg shadow-sm`}>
@@ -586,6 +587,20 @@ const ProductionSheetPrint = React.forwardRef(({ data, products }: ProductionShe
                 </div>
                 ))}
             </div>
+
+            {/* Contract Observations (Global) */}
+            {data.order.contractObservations && (
+                <div className="mt-8 border-t-2 border-slate-300 pt-6">
+                    <h4 className="text-sm font-black text-slate-400 uppercase mb-4 flex items-center gap-2">
+                        <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">OBSERVAÇÕES DO PEDIDO / RETRABALHO</span>
+                    </h4>
+                    <div className="bg-white p-5 border-2 border-slate-200 rounded-lg shadow-sm">
+                        <p className="text-sm font-bold text-slate-800 whitespace-pre-wrap leading-relaxed">
+                            {data.order.contractObservations}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Footer */}
             <div className="mt-8 pt-4 border-t border-slate-300 text-center text-xs text-slate-500">
