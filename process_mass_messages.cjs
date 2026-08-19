@@ -16,9 +16,9 @@ let evoBaseUrl = envContent.match(/VITE_EVOLUTION_API_URL=(.*)/)?.[1] || 'https:
 let evoApiKey = envContent.match(/VITE_EVOLUTION_API_KEY=(.*)/)?.[1] || '429683C4C977415CAAFCCE10F7D57E11';
 
 // Parâmetros de segurança Avançada (Anti-ban WhatsApp)
-const MAX_MESSAGES_PER_DAY = 50;
-const MIN_DELAY_MS = 3 * 60 * 1000; // Mínimo de 3 minutos
-const MAX_DELAY_MS = 8 * 60 * 1000; // Máximo de 8 minutos
+const MAX_MESSAGES_PER_DAY = 200;
+const MIN_DELAY_MS = 10 * 1000; // Mínimo de 10 segundos
+const MAX_DELAY_MS = 20 * 1000; // Máximo de 20 segundos
 const CHECK_INTERVAL_MS = 1 * 60 * 1000; // 1 minuto checando se há pendentes
 
 let isProcessing = false;
@@ -225,7 +225,7 @@ async function processMassMessages() {
         
         // Se sucesso, espera o tempo configurado
         const delayMs = getRandomDelay();
-        console.log(`😴 MassMessaging: Comportamento Humano - Aguardando ${(delayMs / 1000 / 60).toFixed(1)} minutos para enviar a próxima...`);
+        console.log(`😴 MassMessaging: Comportamento Humano - Aguardando ${(delayMs / 1000).toFixed(1)} segundos para enviar a próxima...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         
       } catch (sendError) {
@@ -246,7 +246,7 @@ async function processMassMessages() {
 
 function init() {
   console.log('🔄 Iniciando Serviço de Ativação de Clientes (Disparo em Lote Anti-Ban)...');
-  console.log(`⚙️ Configuração: Max ${MAX_MESSAGES_PER_DAY}/dia. Intervalo entre msgs: ${MIN_DELAY_MS / 1000 / 60} a ${MAX_DELAY_MS / 1000 / 60} min (Aleatório). Horário Comercial: Sim.`);
+  console.log(`⚙️ Configuração: Max ${MAX_MESSAGES_PER_DAY}/dia. Intervalo entre msgs: ${MIN_DELAY_MS / 1000} a ${MAX_DELAY_MS / 1000} seg (Aleatório). Horário Comercial: Sim.`);
   
   // Chama imediatamente
   processMassMessages();
