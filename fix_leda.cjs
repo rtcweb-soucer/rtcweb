@@ -8,16 +8,22 @@ const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line)
 const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY); 
 
 async function run() {
-  const { data: orders, error } = await supabase
+  console.log('Updating PROP-9536 to Contrato 2026-275...');
+  const { data, error } = await supabase
     .from('orders')
-    .select('quote_number, contract_number')
-    .order('created_at', { ascending: false })
-    .limit(20);
+    .update({
+      contract_number: 'Contrato 2026-275',
+      quote_number: 'ORC 2026-240',
+      status: 'APPROVED',
+      production_stage: 'PREPARATION'
+    })
+    .eq('id', 'PROP-9536')
+    .select();
     
   if (error) {
-      console.log('Error:', error);
+    console.error('Error updating:', error);
   } else {
-      console.log('Recent numbers:', orders);
+    console.log('Update success:', data);
   }
 }
 

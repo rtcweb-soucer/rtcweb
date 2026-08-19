@@ -8,16 +8,16 @@ const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line)
 const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY); 
 
 async function run() {
-  const { data: orders, error } = await supabase
+  console.log('Deleting duplicate PROP-2660...');
+  const { error } = await supabase
     .from('orders')
-    .select('quote_number, contract_number')
-    .order('created_at', { ascending: false })
-    .limit(20);
+    .delete()
+    .eq('id', 'PROP-2660');
     
   if (error) {
-      console.log('Error:', error);
+    console.error('Error deleting:', error);
   } else {
-      console.log('Recent numbers:', orders);
+    console.log('Delete success');
   }
 }
 

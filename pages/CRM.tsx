@@ -876,7 +876,32 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                 return l.assigned_to === activeUserTab;
               });
 
-              if (filtered.length === 0) {
+              // Ordenar e filtrar por hoje/não lidos (exceto se estiver buscando)
+              const todayStart = new Date();
+              todayStart.setHours(0, 0, 0, 0);
+
+              let displayLeads = filtered;
+              
+              if (!searchTerm) {
+                 displayLeads = filtered.filter(l => {
+                    if (l.unreadCount > 0) return true;
+                    const leadTime = new Date(l.lastMessageTime || l.updated_at || l.created_at || 0).getTime();
+                    return leadTime >= todayStart.getTime();
+                 });
+              }
+
+              displayLeads.sort((a, b) => {
+                 // Bolinha verde (não lido) sempre no topo
+                 if ((a.unreadCount || 0) > 0 && (b.unreadCount || 0) === 0) return -1;
+                 if ((b.unreadCount || 0) > 0 && (a.unreadCount || 0) === 0) return 1;
+                 
+                 // Depois, os mais recentes primeiro
+                 const timeA = new Date(a.lastMessageTime || a.updated_at || a.created_at || 0).getTime();
+                 const timeB = new Date(b.lastMessageTime || b.updated_at || b.created_at || 0).getTime();
+                 return timeB - timeA;
+              });
+
+              if (displayLeads.length === 0) {
                 return (
                   <div className="flex flex-col items-center justify-center h-40 opacity-40">
                     <MessageSquare size={32} className="text-slate-400 mb-2" />
@@ -885,7 +910,7 @@ const CRM = ({ customers, products, sellers, onAddCustomer, currentUser }: CRMPr
                 );
               }
 
-              return filtered.slice(0, 50).map(lead => {
+              return displayLeads.slice(0, 50).map(lead => {
                 const assignedUser = users.find(u => u.id === lead.assigned_to);
                 const isActive = activeChat?.id === (lead.customer?.id || lead.customer_id || lead.id);
                 
