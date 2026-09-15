@@ -324,7 +324,7 @@ export default function MassMessaging() {
           </div>
           <div>
             <p className="text-sm text-gray-500 font-medium">Enviados Hoje</p>
-            <p className="text-2xl font-bold text-gray-900">{sentToday} / 50</p>
+            <p className="text-2xl font-bold text-gray-900">{sentToday} / 200</p>
           </div>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex items-center gap-4">
@@ -338,7 +338,7 @@ export default function MassMessaging() {
                 <span className="font-bold text-gray-900">{messages.filter(m => m.status === 'SENT').length}</span> <span className="text-gray-500">OK</span>
               </div>
               <div className="text-sm">
-                <span className="font-bold text-gray-900">{messages.filter(m => m.status === 'ERROR').length}</span> <span className="text-gray-500">Erros (Sem WhatsApp)</span>
+                <span className="font-bold text-gray-900">{messages.filter(m => m.status === 'ERROR').length}</span> <span className="text-gray-500">Erros</span>
               </div>
             </div>
           </div>

@@ -196,6 +196,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             'Cliente': inst.customerName,
             'Vendedor': inst.sellerName,
             'NFe': order?.nfeNumber || '--',
+            'Forma Pgto': inst.paymentMethod || order?.paymentMethod || 'A Definir',
             'Parcela': `${inst.installmentNumber}/${inst.totalInstallments}`,
             'Vencimento': new Date(inst.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
             'Pagamento': inst.paymentDate ? new Date(inst.paymentDate).toLocaleDateString('pt-BR') : '--',
@@ -887,6 +888,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato / Cliente</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">NFe</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendedor</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma Pgto</th>
                               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Parcela</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Produção</th>
                               <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Instalação</th>
@@ -900,7 +902,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                            {filteredInstallments.length === 0 ? (
-                              <tr><td colSpan={13} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
+                              <tr><td colSpan={14} className="px-6 py-10 text-center text-slate-400">Nenhum recebimento encontrado</td></tr>
                            ) : (
                               filteredInstallments.map((inst, idx) => {
                                  const order = orders.find(o => o.id === inst.orderId);
@@ -972,6 +974,11 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                                      </td>
                                     <td className="px-6 py-4">
                                        <p className="text-[11px] font-bold text-slate-700 truncate max-w-[120px]">{inst.sellerName}</p>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                       <span className="text-[11px] font-bold text-slate-700 truncate max-w-[120px]">
+                                          {inst.paymentMethod || order?.paymentMethod || 'A Definir'}
+                                       </span>
                                     </td>
                                     <td className="px-6 py-4">
                                        <span className="text-[10px] font-black px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
