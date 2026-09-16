@@ -477,7 +477,7 @@ const Customers = ({
       {showDetailModal && selectedCustomer && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col md:flex-row h-[90vh]">
-            <div className="w-full md:w-80 bg-slate-50 border-r border-slate-100 p-8 flex flex-col overflow-y-auto shrink-0">
+            <div className="w-full md:w-80 bg-slate-50 md:border-r border-b md:border-b-0 border-slate-100 p-6 md:p-8 flex flex-col overflow-y-auto shrink-0 max-h-[35vh] md:max-h-none">
               <div className="mb-8 text-center md:text-left">
                 <div className="h-20 w-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-4 mx-auto md:mx-0">
                   {selectedCustomer.type === 'CNPJ' ? <Building2 size={32} /> : <UserIcon size={32} />}
@@ -539,9 +539,9 @@ const Customers = ({
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col min-w-0 bg-white">
-              <div className="px-8 pt-8 flex items-center justify-between border-b border-slate-50 shrink-0">
-                <div className="flex gap-8">
+            <div className="flex-1 flex flex-col min-w-0 bg-white overflow-hidden">
+              <div className="px-4 md:px-8 pt-6 md:pt-8 flex flex-col-reverse md:flex-row md:items-center justify-between border-b border-slate-50 shrink-0 gap-4">
+                <div className="flex gap-4 md:gap-8 overflow-x-auto custom-scrollbar pb-1">
                   {[
                     { id: 'info', label: 'Visão Geral', icon: <Eye size={18} /> },
                     { id: 'history', label: 'Histórico', icon: <History size={18} /> },
@@ -556,12 +556,12 @@ const Customers = ({
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setShowDetailModal(false)} className="p-2 text-slate-400 hover:text-slate-900 mb-4 transition-colors">
-                  <X size={24} />
+                <button onClick={() => setShowDetailModal(false)} className="absolute md:static top-4 right-4 p-2 bg-slate-100 md:bg-transparent rounded-full text-slate-400 hover:text-slate-900 transition-colors z-10">
+                  <X size={20} className="md:w-6 md:h-6" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8">
+              <div className="flex-1 overflow-y-auto p-4 md:p-8">
                 {activeTab === 'info' && (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
