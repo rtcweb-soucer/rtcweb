@@ -100,15 +100,24 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       const instId = inst.id;
       setIsGenerating(`${inst.orderId}-${instId}`);
       try {
-         const { infinitePayService } = await import('../services/infinitePayService');
          const customer = customers.find(c => c.id === order.customerId);
          const customerData = {
             name: customer?.name || 'Cliente',
             email: customer?.email || '',
-            phone: customer?.phone || ''
+            phone: customer?.phone || '',
+            document: customer?.document || ''
          };
 
-         const charge = await infinitePayService.createCharge(order, inst, customerData);
+         const isPix = inst.paymentMethod?.toUpperCase().includes('PIX');
+         let charge;
+
+         if (isPix) {
+            const { asaasService } = await import('../services/asaasService');
+            charge = await asaasService.createPixCharge(order, inst, customerData);
+         } else {
+            const { infinitePayService } = await import('../services/infinitePayService');
+            charge = await infinitePayService.createCharge(order, inst, customerData);
+         }
 
          const updatedInstallments = order.installments?.map(i => {
             if (i.id === instId) {
@@ -268,9 +277,16 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
       
       setIsSincronizing(installment.id);
       try {
-         const { infinitePayService } = await import('../services/infinitePayService');
-         const type = installment.pixCopyPaste ? 'PIX' : 'LINK';
-         const status = await infinitePayService.checkStatus(installment.paymentId, type, installment.orderId, installment.id);
+         let status = 'PENDING';
+         
+         if (installment.paymentId.startsWith('pay_')) {
+            const { asaasService } = await import('../services/asaasService');
+            status = await asaasService.checkStatus(installment.paymentId);
+         } else {
+            const { infinitePayService } = await import('../services/infinitePayService');
+            const type = installment.pixCopyPaste ? 'PIX' : 'LINK';
+            status = await infinitePayService.checkStatus(installment.paymentId, type, installment.orderId, installment.id);
+         }
          
          if (status === 'PAID') {
             const relatedInstallments = filteredInstallments.filter(i => 

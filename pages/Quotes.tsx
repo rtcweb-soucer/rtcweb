@@ -116,7 +116,11 @@ const Quotes = ({
   const [filterAddress, setFilterAddress] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
   const [filterCPF, setFilterCPF] = useState('');
-  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
   const [filterEndDate, setFilterEndDate] = useState('');
 
   // New Quote / Edit Quote State
@@ -130,6 +134,7 @@ const Quotes = ({
     syncToSheet: boolean;
     contractObservations: string;
     paymentConditions: string;
+    createdAt?: string;
   }>({
     customerId: '',
     sellerId: currentUser?.sellerId || '',
@@ -344,7 +349,8 @@ const Quotes = ({
       }),
       syncToSheet: true,
       contractObservations: order.contractObservations || '',
-      paymentConditions: order.paymentConditions || ''
+      paymentConditions: order.paymentConditions || '',
+      createdAt: order.createdAt ? new Date(order.createdAt).toISOString() : new Date().toISOString()
     });
     setShowAddEditModal(true);
   };
@@ -516,7 +522,7 @@ const Quotes = ({
         },
         contractObservations: quoteFormData.contractObservations,
         paymentConditions: quoteFormData.paymentConditions,
-        createdAt: existingOrder?.createdAt || new Date()
+        createdAt: quoteFormData.createdAt ? new Date(quoteFormData.createdAt) : (existingOrder?.createdAt || new Date())
       };
 
       // Gerar número de orçamento se for novo
@@ -1643,7 +1649,7 @@ const Quotes = ({
 
                 <div className="p-6 lg:p-8 space-y-8 overflow-y-auto flex-1 custom-scrollbar">
                   {/* Cabeçalho do Formulário */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="space-y-2">
                       <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Cliente</label>
                       <SearchableCustomerSelect
@@ -1659,15 +1665,25 @@ const Quotes = ({
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Vendedor Responsável</label>
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Vendedor</label>
                       <select
                         value={quoteFormData.sellerId}
                         onChange={(e) => setQuoteFormData(prev => ({ ...prev, sellerId: e.target.value }))}
                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none appearance-none"
                       >
-                        <option value="">Selecione o vendedor...</option>
+                        <option value="">Selecione...</option>
                         {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Data</label>
+                      <input
+                        type="date"
+                        value={quoteFormData.createdAt ? quoteFormData.createdAt.split('T')[0] : ''}
+                        onChange={(e) => setQuoteFormData(prev => ({ ...prev, createdAt: e.target.value + 'T12:00:00.000Z' }))}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                      />
                     </div>
                   </div>
 
@@ -2365,7 +2381,7 @@ const Quotes = ({
             </div>
 
             <div className="p-6 lg:p-8 space-y-8 overflow-y-auto flex-1 custom-scrollbar">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
                 <div className="space-y-2">
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest px-1">Cliente</label>
                   <div className="flex gap-2">
@@ -2396,11 +2412,21 @@ const Quotes = ({
                   <select
                     value={quoteFormData.sellerId}
                     onChange={(e) => setQuoteFormData(prev => ({ ...prev, sellerId: e.target.value }))}
-                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                   >
                     <option value="">Selecione o vendedor...</option>
                     {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Data</label>
+                  <input
+                    type="date"
+                    value={quoteFormData.createdAt ? quoteFormData.createdAt.split('T')[0] : ''}
+                    onChange={(e) => setQuoteFormData(prev => ({ ...prev, createdAt: e.target.value + 'T12:00:00.000Z' }))}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                  />
                 </div>
               </div>
 

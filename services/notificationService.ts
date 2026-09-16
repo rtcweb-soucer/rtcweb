@@ -31,10 +31,19 @@ export const notificationService = {
       const customerData = {
         name: order.customerName || 'Cliente',
         email: '', // Email opcional se disponível
-        phone: order.customerPhone.startsWith('+') ? order.customerPhone : `+55${order.customerPhone.replace(/\D/g, '')}`
+        phone: order.customerPhone.startsWith('+') ? order.customerPhone : `+55${order.customerPhone.replace(/\D/g, '')}`,
+        document: '' // Documento não está disponível aqui facilmente, usaremos o fallback 00000000000
       };
 
-      const charge = await infinitePayService.createCharge(order, installment, customerData);
+      const isPix = installment.paymentMethod?.toUpperCase().includes('PIX');
+      let charge;
+
+      if (isPix) {
+        const { asaasService } = await import('./asaasService');
+        charge = await asaasService.createPixCharge(order, installment, customerData);
+      } else {
+        charge = await infinitePayService.createCharge(order, installment, customerData);
+      }
       
       // Atualizar o pedido com o link/código gerado
       const updatedInstallments = order.installments.map(i => {

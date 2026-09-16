@@ -102,15 +102,24 @@ const Orders = ({
   const handleGeneratePaymentForInstallment = async (inst: any, order: Order) => {
     setIsGenerating(`${order.id}-${inst.id}`);
     try {
-      const { infinitePayService } = await import('../services/infinitePayService');
       const customer = customers.find(c => c.id === order.customerId);
       const customerData = {
         name: customer?.name || 'Cliente',
         email: customer?.email || '',
-        phone: customer?.phone || ''
+        phone: customer?.phone || '',
+        document: customer?.document || ''
       };
 
-      const charge = await infinitePayService.createCharge(order, inst, customerData);
+      const isPix = inst.paymentMethod?.toUpperCase().includes('PIX');
+      let charge;
+
+      if (isPix) {
+        const { asaasService } = await import('../services/asaasService');
+        charge = await asaasService.createPixCharge(order, inst, customerData);
+      } else {
+        const { infinitePayService } = await import('../services/infinitePayService');
+        charge = await infinitePayService.createCharge(order, inst, customerData);
+      }
 
       const updatedInstallments = order.installments?.map(i => {
         if (i.id === inst.id) {
@@ -222,7 +231,11 @@ const Orders = ({
   const [filterAddress, setFilterAddress] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
   const [filterCPF, setFilterCPF] = useState('');
-  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
   const [filterEndDate, setFilterEndDate] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 

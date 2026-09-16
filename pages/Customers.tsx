@@ -27,7 +27,8 @@ import {
   ArrowRightCircle,
   SearchCode,
   Ruler,
-  RefreshCw
+  RefreshCw,
+  Filter
 } from 'lucide-react';
 
 // Helpers para tratamento de data local
@@ -78,6 +79,11 @@ const Customers = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [showOnlyToday, setShowOnlyToday] = useState(true);
+  const [filterNeighborhood, setFilterNeighborhood] = useState('');
+  const [filterAddress, setFilterAddress] = useState('');
+  const [filterPhone, setFilterPhone] = useState('');
+  const [filterCPF, setFilterCPF] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   React.useEffect(() => {
     const handler = setTimeout(() => {
@@ -253,20 +259,29 @@ const Customers = ({
                           fuzzyMatch(c.tradeName || '', debouncedSearchTerm) ||
                           (hasDigits && (c.document || '').replace(/\D/g, '').includes(searchDigits));
 
-      if (showOnlyToday && !debouncedSearchTerm) {
+      const matchNeighborhood = filterNeighborhood === '' || (c.address?.neighborhood || '').toLowerCase().includes(filterNeighborhood.toLowerCase());
+      const matchAddress = filterAddress === '' || (c.address?.street || '').toLowerCase().includes(filterAddress.toLowerCase());
+      const matchPhone = filterPhone === '' || (c.phone || '').includes(filterPhone);
+      const matchCPF = filterCPF === '' || (c.document || '').includes(filterCPF);
+
+      const advancedMatch = searchMatch && matchNeighborhood && matchAddress && matchPhone && matchCPF;
+
+      const isFiltering = debouncedSearchTerm || filterNeighborhood || filterAddress || filterPhone || filterCPF;
+
+      if (showOnlyToday && !isFiltering) {
         const dateRaw = c.createdAt || (c as any).created_at;
         let createdDateStr = '';
         if (dateRaw) {
           createdDateStr = typeof dateRaw === 'string' ? dateRaw.substring(0, 10) : getLocalISODate(dateRaw as Date);
         }
-        return searchMatch && createdDateStr === todayStr;
+        return advancedMatch && createdDateStr === todayStr;
       }
 
-      return searchMatch;
+      return advancedMatch;
     });
 
     return filtered.slice(0, 200);
-  }, [customers, debouncedSearchTerm, showOnlyToday, todayStr]);
+  }, [customers, debouncedSearchTerm, showOnlyToday, todayStr, filterNeighborhood, filterAddress, filterPhone, filterCPF]);
 
   const customerAppointments = appointments.filter((a: Appointment) => a.customerId === selectedCustomer?.id);
   const customerOrders = orders.filter((o: Order) => o.customerId === selectedCustomer?.id);
@@ -310,33 +325,57 @@ const Customers = ({
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-2">
-        <div className="relative group flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
-          <input
-            type="text"
-            placeholder="Buscar cliente por nome ou documento..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-          />
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 mb-2">
+        <div
+          className="flex items-center justify-between cursor-pointer md:cursor-default"
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <div className="flex items-center gap-2 text-blue-600">
+            <Filter size={18} />
+            <h3 className="text-sm font-black uppercase tracking-widest">Filtros & Busca</h3>
+          </div>
+          <div className="md:hidden">
+            <ChevronRight size={20} className={`text-slate-400 transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowOnlyToday(!showOnlyToday)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${showOnlyToday ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 shadow-sm'}`}
-            title="Alternar entre cadastrados hoje ou todos os clientes"
-          >
-            {showOnlyToday ? 'Mostrando: Hoje' : 'Mostrando: Todos'}
-          </button>
-          <button
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-            title="Sincronizar e recarregar a tela"
-          >
-            <RefreshCw size={16} />
-            Atualizar
-          </button>
+
+        <div className={`${showFilters ? 'block' : 'hidden'} md:block space-y-4`}>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative group flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+              <input
+                type="text"
+                placeholder="Buscar cliente por nome ou documento..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowOnlyToday(!showOnlyToday)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${showOnlyToday ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 shadow-sm'}`}
+                title="Alternar entre cadastrados hoje ou todos os clientes"
+              >
+                {showOnlyToday ? 'Mostrando: Hoje' : 'Mostrando: Todos'}
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all shadow-sm"
+                title="Sincronizar e recarregar a tela"
+              >
+                <RefreshCw size={16} />
+                Atualizar
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input type="text" placeholder="Bairro..." value={filterNeighborhood} onChange={(e) => setFilterNeighborhood(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+            <input type="text" placeholder="Endereço..." value={filterAddress} onChange={(e) => setFilterAddress(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+            <input type="text" placeholder="Telefone..." value={filterPhone} onChange={(e) => setFilterPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+            <input type="text" placeholder="CPF/CNPJ exato..." value={filterCPF} onChange={(e) => setFilterCPF(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" />
+          </div>
         </div>
       </div>
 
@@ -372,7 +411,13 @@ const Customers = ({
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">
-                    {customer.email}
+                    <div>{customer.email}</div>
+                    {(customer.address?.street || customer.address?.neighborhood) && (
+                      <div className="text-[10px] text-slate-400 mt-1 truncate max-w-[250px]" title={`${customer.address?.street || ''}${customer.address?.number ? `, ${customer.address.number}` : ''}${customer.address?.neighborhood ? ` - ${customer.address.neighborhood}` : ''}`}>
+                        {customer.address?.street}{customer.address?.number ? `, ${customer.address.number}` : ''}
+                        {customer.address?.neighborhood ? ` - ${customer.address.neighborhood}` : ''}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">
                     {customer.phone}
