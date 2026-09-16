@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 const tokenPart1 = '$aact_prod_000MzkwODA2MWY2OGM3MWRl';
 const tokenPart2 = 'MDU2NWM3MzJlNzZmNGZhZGY6Ojg5OTViZDYxLTZmMjUtNGUzMS1iYTI5LTFmZWI5MzQ5YmJhYzo6JGFhY2hfMTc4ZThlNGMtMWI4MS00ZjdiLWE4OGEtNTMzNWYwY2MzYWY2';
 const ASAAS_API_KEY = import.meta.env.VITE_ASAAS_API_TOKEN || (tokenPart1 + tokenPart2);
-const ASAAS_BASE_URL = 'https://api.asaas.com/v3';
+const ASAAS_BASE_URL = '/api/asaas';
 
 export const asaasService = {
   /**

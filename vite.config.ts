@@ -21,6 +21,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/infinitepay-remote/, ''),
           secure: false
+        },
+        '/api/asaas': {
+          target: 'https://api.asaas.com/v3',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/asaas/, ''),
+          secure: false
         }
       }
     },
