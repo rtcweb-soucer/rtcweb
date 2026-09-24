@@ -21,7 +21,7 @@ serve(async (req) => {
             return new Response(JSON.stringify({ message: "Fora do horário comercial. Ignorado." }), { status: 200 });
         }
 
-        // 2. Verificar limite de 50 mensagens enviadas hoje
+        // 2. Verificar limite de 200 mensagens enviadas hoje
         const today = now.toISOString().split('T')[0];
         const { count, error: countError } = await supabase
             .from('mass_messages')
@@ -31,8 +31,8 @@ serve(async (req) => {
 
         if (countError) throw countError;
 
-        if (count && count >= 50) {
-            return new Response(JSON.stringify({ message: `Limite diário de 50 mensagens atingido (${count}).` }), { status: 200 });
+        if (count && count >= 200) {
+            return new Response(JSON.stringify({ message: `Limite diário de 200 mensagens atingido (${count}).` }), { status: 200 });
         }
 
         // 3. Buscar mensagens pendentes e ordenar pela sequência de anos

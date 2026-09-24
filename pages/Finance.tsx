@@ -53,6 +53,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
    const [activeSection, setActiveSection] = useState<'receivable' | 'payable' | 'transactions' | 'dashboard'>('dashboard');
    const [searchTerm, setSearchTerm] = useState('');
    const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PAID'>('ALL');
+   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
    const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
    const [dateFilterType, setDateFilterType] = useState<'due' | 'payment'>('due');
    const reportRef = useRef<HTMLDivElement>(null);
@@ -185,6 +186,10 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             inst.orderId.toLowerCase().includes(searchTerm.toLowerCase());
          const matchesStatus = statusFilter === 'ALL' || inst.status === statusFilter;
          
+         const order = orders.find(o => o.id === inst.orderId);
+         const method = inst.paymentMethod || order?.paymentMethod || '';
+         const matchesPayment = paymentMethodFilter === 'ALL' || method.toUpperCase().includes(paymentMethodFilter.toUpperCase());
+
          const dateToCompare = dateFilterType === 'due' 
             ? inst.dueDate 
             : (inst.paymentDate ? inst.paymentDate.split('T')[0] : null);
@@ -193,9 +198,9 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             dateToCompare && dateToCompare >= dateFilter.start && dateToCompare <= dateFilter.end
          );
 
-         return matchesSearch && matchesStatus && matchesDate;
+         return matchesSearch && matchesStatus && matchesPayment && matchesDate;
       }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-   }, [orders, customers, searchTerm, statusFilter, dateFilter, dateFilterType]);
+   }, [orders, customers, searchTerm, statusFilter, dateFilter, dateFilterType, paymentMethodFilter]);
 
    const exportToExcel = () => {
       const exportData = filteredInstallments.map(inst => {
@@ -839,7 +844,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
          </div>
 
          {/* Filters */}
-         <div className="no-pdf grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+         <div className="no-pdf grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <div className="relative">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                <input
@@ -858,6 +863,18 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                <option value="ALL">Todos os status</option>
                <option value="PENDING">Pendentes</option>
                <option value="PAID">Liquidados</option>
+            </select>
+            <select
+               value={paymentMethodFilter}
+               onChange={(e: any) => setPaymentMethodFilter(e.target.value)}
+               className="px-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium appearance-none"
+            >
+               <option value="ALL">Todos os Pagamentos</option>
+               <option value="PIX">PIX</option>
+               <option value="CARTÃO">Cartão</option>
+               <option value="BOLETO">Boleto</option>
+               <option value="DINHEIRO">Dinheiro</option>
+               <option value="TED">TED/DOC</option>
             </select>
             <select
                value={dateFilterType}
@@ -888,7 +905,14 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
             {activeSection === 'dashboard' && renderDashboard()}
 
             {activeSection === 'receivable' && (
-               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+               <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                     <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Somatório da Lista (Filtro Atual)</span>
+                     <span className="text-xl font-black text-blue-600">
+                        R$ {filteredInstallments.reduce((acc, inst) => acc + (inst.value || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                     </span>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
                      <table className="w-full text-left border-collapse">
                         <thead>
@@ -1152,6 +1176,7 @@ const Finance = ({ orders, customers, products, sellers, technicalSheets, transa
                         </tbody>
                      </table>
                   </div>
+               </div>
                </div>
             )}
 
