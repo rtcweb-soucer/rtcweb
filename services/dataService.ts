@@ -394,7 +394,11 @@ export const dataService = {
                 createdAt: c.created_at,
             })) as Customer[];
 
-            localStorage.setItem('rtc_cache_customers', JSON.stringify(normalized));
+            try {
+                localStorage.setItem('rtc_cache_customers', JSON.stringify(normalized));
+            } catch (storageErr) {
+                console.warn('Cache local de clientes ignorado (limite de quota de armazenamento local excedido)');
+            }
             return normalized;
         } catch (error) {
             console.error('Offline Mode: Usando cache de clientes local');
@@ -820,6 +824,8 @@ export const dataService = {
 
         // Fetch orders that are in tracking and NOT deleted
         const orderIds = trackingData.map(t => t.order_id);
+        if (!orderIds || orderIds.length === 0) return [];
+
         const { data: ordersData, error: ordersError } = await supabase
             .from('orders')
             .select('*')
@@ -827,12 +833,33 @@ export const dataService = {
             .eq('is_deleted', false);
         if (ordersError) throw ordersError;
 
+        // Fetch customer details for these specific orders to guarantee names are always resolved
+        const customerIds = [...new Set((ordersData || []).map(o => o.customer_id).filter(Boolean))];
+        const customerMap = new Map<string, { name: string; phone?: string }>();
+
+        if (customerIds.length > 0) {
+            const { data: customersData } = await supabase
+                .from('customers')
+                .select('id, name, trade_name, phone')
+                .in('id', customerIds);
+            
+            (customersData || []).forEach(c => {
+                customerMap.set(c.id, {
+                    name: c.trade_name || c.name,
+                    phone: c.phone
+                });
+            });
+        }
+
         // Merge data
         return ordersData.map(o => {
             const tracking = trackingData.find(t => t.order_id === o.id);
+            const customerInfo = o.customer_id ? customerMap.get(o.customer_id) : null;
             return {
                 ...o,
                 customerId: o.customer_id,
+                customerName: customerInfo?.name || undefined,
+                customerPhone: customerInfo?.phone || undefined,
                 technicalSheetId: o.technical_sheet_id,
                 sellerId: o.seller_id,
                 itemIds: o.item_ids,

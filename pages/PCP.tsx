@@ -7,6 +7,7 @@ import { dataService } from '../services/dataService';
 import { evolutionService } from '../services/evolutionService';
 import ProductionSheetPrint from '../components/ProductionSheetPrint';
 import { LabelPrintModal } from '../components/LabelPrintModal';
+import { PCPExecutiveReportModal } from '../components/PCPExecutiveReportModal';
 import {
   Package,
   Clock,
@@ -31,7 +32,8 @@ import {
   Trash2,
   Search,
   AlertTriangle,
-  History
+  History,
+  FileText
 } from 'lucide-react';
 
 interface PCPProps {
@@ -93,6 +95,9 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
   const [historyRequests, setHistoryRequests] = useState<any[]>([]);
   const [historyPOs, setHistoryPOs] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Relatório Executivo PCP / PDF
+  const [showExecutiveReportModal, setShowExecutiveReportModal] = useState(false);
 
   // Internal state for orders with production tracking
   const [pcpOrders, setPcpOrders] = useState<Order[]>([]);
@@ -233,7 +238,7 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
       // Envia notificação no WhatsApp usando a Evolution API
       if (sellerProfile && sellerProfile.phone) {
         const orderIdDisplay = order.contractNumber || order.quoteNumber || `Pedido #${order.id.slice(0, 8)}`;
-        const customerName = customers.find(c => c.id === order.customerId)?.name || 'Cliente não identificado';
+        const customerName = order.customerName || customers.find(c => c.id === order.customerId)?.tradeName || customers.find(c => c.id === order.customerId)?.name || 'Cliente não identificado';
         
         let message = `⚠️ *Aviso do PCP (Falta de Informação)* ⚠️\n\n`;
         message += `Olá ${sellerProfile.name}, o setor de produção identificou falta de dados na Ficha Técnica do *${orderIdDisplay}* (Cliente: ${customerName}).\n\n`;
@@ -495,6 +500,14 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
           >
             Lista Geral
           </button>
+          <button
+            onClick={() => setShowExecutiveReportModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-black rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all active:scale-95 ml-1"
+            title="Abrir Relatório Executivo e Raio-X do PCP para gerar PDF"
+          >
+            <FileText size={15} />
+            <span>Relatório PCP (PDF)</span>
+          </button>
         </div>
       </div>
 
@@ -507,7 +520,7 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
               
               if (!searchTerm) return true;
               
-              const customerName = customers.find(c => c.id === o.customerId)?.name?.toLowerCase() || '';
+              const customerName = (o.customerName || customers.find(c => c.id === o.customerId)?.tradeName || customers.find(c => c.id === o.customerId)?.name || '').toLowerCase();
               const contractNum = (o.contractNumber || o.quoteNumber || o.id).toLowerCase();
               const term = searchTerm.toLowerCase();
               
@@ -562,7 +575,7 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
                             className={`flex items-center gap-2 text-[11px] ${deadlineStatus.isDark ? 'text-white bg-white/10 border-white/20' : 'text-slate-700 bg-white/60 border-slate-100/50'} font-bold p-2 rounded-lg border hover:bg-white/20 transition-all w-full text-left group/cust`}
                           >
                             <Users size={12} className={deadlineStatus.isDark ? 'text-white/80' : 'text-blue-500'} />
-                            <span className="truncate">{customers.find(c => c.id === order.customerId)?.name || 'Cliente Desconhecido'}</span>
+                            <span className="truncate">{order.customerName || customers.find(c => c.id === order.customerId)?.tradeName || customers.find(c => c.id === order.customerId)?.name || 'Cliente Desconhecido'}</span>
                           </button>
 
                           <div className="grid grid-cols-2 gap-2">
@@ -934,6 +947,17 @@ const PCP = ({ orders, products, sellers, customers, systemUsers, currentUser, o
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal do Relatório Executivo de Produção (PCP) */}
+      {showExecutiveReportModal && (
+        <PCPExecutiveReportModal
+          isOpen={showExecutiveReportModal}
+          onClose={() => setShowExecutiveReportModal(false)}
+          orders={pcpOrders}
+          customers={customers}
+          products={products}
+        />
       )}
     </div>
   );
